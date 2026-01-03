@@ -1,0 +1,267 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import './default_theme.css';
+
+/* Tailwind v4 auto-detects source files but inside the docker bind-mount the
+   default heuristic misses everything. Be explicit. */
+@source "../**/*.{ts,tsx,js,jsx,html}";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  html {
+    font-size: var(--font-size);
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* Inter — the same body font Kaggle uses. Falls back to system sans if
+     * the variable font hasn't loaded yet. */
+    font-family:
+      'Inter Variable',
+      'Inter',
+      ui-sans-serif,
+      system-ui,
+      -apple-system,
+      'Segoe UI',
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+    font-feature-settings:
+      'cv11' 1,
+      'ss01' 1,
+      'ss03' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    min-height: 100vh;
+    letter-spacing: -0.005em;
+  }
+
+  ::selection {
+    @apply bg-primary/15 text-foreground;
+  }
+}
+
+/* Base typography — calibrated against measurements from a comparable
+ * Material-style product (Inter body, big bold H1, dense H2, lighter H3).
+ *
+ *   H1  → 36px / 700 / lh 44px / -0.02em
+ *   H2  → 20px / 700 / lh 24px / -0.015em
+ *   H3  → 18px / 600 / lh 24px / -0.01em
+ *   p   → 16px / 400 / lh 24px
+ */
+@layer base {
+  :where(:not(:has([class*=' text-'])):not(:has([class^='text-']))) {
+    h1 {
+      font-size: var(--text-3xl);       /* 36px */
+      font-weight: 700;
+      line-height: 1.22;                /* 44/36 */
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: var(--text-xl);        /* 20px */
+      font-weight: 700;
+      line-height: 1.2;                 /* 24/20 */
+      letter-spacing: -0.015em;
+    }
+    h3 {
+      font-size: var(--text-lg);        /* 18px */
+      font-weight: 600;
+      line-height: 1.33;
+      letter-spacing: -0.01em;
+    }
+    h4 {
+      font-size: var(--text-base);
+      font-weight: 600;
+      line-height: 1.5;
+    }
+    p {
+      font-size: var(--text-base);
+      font-weight: 400;
+      line-height: 1.5;
+    }
+    label {
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+    button {
+      font-size: var(--text-sm);
+      font-weight: 500;
+    }
+  }
+}
+
+.font-mono,
+code,
+pre,
+kbd,
+samp {
+  font-family:
+    'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-feature-settings: 'liga' 0;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/* Custom thin scrollbar */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 999px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.pl-splash {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--background);
+  color: var(--muted-foreground);
+  font-size: 14px;
+  letter-spacing: 0.01em;
+}
+
+/* Rendered HTML statements from Y.Contest / other integrations. Lives at
+   the root scope so a `<div className="assignment-prose">` lights up
+   sensible defaults for paragraphs, lists, code, images and tables. */
+.assignment-prose p {
+  margin: 0 0 0.85em 0;
+}
+.assignment-prose p:last-child {
+  margin-bottom: 0;
+}
+.assignment-prose h1,
+.assignment-prose h2,
+.assignment-prose h3,
+.assignment-prose h4 {
+  font-weight: 600;
+  margin: 1.2em 0 0.5em 0;
+  line-height: 1.25;
+}
+.assignment-prose h1 { font-size: 1.25rem; }
+.assignment-prose h2 { font-size: 1.1rem; }
+.assignment-prose h3 { font-size: 1rem; }
+.assignment-prose ul,
+.assignment-prose ol {
+  margin: 0 0 0.85em 1.5em;
+  padding-left: 0.5em;
+}
+.assignment-prose ul { list-style: disc; }
+.assignment-prose ol { list-style: decimal; }
+.assignment-prose li { margin: 0.2em 0; }
+.assignment-prose pre {
+  background: var(--muted);
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  overflow-x: auto;
+  font-family: 'Geist Mono Variable', ui-monospace, monospace;
+  font-size: 0.875em;
+  line-height: 1.55;
+  margin: 0.85em 0;
+}
+.assignment-prose code {
+  font-family: 'Geist Mono Variable', ui-monospace, monospace;
+  font-size: 0.9em;
+  background: var(--muted);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+.assignment-prose pre code {
+  padding: 0;
+  background: transparent;
+}
+.assignment-prose img {
+  max-width: 100%;
+  height: auto;
+  margin: 0.85em 0;
+  border-radius: 6px;
+}
+.assignment-prose table {
+  border-collapse: collapse;
+  margin: 0.85em 0;
+  width: 100%;
+}
+.assignment-prose th,
+.assignment-prose td {
+  border: 1px solid var(--border);
+  padding: 0.4em 0.7em;
+  text-align: left;
+}
+.assignment-prose th {
+  background: var(--muted);
+  font-weight: 600;
+}
+.assignment-prose a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* Down-weight the synthetic "Open on YC →" link the integration prepends
+   to each statement — it should be a quiet helper, not a billboard. */
+.assignment-prose a[href*="contest.yandex.ru"] {
+  font-size: 0.8em;
+  opacity: 0.55;
+  text-decoration: none;
+}
+.assignment-prose a[href*="contest.yandex.ru"]:hover {
+  opacity: 0.9;
+  text-decoration: underline;
+}
+.assignment-prose blockquote {
+  border-left: 3px solid var(--border);
+  padding-left: 1em;
+  color: var(--muted-foreground);
+  margin: 0.85em 0;
+}
+
+/* Indeterminate progress stripes used by the YC import modal while we
+   paginate submissions (the total isn't known yet, so a regular
+   determinate bar would sit at 0% the whole time). */
+.yc-import-stripes {
+  background-image: linear-gradient(
+    45deg,
+    var(--primary) 25%,
+    transparent 25%,
+    transparent 50%,
+    var(--primary) 50%,
+    var(--primary) 75%,
+    transparent 75%,
+    transparent
+  );
+  background-size: 1rem 1rem;
+  opacity: 0.55;
+  animation: yc-import-stripes-move 0.9s linear infinite;
+}
+@keyframes yc-import-stripes-move {
+  from { background-position: 0 0; }
+  to   { background-position: 1rem 0; }
+}
