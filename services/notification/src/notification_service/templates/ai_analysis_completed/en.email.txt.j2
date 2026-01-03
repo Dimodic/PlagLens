@@ -1,0 +1,10 @@
+Hello!
+
+LLM analysis{% if assignment_title %} for "{{ assignment_title }}"{% endif %} is ready.
+{% if model %}Model: {{ model }}.{% endif %}
+{% if tokens_used %}Tokens used: {{ tokens_used }}.{% endif %}
+{% if action_url %}
+View report: {{ action_url }}
+{% endif %}
+
+— PlagLens

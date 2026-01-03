@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="ru">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>Работа оценена</h2>
+  <p>Здравствуйте!</p>
+  <p>
+    Ваша работа{% if assignment_title %} <strong>{{ assignment_title }}</strong>{% endif %}
+    {% if course_name %}по курсу <strong>{{ course_name }}</strong>{% endif %} оценена.
+  </p>
+  {% if score is defined %}
+  <p>Оценка: <strong>{{ score }}{% if max_score %} из {{ max_score }}{% endif %}</strong>.</p>
+  {% endif %}
+  {% if action_url %}
+  <p><a href="{{ action_url }}">Открыть работу</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens — платформа проверки на плагиат и LLM-анализ.</p>
+</body>
+</html>

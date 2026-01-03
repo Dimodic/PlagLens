@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="ru">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>LLM-анализ завершён</h2>
+  <p>Здравствуйте!</p>
+  <p>AI-анализ{% if assignment_title %} «{{ assignment_title }}»{% endif %} готов.</p>
+  {% if model %}<p>Модель: <strong>{{ model }}</strong>.</p>{% endif %}
+  {% if tokens_used %}<p>Использовано токенов: {{ tokens_used }}.</p>{% endif %}
+  {% if action_url %}
+  <p><a href="{{ action_url }}">Посмотреть отчёт</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens</p>
+</body>
+</html>

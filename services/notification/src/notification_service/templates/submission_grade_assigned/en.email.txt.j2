@@ -1,0 +1,9 @@
+Hello!
+
+Your submission{% if assignment_title %} {{ assignment_title }}{% endif %}{% if course_name %} for {{ course_name }}{% endif %} has been graded.
+{% if score is defined %}Score: {{ score }}{% if max_score %} / {{ max_score }}{% endif %}.{% endif %}
+{% if action_url %}
+View submission: {{ action_url }}
+{% endif %}
+
+— PlagLens

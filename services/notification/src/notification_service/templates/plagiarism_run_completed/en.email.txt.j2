@@ -1,0 +1,10 @@
+Hello!
+
+Plagiarism check{% if assignment_title %} for {{ assignment_title }}{% endif %}{% if course_name %} ({{ course_name }}){% endif %} has finished.
+{% if similarity_score is defined %}Max similarity: {{ similarity_score }}%.{% endif %}
+{% if suspicious_pairs %}Suspicious pairs: {{ suspicious_pairs }}.{% endif %}
+{% if action_url %}
+View report: {{ action_url }}
+{% endif %}
+
+— PlagLens

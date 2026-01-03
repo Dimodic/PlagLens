@@ -1,0 +1,85 @@
+[build-system]
+requires = ["hatchling>=1.21"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plaglens-common"
+version = "0.1.0"
+description = "Shared abstractions for PlagLens microservices (errors, auth, RBAC, idempotency, events, observability)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+authors = [{ name = "PlagLens Team" }]
+keywords = ["plaglens", "fastapi", "microservices", "rbac", "events"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3.12",
+    "Framework :: FastAPI",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "pydantic>=2.6,<3",
+    "redis>=5.0,<6",
+    "structlog>=24.1",
+    "prometheus-client>=0.19",
+    "opentelemetry-api>=1.24",
+    "opentelemetry-sdk>=1.24",
+    "opentelemetry-exporter-otlp>=1.24",
+    "opentelemetry-instrumentation-httpx>=0.45b0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.45b0",
+    "pyjwt[crypto]>=2.8",
+    "httpx>=0.27,<1.0",
+    "anyio>=4.3",
+]
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.110", "starlette>=0.36"]
+kafka = ["aiokafka>=0.10,<0.13"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "respx>=0.21",
+    "fakeredis[lua]>=2.21",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "fastapi>=0.110",
+    "starlette>=0.36",
+    "httpx>=0.27",
+]
+
+[project.urls]
+Homepage = "https://github.com/plaglens/plaglens-common"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/plaglens_common"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/plaglens_common", "README.md", "tests"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N", "SIM"]
+# E501 - long lines, B008 - default arg func calls, N818 - public class names baked into spec
+ignore = ["E501", "B008", "N818"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B", "N802", "N806"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = false
+warn_redundant_casts = true
+disallow_untyped_defs = false
+files = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"

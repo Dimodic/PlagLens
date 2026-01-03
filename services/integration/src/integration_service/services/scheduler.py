@@ -1,0 +1,356 @@
+"""APScheduler-driven autosync.
+
+Pulls participants (and counts submissions) from every active integration on
+a fixed cadence. Each tick is fenced by a Redis lock so that running multiple
+replicas of integration-service won't double-sync.
+
+Wiring
+------
+* `start_scheduler(app)` is called from `main.py:lifespan` when
+  `settings.enable_scheduler` is true.
+* The scheduler keeps a single recurring job (`_run_tick`) at
+  `settings.scheduler_interval_seconds` (default 300s).
+* Inside `_run_tick` we acquire `lock:autosync:tick` in Redis (`SET NX EX`).
+  If the lock is held we skip the tick — another replica is doing it.
+* For each active `yandex_contest` config we fetch homeworks of the bound
+  course (cross-schema HTTP to course-service with our s2s bearer), extract
+  contest IDs, and fan out to `import-participants` / `import-submissions`
+  through the same adapter the API endpoint uses.
+* Every run materialises an `ImportJob` row so the UI can display history.
+
+The pulled bearer is the cached super_admin service token (see
+`service_token.py`), which has full cross-tenant rights.
+"""
+from __future__ import annotations
+
+import asyncio
+import re
+import time
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import httpx
+import structlog
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from integration_service.adapters.yandex_contest import YandexContestAdapter
+from integration_service.common.db import get_sessionmaker
+from integration_service.common.ids import new_job_id
+from integration_service.common.redis_client import get_redis
+from integration_service.config import get_settings
+from integration_service.models.entities import ImportJob, IntegrationConfig
+from integration_service.services.service_token import auth_headers
+
+logger = structlog.get_logger(__name__)
+
+LOCK_KEY = "lock:autosync:tick"
+CONTEST_ID_RE = re.compile(r"contest_id\s*=\s*(\d+)", re.I)
+
+_scheduler: Optional[AsyncIOScheduler] = None
+
+
+async def _list_active_yc_configs() -> list[IntegrationConfig]:
+    """Cross-tenant select — the scheduler runs as super_admin and must see
+    integrations across every tenant. The repo's `list_` is tenant-bound, so
+    we issue a direct select here."""
+    from sqlalchemy import select
+
+    factory = get_sessionmaker()
+    async with factory() as s:
+        stmt = (
+            select(IntegrationConfig)
+            .where(
+                IntegrationConfig.kind == "yandex_contest",
+                IntegrationConfig.status == "active",
+                IntegrationConfig.deleted_at.is_(None),
+            )
+            .limit(500)
+        )
+        rows = (await s.execute(stmt)).scalars().all()
+        return list(rows)
+
+
+async def _list_homework_contest_ids(course_id: str, headers: dict[str, str]) -> list[int]:
+    s = get_settings()
+    url = (
+        s.course_service_url.rstrip("/")
+        + f"/api/v1/courses/{course_id}/homeworks?limit=200"
+    )
+    async with httpx.AsyncClient(timeout=s.httpx_timeout_seconds) as client:
+        resp = await client.get(url, headers=headers)
+    if resp.status_code >= 400:
+        logger.warning(
+            "scheduler.homeworks_fetch_failed",
+            course_id=course_id,
+            status=resp.status_code,
+            body=resp.text[:200],
+        )
+        return []
+    data = resp.json().get("data") or []
+    out: list[int] = []
+    for hw in data:
+        m = CONTEST_ID_RE.search(hw.get("description") or "")
+        if m:
+            out.append(int(m.group(1)))
+    return out
+
+
+async def _push_to_identity(headers: dict[str, str], items: list[dict[str, Any]], tenant_id: str) -> dict[str, Any]:
+    s = get_settings()
+    url = s.identity_service_url.rstrip("/") + "/api/v1/users/bulk-import"
+    async with httpx.AsyncClient(timeout=s.httpx_timeout_seconds) as client:
+        resp = await client.post(
+            url,
+            headers={**headers, "Content-Type": "application/json"},
+            json={"items": items, "tenant_id": tenant_id},
+        )
+    if resp.status_code >= 400:
+        return {"ok": False, "status": resp.status_code, "body": resp.text[:200]}
+    return {"ok": True, **resp.json()}
+
+
+async def _push_to_course(
+    headers: dict[str, str], course_id: str, members: list[dict[str, Any]]
+) -> dict[str, Any]:
+    s = get_settings()
+    url = (
+        s.course_service_url.rstrip("/")
+        + f"/api/v1/courses/{course_id}/members:batchCreate"
+    )
+    async with httpx.AsyncClient(timeout=s.httpx_timeout_seconds) as client:
+        resp = await client.post(
+            url,
+            headers={**headers, "Content-Type": "application/json"},
+            json={"members": members},
+        )
+    if resp.status_code >= 400:
+        return {"ok": False, "status": resp.status_code, "body": resp.text[:200]}
+    body = resp.json()
+    rows = body if isinstance(body, list) else (body.get("data") or [])
+    return {"ok": True, "added": len(rows)}
+
+
+async def _record_job(
+    config_id: str,
+    tenant_id: str,
+    started_at: datetime,
+    finished_at: datetime,
+    status: str,
+    stats: dict[str, Any],
+    error: Optional[str] = None,
+) -> None:
+    factory = get_sessionmaker()
+    async with factory() as s:
+        s.add(
+            ImportJob(
+                id=new_job_id(),
+                tenant_id=tenant_id,
+                integration_id=config_id,
+                scope={},
+                trigger="scheduled",
+                status=status,
+                progress=stats,
+                started_at=started_at,
+                finished_at=finished_at,
+                stats=stats,
+                error={"detail": error} if error else None,
+            )
+        )
+        await s.commit()
+
+
+async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
+    """Pull every contest tied to this config; report aggregate stats."""
+    started = datetime.now(timezone.utc)
+    headers = await auth_headers()
+    course_id = cfg.course_id
+    if not course_id:
+        return {"skipped": True, "reason": "no course_id"}
+
+    contest_ids = await _list_homework_contest_ids(course_id, headers)
+    if not contest_ids:
+        await _record_job(
+            cfg.id,
+            cfg.tenant_id,
+            started,
+            datetime.now(timezone.utc),
+            "completed",
+            {"contests": 0, "participants_imported": 0},
+        )
+        return {"contests": 0}
+
+    adapter = YandexContestAdapter()
+    total_pp = 0
+    total_created = 0
+    total_existing = 0
+    total_enrolled = 0
+    total_failed = 0
+    errors: list[str] = []
+
+    for cid in contest_ids:
+        result = await adapter.import_participants(cfg, {"contest_id": cid})
+        total_pp += result.imported
+        total_failed += result.failed
+        if result.errors:
+            errors.extend(result.errors[:2])
+        if not result.participants:
+            continue
+
+        items = [
+            {
+                "external_id": rp.external_id,
+                "email": rp.email,
+                "login": rp.login,
+                "display_name": (
+                    f"{rp.surname or ''} {rp.name or ''}".strip()
+                    or rp.login
+                    or rp.external_id
+                ),
+                "global_role": "student",
+            }
+            for rp in result.participants
+        ]
+        ident = await _push_to_identity(headers, items, cfg.tenant_id)
+        if not ident.get("ok"):
+            total_failed += 1
+            errors.append(f"identity {ident.get('status')}: {ident.get('body')}")
+            continue
+        total_created += ident.get("created", 0)
+        total_existing += ident.get("existing", 0)
+
+        members = [
+            {"user_id": it["user_id"], "role": "student"}
+            for it in (ident.get("items") or [])
+        ]
+        if members:
+            crs = await _push_to_course(headers, course_id, members)
+            if not crs.get("ok"):
+                errors.append(f"course {crs.get('status')}: {crs.get('body')}")
+            else:
+                total_enrolled += crs.get("added", 0)
+
+    # ---- Submissions: pull deltas + advance cursor (count-only for now) ----
+    total_subs = 0
+    sub_failures = 0
+    factory = get_sessionmaker()
+    async with factory() as s:
+        # Re-load cfg to get the current cursor (may have advanced if a parallel
+        # request to /import-submissions ran).
+        from sqlalchemy import select as _sel
+
+        fresh = (
+            await s.execute(_sel(IntegrationConfig).where(IntegrationConfig.id == cfg.id))
+        ).scalar_one_or_none()
+        if fresh is not None:
+            cursor_map = dict(fresh.cursor or {})
+            for cid in contest_ids:
+                key = f"yc:{cid}:submissions"
+                sub_scope = {"contest_id": cid, "cursor": cursor_map.get(key) or {}}
+                try:
+                    sres = await adapter.import_submissions(cfg, sub_scope, since=None)
+                except Exception as exc:  # noqa: BLE001
+                    sub_failures += 1
+                    errors.append(f"submissions {cid}: {exc!s}")
+                    continue
+                total_subs += sres.imported
+                sub_failures += sres.failed
+                if sres.cursor and not sres.failed:
+                    cursor_map[key] = sres.cursor
+            fresh.cursor = cursor_map
+            await s.commit()
+
+    finished = datetime.now(timezone.utc)
+    stats = {
+        "contests": len(contest_ids),
+        "participants_imported": total_pp,
+        "users_created": total_created,
+        "users_existing": total_existing,
+        "members_enrolled": total_enrolled,
+        "submissions_fetched": total_subs,
+        "failures": total_failed + sub_failures,
+    }
+    status = (
+        "failed" if (total_failed + sub_failures) and not (total_pp + total_subs) else "completed"
+    )
+    await _record_job(
+        cfg.id,
+        cfg.tenant_id,
+        started,
+        finished,
+        status,
+        stats,
+        error=" | ".join(errors[:3]) if errors else None,
+    )
+    return stats
+
+
+async def _run_tick() -> None:
+    s = get_settings()
+    redis = get_redis()
+    lock_acquired = await redis.set(
+        LOCK_KEY, str(time.time()), nx=True, ex=s.scheduler_lock_ttl_seconds
+    )
+    if not lock_acquired:
+        logger.debug("scheduler.tick_skipped", reason="lock_held")
+        return
+
+    started = time.monotonic()
+    try:
+        configs = await _list_active_yc_configs()
+        if not configs:
+            logger.info("scheduler.tick_no_configs")
+            return
+        logger.info("scheduler.tick_start", configs=len(configs))
+        results: list[dict[str, Any]] = []
+        for cfg in configs:
+            try:
+                stat = await _sync_one_config(cfg)
+                results.append({"config": cfg.id, **stat})
+            except Exception as exc:  # noqa: BLE001
+                logger.exception(
+                    "scheduler.config_failed", config_id=cfg.id, error=str(exc)
+                )
+        elapsed = time.monotonic() - started
+        logger.info(
+            "scheduler.tick_done",
+            elapsed_s=round(elapsed, 2),
+            results=results,
+        )
+    finally:
+        # Lock TTL'd to a fixed value; explicit DEL for fast handoff.
+        try:
+            await redis.delete(LOCK_KEY)
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def start_scheduler() -> AsyncIOScheduler:
+    """Initialise + start a single recurring tick. Idempotent."""
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        return _scheduler
+    s = get_settings()
+    _scheduler = AsyncIOScheduler(timezone="UTC")
+    _scheduler.add_job(
+        _run_tick,
+        "interval",
+        seconds=s.scheduler_interval_seconds,
+        id="autosync_tick",
+        coalesce=True,
+        max_instances=1,
+        replace_existing=True,
+    )
+    _scheduler.start()
+    logger.info(
+        "scheduler.started",
+        interval_seconds=s.scheduler_interval_seconds,
+    )
+    return _scheduler
+
+
+def stop_scheduler() -> None:
+    global _scheduler
+    if _scheduler and _scheduler.running:
+        _scheduler.shutdown(wait=False)
+        logger.info("scheduler.stopped")
+    _scheduler = None

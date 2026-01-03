@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>Welcome to the course</h2>
+  <p>Hello!</p>
+  <p>
+    You have been added to{% if course_name %} <strong>{{ course_name }}</strong>{% endif %}
+    {% if role %}as <strong>{{ role }}</strong>{% endif %}.
+  </p>
+  {% if action_url %}
+  <p><a href="{{ action_url }}">Open course</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens</p>
+</body>
+</html>

@@ -1,0 +1,9 @@
+Здравствуйте{% if user_name %}, {{ user_name }}{% endif %}!
+
+Чтобы завершить регистрацию в PlagLens, подтвердите ваш email:
+
+{{ verify_url }}
+
+Ссылка действительна {{ expires_in_hours | default(24) }} часов.
+
+— PlagLens

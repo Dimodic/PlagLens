@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "plaglens-audit-service"
+version = "0.1.0"
+description = "PlagLens Audit Service: append-only audit log, retention, legal holds"
+requires-python = ">=3.12"
+authors = [{ name = "PlagLens Team" }]
+readme = "README.md"
+license = { text = "Proprietary" }
+
+dependencies = [
+    "plaglens-common>=0.1.0",
+    "fastapi>=0.110,<0.120",
+    "uvicorn[standard]>=0.29,<0.40",
+    "pydantic>=2.6,<3.0",
+    "pydantic-settings>=2.2,<3.0",
+    "sqlalchemy[asyncio]>=2.0.29,<3.0",
+    "asyncpg>=0.29,<0.31",
+    "psycopg2-binary>=2.9",
+    "alembic>=1.13,<2.0",
+    "redis>=5.0,<6.0",
+    "aiokafka>=0.10,<0.13",
+    "apscheduler>=3.10,<4.0",
+    "structlog>=24.1,<26.0",
+    "httpx>=0.27,<0.30",
+    "pyjwt[crypto]>=2.8,<3.0",
+    "python-ulid>=2.2,<4.0",
+    "prometheus-client>=0.20,<0.22",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.1,<9.0",
+    "pytest-asyncio>=0.23,<0.30",
+    "aiosqlite>=0.20,<0.22",
+    "fakeredis>=2.20,<3.0",
+    "ruff>=0.4,<0.10",
+    "mypy>=1.10,<2.0",
+]
+
+[project.scripts]
+audit-service = "audit_service.main:run"
+
+[tool.uv.sources]
+plaglens-common = { path = "../../libs/plaglens-common", editable = true }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ASYNC"]
+ignore = [
+    "E501",
+    "B008",
+    "B904",
+    "UP038",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B"]
+"alembic/*" = []
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --tb=short"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]

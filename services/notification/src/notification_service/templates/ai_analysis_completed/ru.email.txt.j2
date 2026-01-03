@@ -1,0 +1,10 @@
+Здравствуйте!
+
+AI-анализ{% if assignment_title %} «{{ assignment_title }}»{% endif %} готов.
+{% if model %}Модель: {{ model }}.{% endif %}
+{% if tokens_used %}Использовано токенов: {{ tokens_used }}.{% endif %}
+{% if action_url %}
+Посмотреть отчёт: {{ action_url }}
+{% endif %}
+
+— PlagLens

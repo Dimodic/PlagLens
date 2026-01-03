@@ -1,0 +1,9 @@
+Здравствуйте!
+
+Ваша работа{% if assignment_title %} {{ assignment_title }}{% endif %}{% if course_name %} по курсу {{ course_name }}{% endif %} оценена.
+{% if score is defined %}Оценка: {{ score }}{% if max_score %} из {{ max_score }}{% endif %}.{% endif %}
+{% if action_url %}
+Открыть работу: {{ action_url }}
+{% endif %}
+
+— PlagLens

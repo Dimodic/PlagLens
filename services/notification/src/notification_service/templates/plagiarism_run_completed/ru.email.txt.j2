@@ -1,0 +1,10 @@
+Здравствуйте!
+
+Проверка на плагиат{% if assignment_title %} по заданию {{ assignment_title }}{% endif %}{% if course_name %} ({{ course_name }}){% endif %} завершена.
+{% if similarity_score is defined %}Максимальное совпадение: {{ similarity_score }}%.{% endif %}
+{% if suspicious_pairs %}Подозрительных пар: {{ suspicious_pairs }}.{% endif %}
+{% if action_url %}
+Открыть отчёт: {{ action_url }}
+{% endif %}
+
+— PlagLens

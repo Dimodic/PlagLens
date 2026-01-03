@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>Plagiarism check completed</h2>
+  <p>Hello!</p>
+  <p>
+    Plagiarism check{% if assignment_title %} for <strong>{{ assignment_title }}</strong>{% endif %}
+    {% if course_name %}({{ course_name }}){% endif %} has finished.
+  </p>
+  {% if similarity_score is defined %}
+  <p>Max similarity: <strong>{{ similarity_score }}%</strong>.</p>
+  {% endif %}
+  {% if suspicious_pairs %}
+  <p>Suspicious pairs: {{ suspicious_pairs }}.</p>
+  {% endif %}
+  {% if action_url %}
+  <p><a href="{{ action_url }}">View report</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens</p>
+</body>
+</html>

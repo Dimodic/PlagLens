@@ -1,0 +1,139 @@
+# PlagLens API Gateway runtime config
+# Loaded on startup; environment variables (GATEWAY_*) take precedence.
+
+backends:
+  identity:     http://identity-service:8080
+  course:       http://course-service:8080
+  submission:   http://submission-service:8080
+  integration:  http://integration-service:8080
+  plagiarism:   http://plagiarism-service:8080
+  ai-analysis:  http://ai-analysis-service:8080
+  notification: http://notification-service:8080
+  reporting:    http://reporting-service:8080
+  audit:        http://audit-service:8080
+
+# Routing table is also defined statically in code (routing/table.py).
+# This file documents the same shape for ops; keep them in sync.
+routes:
+  - prefix: /api/v1/courses/{id}/submissions
+    backend: submission
+  - prefix: /api/v1/auth/login
+    backend: identity
+    endpoint_class: auth_sensitive
+  - prefix: /api/v1/auth/register
+    backend: identity
+    endpoint_class: auth_sensitive
+  - prefix: /api/v1/auth/refresh
+    backend: identity
+    endpoint_class: auth_sensitive
+  - prefix: /api/v1/auth/password
+    backend: identity
+    endpoint_class: auth_sensitive
+  - prefix: /api/v1/auth
+    backend: identity
+  - prefix: /api/v1/users
+    backend: identity
+  - prefix: /api/v1/tenants
+    backend: identity
+  - prefix: /api/v1/roles
+    backend: identity
+  - prefix: /api/v1/invitations
+    backend: identity
+  - prefix: /api/v1/.well-known
+    backend: identity
+  - prefix: /api/v1/courses
+    backend: course
+  # Assignment-scoped sub-resources owned by submission_service — must
+  # come before the generic /api/v1/assignments → course rule.
+  - prefix: /api/v1/assignments/{id}/submissions
+    backend: submission
+  - prefix: /api/v1/assignments/{id}/grades
+    backend: submission
+  - prefix: /api/v1/assignments/{id}/aggregate-stats
+    backend: submission
+  - prefix: /api/v1/assignments
+    backend: course
+  - prefix: /api/v1/submissions/{id}/ai-analyses
+    backend: ai-analysis
+    endpoint_class: run
+  - prefix: /api/v1/submissions/{id}/suspicious-flags
+    backend: plagiarism
+  # Collection-level :action endpoint — needs an explicit rule.
+  - prefix: /api/v1/submissions:distribute
+    backend: submission
+  - prefix: /api/v1/submissions
+    backend: submission
+  - prefix: /api/v1/integrations
+    backend: integration
+  - prefix: /api/v1/webhooks
+    backend: integration
+  - prefix: /api/v1/plagiarism-runs
+    backend: plagiarism
+    endpoint_class: run
+  - prefix: /api/v1/plagiarism-corpus
+    backend: plagiarism
+  - prefix: /api/v1/ai-analyses
+    backend: ai-analysis
+    endpoint_class: run
+  - prefix: /api/v1/notifications
+    backend: notification
+  - prefix: /api/v1/exports
+    backend: reporting
+    endpoint_class: run
+  - prefix: /api/v1/scheduled-exports
+    backend: reporting
+  # Interactive Google Sheets picker — preview a spreadsheet into JSON so
+  # the export page can render its tabs and let the teacher drag-select
+  # the destination region.
+  - prefix: /api/v1/sheets
+    backend: reporting
+  - prefix: /api/v1/audit
+    backend: audit
+  - prefix: /api/v1/admin/users
+    backend: identity
+  - prefix: /api/v1/admin/tenants
+    backend: identity
+  - prefix: /api/v1/admin/templates
+    backend: notification
+  - prefix: /api/v1/admin/reporting
+    backend: reporting
+  - prefix: /api/v1/admin/dashboard
+    backend: reporting
+  - prefix: /api/v1/admin/plagiarism
+    backend: plagiarism
+  - prefix: /api/v1/admin/ai-analysis
+    backend: ai-analysis
+  - prefix: /api/v1/admin/integration
+    backend: integration
+  - prefix: /api/v1/admin/audit
+    backend: audit
+
+operation_prefix_routing:
+  op_imp_: integration
+  op_plg_: plagiarism
+  op_ai_:  ai-analysis
+  op_exp_: reporting
+  op_grd_: submission
+
+rate_limits:
+  per_ip:    { rpm: 60 }
+  per_user:  { rpm: 600 }
+  endpoint_classes:
+    auth_sensitive: { rpm: 5 }
+    write:          { rpm: 120 }
+    run:            { rph: 30 }
+
+body_limits:
+  default_bytes:   10485760    # 10 MiB
+  multipart_bytes: 52428800    # 50 MiB
+
+circuit_breaker:
+  window_s: 30
+  open_for_s: 60
+  failure_threshold_pct: 50
+  min_calls: 10
+
+cors:
+  default_origins:
+    - http://localhost:3000
+  allow_credentials: true

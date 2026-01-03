@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="ru">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>Добро пожаловать в курс</h2>
+  <p>Здравствуйте!</p>
+  <p>
+    Вы добавлены в курс{% if course_name %} <strong>{{ course_name }}</strong>{% endif %}
+    {% if role %}в роли <strong>{{ role }}</strong>{% endif %}.
+  </p>
+  {% if action_url %}
+  <p><a href="{{ action_url }}">Перейти к курсу</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens</p>
+</body>
+</html>

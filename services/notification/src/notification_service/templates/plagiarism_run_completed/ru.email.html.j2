@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="ru">
+<body style="font-family:Arial,Helvetica,sans-serif;color:#222;">
+  <h2>Проверка на плагиат завершена</h2>
+  <p>Здравствуйте!</p>
+  <p>
+    Проверка{% if assignment_title %} по заданию <strong>{{ assignment_title }}</strong>{% endif %}
+    {% if course_name %}({{ course_name }}){% endif %} завершилась.
+  </p>
+  {% if similarity_score is defined %}
+  <p>Максимальное совпадение: <strong>{{ similarity_score }}%</strong>.</p>
+  {% endif %}
+  {% if suspicious_pairs %}
+  <p>Подозрительных пар: {{ suspicious_pairs }}.</p>
+  {% endif %}
+  {% if action_url %}
+  <p><a href="{{ action_url }}">Открыть отчёт</a></p>
+  {% endif %}
+  <hr>
+  <p style="color:#888;font-size:12px;">PlagLens</p>
+</body>
+</html>
