@@ -1,0 +1,187 @@
+---
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Per-service / per-lib matrix: ruff, mypy, pytest with coverage
+  # ---------------------------------------------------------------------------
+  service-checks:
+    name: "${{ matrix.target.kind }} / ${{ matrix.target.name }}"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - {kind: service, name: gateway,      path: services/gateway}
+          - {kind: service, name: identity,     path: services/identity}
+          - {kind: service, name: course,       path: services/course}
+          - {kind: service, name: submission,   path: services/submission}
+          - {kind: service, name: integration,  path: services/integration}
+          - {kind: service, name: plagiarism,   path: services/plagiarism}
+          - {kind: service, name: ai-analysis,  path: services/ai-analysis}
+          - {kind: service, name: notification, path: services/notification}
+          - {kind: service, name: reporting,    path: services/reporting}
+          - {kind: service, name: audit,        path: services/audit}
+          - {kind: lib,     name: plaglens-common, path: libs/plaglens-common}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Skip if path absent
+        id: presence
+        run: |
+          if [ -d "${{ matrix.target.path }}" ]; then
+            echo "exists=true"  >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ matrix.target.path }} not present yet — skipping"
+          fi
+
+      - name: Install dependencies
+        if: steps.presence.outputs.exists == 'true'
+        working-directory: ${{ matrix.target.path }}
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ruff mypy pytest pytest-asyncio pytest-cov httpx respx
+          if [ -f pyproject.toml ]; then pip install -e ".[dev]" || pip install -e .; fi
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: ruff check
+        if: steps.presence.outputs.exists == 'true'
+        working-directory: ${{ matrix.target.path }}
+        run: ruff check .
+
+      - name: ruff format --check
+        if: steps.presence.outputs.exists == 'true'
+        working-directory: ${{ matrix.target.path }}
+        run: ruff format --check .
+
+      - name: mypy
+        if: steps.presence.outputs.exists == 'true'
+        working-directory: ${{ matrix.target.path }}
+        continue-on-error: true
+        run: |
+          if [ -d src ]; then
+            mypy src --ignore-missing-imports --show-error-codes
+          fi
+
+      - name: pytest with coverage
+        if: steps.presence.outputs.exists == 'true'
+        working-directory: ${{ matrix.target.path }}
+        run: |
+          if [ -d tests ]; then
+            python -m pytest --cov=src --cov-report=xml --cov-report=term-missing
+          else
+            echo "::notice::no tests/ in ${{ matrix.target.path }} — skipping pytest"
+          fi
+
+      - name: Upload coverage
+        if: steps.presence.outputs.exists == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.target.name }}
+          path: ${{ matrix.target.path }}/coverage.xml
+          if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # docker compose validate
+  # ---------------------------------------------------------------------------
+  docker-compose-validate:
+    name: docker compose config
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare env
+        run: |
+          if [ -f infra/.env.example ] && [ ! -f infra/.env ]; then
+            cp infra/.env.example infra/.env
+          fi
+      - name: Validate compose
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env config --quiet
+
+  # ---------------------------------------------------------------------------
+  # E2E (best-effort — does not block the PR)
+  # ---------------------------------------------------------------------------
+  e2e:
+    name: E2E smoke
+    runs-on: ubuntu-latest
+    needs: docker-compose-validate
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install e2e deps
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-asyncio httpx respx pyjwt
+
+      - name: Bring up stack
+        run: |
+          if [ -f infra/.env.example ] && [ ! -f infra/.env ]; then
+            cp infra/.env.example infra/.env
+          fi
+          docker compose -f infra/docker-compose.yml --env-file infra/.env up -d --build || true
+
+      - name: Wait for gateway
+        run: |
+          for i in {1..30}; do
+            if curl -fsS http://localhost:8080/healthz >/dev/null 2>&1; then
+              echo "gateway up"; break
+            fi
+            sleep 5
+          done
+
+      - name: Run e2e
+        env:
+          PLAGLENS_GATEWAY_URL: http://localhost:8080
+        run: python -m pytest tools/e2e/ -v --tb=short
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env down -v || true
+
+  # ---------------------------------------------------------------------------
+  # Markdown lint for docs/
+  # ---------------------------------------------------------------------------
+  lint-docs:
+    name: markdownlint docs/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v17
+        with:
+          globs: |
+            docs/**/*.md
+            README.md
+          config: |
+            {
+              "default": true,
+              "MD013": false,
+              "MD033": false,
+              "MD041": false,
+              "MD024": {"siblings_only": true}
+            }

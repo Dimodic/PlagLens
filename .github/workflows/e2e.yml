@@ -1,0 +1,103 @@
+name: E2E (Playwright)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install frontend deps
+        working-directory: frontend
+        run: npm ci --legacy-peer-deps
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Generate JWT keys
+        run: bash tools/scripts/gen-jwt-keys.sh infra/secrets
+
+      - name: Bootstrap infra/.env
+        run: |
+          if [ ! -f infra/.env ]; then
+            cp infra/.env.example infra/.env
+          fi
+          if [ ! -f infra/.env.local ]; then
+            touch infra/.env.local
+          fi
+
+      - name: Boot stack
+        run: |
+          docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
+          # Healthcheck loop — wait until the gateway responds.
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:5173/api/v1/auth/login -X POST -H "Content-Type: application/json" -d '{}' >/dev/null 2>&1; then
+              echo "Gateway alive"; break;
+            fi
+            echo "Waiting for gateway… ($i/60)"; sleep 5
+          done
+
+      - name: Seed demo data
+        run: python tools/scripts/seed-demo-data.py --gateway-url http://localhost:8001 || true
+
+      - name: Run Playwright tests
+        working-directory: frontend
+        env:
+          CI: 'true'
+          E2E_BASE_URL: http://localhost:5173
+          E2E_API_HOST: http://localhost:5173
+        run: npx playwright test --reporter=list,html,junit
+
+      - name: Upload HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7
+
+      - name: Upload test-results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-test-results
+          path: frontend/test-results/
+          retention-days: 3
+
+      - name: Show stack logs on failure
+        if: failure()
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env logs --tail=200
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose -f infra/docker-compose.yml --env-file infra/.env down -v --remove-orphans

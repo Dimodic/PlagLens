@@ -1,0 +1,115 @@
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+.installed.cfg
+
+# venv
+.venv/
+venv/
+env/
+ENV/
+.python-version
+
+# build artefacts
+build/
+dist/
+sdist/
+wheels/
+*.manifest
+*.spec
+pip-wheel-metadata/
+share/python-wheels/
+
+# test/lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.cache/
+.hypothesis/
+htmlcov/
+coverage.xml
+.coverage
+.coverage.*
+nosetests.xml
+*.cover
+
+# ---------------------------------------------------------------------------
+# IDEs / editors
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.spyderproject
+.spyproject
+.ropeproject
+.history/
+
+# ---------------------------------------------------------------------------
+# Environment / secrets
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+secrets/
+# Allow the placeholder dir at infra/secrets/ to exist in the checkout
+# (so docker-compose's bind-mount has something to attach to). Only the
+# .gitignore + README.md inside it are committed; PEM keys etc. stay out.
+!infra/secrets/
+infra/secrets/*
+!infra/secrets/.gitignore
+!infra/secrets/README.md
+credentials.json
+*.key
+*.pem
+*.p12
+*.pfx
+.ssh/
+
+# detect-secrets baseline (committed)
+!.secrets.baseline
+
+# ---------------------------------------------------------------------------
+# Docker / infra
+# ---------------------------------------------------------------------------
+.docker/
+docker-compose.override.yml
+*.tar
+*.tar.gz
+
+# ---------------------------------------------------------------------------
+# Logs
+# ---------------------------------------------------------------------------
+*.log
+logs/
+*.log.*
+
+# ---------------------------------------------------------------------------
+# Frontend (forward-looking)
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+.nuxt/
+.svelte-kit/
+out/
+
+# ---------------------------------------------------------------------------
+# OS-specific
+# ---------------------------------------------------------------------------
+$RECYCLE.BIN/
+ehthumbs.db
+.Trash-*
