@@ -1,0 +1,2256 @@
+{
+  "pages": [
+    {
+      "role": "teacher",
+      "idx": 1,
+      "url": "/",
+      "slug": "root",
+      "probe": {
+        "title": "Курсы · PlagLens",
+        "bodyLen": 513,
+        "h1": "Курсы и задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 2,
+      "url": "/me",
+      "slug": "me",
+      "probe": {
+        "title": "Мой обзор · PlagLens",
+        "bodyLen": 393,
+        "h1": "Добрый вечер, Горденко М.К.",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 3,
+      "url": "/courses",
+      "slug": "courses",
+      "probe": {
+        "title": "Курсы · PlagLens",
+        "bodyLen": 513,
+        "h1": "Курсы и задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 4,
+      "url": "/integrations",
+      "slug": "integrations",
+      "probe": {
+        "title": "Интеграции · PlagLens",
+        "bodyLen": 377,
+        "h1": "Интеграции курса",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 5,
+      "url": "/settings",
+      "slug": "settings",
+      "probe": {
+        "title": "Настройки · PlagLens",
+        "bodyLen": 518,
+        "h1": "Настройки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 6,
+      "url": "/me/settings",
+      "slug": "me-settings",
+      "probe": {
+        "title": "Настройки · PlagLens",
+        "bodyLen": 447,
+        "h1": "Настройки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 7,
+      "url": "/me/profile",
+      "slug": "me-profile",
+      "probe": {
+        "title": "Профиль · PlagLens",
+        "bodyLen": 302,
+        "h1": "Профиль",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 8,
+      "url": "/me/assignments",
+      "slug": "me-assignments",
+      "probe": {
+        "title": "Мои задания · PlagLens",
+        "bodyLen": 305,
+        "h1": "Мои задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 9,
+      "url": "/me/submissions",
+      "slug": "me-submissions",
+      "probe": {
+        "title": "Мои посылки · PlagLens",
+        "bodyLen": 284,
+        "h1": "Мои посылки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 10,
+      "url": "/notifications",
+      "slug": "notifications",
+      "probe": {
+        "title": "Уведомления · PlagLens",
+        "bodyLen": 291,
+        "h1": "Уведомления",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 11,
+      "url": "/reports",
+      "slug": "reports",
+      "probe": {
+        "title": "Отчёты · PlagLens",
+        "bodyLen": 311,
+        "h1": "Отчёты курса",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 12,
+      "url": "/imports",
+      "slug": "imports",
+      "probe": {
+        "title": "Импорт посылок · PlagLens",
+        "bodyLen": 1635,
+        "h1": "Импорт посылок",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 13,
+      "url": "/llm",
+      "slug": "llm",
+      "probe": {
+        "title": "Курсы · PlagLens",
+        "bodyLen": 513,
+        "h1": "Курсы и задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 14,
+      "url": "/courses/new",
+      "slug": "courses-new",
+      "probe": {
+        "title": "Создание курса · PlagLens",
+        "bodyLen": 312,
+        "h1": "Создание курса",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 15,
+      "url": "/courses/join",
+      "slug": "courses-join",
+      "probe": {
+        "title": "Присоединиться к курсу · PlagLens",
+        "bodyLen": 295,
+        "h1": "Присоединиться к курсу",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 16,
+      "url": "/integrations/wizard",
+      "slug": "integrations-wizard",
+      "probe": {
+        "title": "Импорт · PlagLens",
+        "bodyLen": 334,
+        "h1": "Мастер настройки интеграции",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 17,
+      "url": "/integrations/new",
+      "slug": "integrations-new",
+      "probe": {
+        "title": "Новая интеграция · PlagLens",
+        "bodyLen": 347,
+        "h1": "Новая интеграция",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 18,
+      "url": "/integrations/yandex-contest/setup",
+      "slug": "integrations-yandex-contest-setup",
+      "probe": {
+        "title": "Подключить Yandex.Contest · PlagLens",
+        "bodyLen": 608,
+        "h1": "Подключить Yandex.Contest",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 19,
+      "url": "/integrations/stepik/setup",
+      "slug": "integrations-stepik-setup",
+      "probe": {
+        "title": "Подключить Stepik · PlagLens",
+        "bodyLen": 551,
+        "h1": "Подключить Stepik",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 20,
+      "url": "/integrations/ejudge/setup",
+      "slug": "integrations-ejudge-setup",
+      "probe": {
+        "title": "Подключить eJudge · PlagLens",
+        "bodyLen": 954,
+        "h1": "Подключить eJudge",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 21,
+      "url": "/me/security",
+      "slug": "me-security",
+      "probe": {
+        "title": "Безопасность · PlagLens",
+        "bodyLen": 293,
+        "h1": "Безопасность",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 22,
+      "url": "/me/api-keys",
+      "slug": "me-api-keys",
+      "probe": {
+        "title": "API keys · PlagLens",
+        "bodyLen": 244,
+        "h1": "API keys",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 23,
+      "url": "/me/external-bindings",
+      "slug": "me-external-bindings",
+      "probe": {
+        "title": "Внешние привязки · PlagLens",
+        "bodyLen": 310,
+        "h1": "Внешние привязки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 24,
+      "url": "/me/2fa",
+      "slug": "me-2fa",
+      "probe": {
+        "title": "Двухфакторная аутентификация · PlagLens",
+        "bodyLen": 450,
+        "h1": "Двухфакторная аутентификация",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 25,
+      "url": "/me/notifications/preferences",
+      "slug": "me-notifications-preferences",
+      "probe": {
+        "title": "Настройки уведомлений · PlagLens",
+        "bodyLen": 1085,
+        "h1": "Настройки уведомлений",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 26,
+      "url": "/me/notifications/web-push",
+      "slug": "me-notifications-web-push",
+      "probe": {
+        "title": "Web Push · PlagLens",
+        "bodyLen": 276,
+        "h1": "Push-уведомления",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 27,
+      "url": "/me/exports",
+      "slug": "me-exports",
+      "probe": {
+        "title": "Мои экспорты · PlagLens",
+        "bodyLen": 309,
+        "h1": "Мои экспорты",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "teacher",
+      "idx": 28,
+      "url": "/courses/knad-cpp-24-25",
+      "slug": "courses-knad-cpp-24-25",
+      "probe": {
+        "title": "Программирование на C++ КНАД 24/25 · PlagLens",
+        "bodyLen": 1036,
+        "h1": "Программирование на C++ КНАД 24/25",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      },
+      "dynamic": true
+    },
+    {
+      "role": "teacher",
+      "idx": 29,
+      "url": "/integrations/ic_ab80daf0834173",
+      "slug": "integrations-ic-ab80daf0834173",
+      "probe": {
+        "title": "Интеграция · PlagLens",
+        "bodyLen": 427,
+        "h1": "Stepik — 10.05.2026stepikактивно",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      },
+      "dynamic": true
+    },
+    {
+      "role": "admin",
+      "idx": 1,
+      "url": "/",
+      "slug": "root",
+      "probe": {
+        "title": "Дашборд тенанта · PlagLens",
+        "bodyLen": 424,
+        "h1": "Дашборд тенанта",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 2,
+      "url": "/me",
+      "slug": "me",
+      "probe": {
+        "title": "Мой обзор · PlagLens",
+        "bodyLen": 410,
+        "h1": "Добрый вечер, System Super Admin",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 3,
+      "url": "/admin",
+      "slug": "admin",
+      "probe": {
+        "title": "Дашборд тенанта · PlagLens",
+        "bodyLen": 424,
+        "h1": "Дашборд тенанта",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 4,
+      "url": "/admin/overview",
+      "slug": "admin-overview",
+      "probe": {
+        "title": "Админ-панель · PlagLens",
+        "bodyLen": 387,
+        "h1": "ФКН ВШЭ",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 5,
+      "url": "/admin/users",
+      "slug": "admin-users",
+      "probe": {
+        "title": "Пользователи · PlagLens",
+        "bodyLen": 8537,
+        "h1": "Пользователи",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 6,
+      "url": "/admin/audit",
+      "slug": "admin-audit",
+      "probe": {
+        "title": "Аудит · PlagLens",
+        "bodyLen": 253,
+        "h1": "Аудит",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 7,
+      "url": "/admin/integrations",
+      "slug": "admin-integrations",
+      "probe": {
+        "title": "Интеграции · PlagLens",
+        "bodyLen": 274,
+        "h1": "Интеграции",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 8,
+      "url": "/admin/notifications/email",
+      "slug": "admin-notifications-email",
+      "probe": {
+        "title": "Email config · PlagLens",
+        "bodyLen": 276,
+        "h1": "Email-конфиг",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 9,
+      "url": "/admin/ai/providers",
+      "slug": "admin-ai-providers",
+      "probe": {
+        "title": "LLM provider · PlagLens",
+        "bodyLen": 364,
+        "h1": "LLM provider",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 10,
+      "url": "/admin/system/settings",
+      "slug": "admin-system-settings",
+      "probe": {
+        "title": "Настройки учреждения · PlagLens",
+        "bodyLen": 674,
+        "h1": "Настройки учреждения",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 11,
+      "url": "/admin/system/health",
+      "slug": "admin-system-health",
+      "probe": {
+        "title": "System health · PlagLens",
+        "bodyLen": 215,
+        "h1": "System health",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 12,
+      "url": "/admin/roles",
+      "slug": "admin-roles",
+      "probe": {
+        "title": "Roles & permissions · PlagLens",
+        "bodyLen": 425,
+        "h1": "Roles & permissions",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 13,
+      "url": "/me/settings",
+      "slug": "me-settings",
+      "probe": {
+        "title": "Настройки · PlagLens",
+        "bodyLen": 466,
+        "h1": "Настройки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 14,
+      "url": "/me/profile",
+      "slug": "me-profile",
+      "probe": {
+        "title": "Профиль · PlagLens",
+        "bodyLen": 314,
+        "h1": "Профиль",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 15,
+      "url": "/notifications",
+      "slug": "notifications",
+      "probe": {
+        "title": "Уведомления · PlagLens",
+        "bodyLen": 303,
+        "h1": "Уведомления",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 16,
+      "url": "/admin/users/new",
+      "slug": "admin-users-new",
+      "probe": {
+        "title": "Новый пользователь · PlagLens",
+        "bodyLen": 313,
+        "h1": "Новый пользователь",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 17,
+      "url": "/admin/integrations/new",
+      "slug": "admin-integrations-new",
+      "probe": {
+        "title": "Новая интеграция · PlagLens",
+        "bodyLen": 359,
+        "h1": "Новая интеграция",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 18,
+      "url": "/admin/integrations/oauth-providers",
+      "slug": "admin-integrations-oauth-providers",
+      "probe": {
+        "title": "OAuth-провайдеры · PlagLens",
+        "bodyLen": 1036,
+        "h1": "OAuth-провайдеры",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 19,
+      "url": "/admin/integrations/webhooks",
+      "slug": "admin-integrations-webhooks",
+      "probe": {
+        "title": "Webhook events · PlagLens",
+        "bodyLen": 249,
+        "h1": "Webhook events",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 20,
+      "url": "/admin/audit/search",
+      "slug": "admin-audit-search",
+      "probe": {
+        "title": "Audit search · PlagLens",
+        "bodyLen": 277,
+        "h1": "Audit search",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 21,
+      "url": "/admin/audit/access-denied",
+      "slug": "admin-audit-access-denied",
+      "probe": {
+        "title": "Access denied · PlagLens",
+        "bodyLen": 269,
+        "h1": "Access denied",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 22,
+      "url": "/admin/audit/retention",
+      "slug": "admin-audit-retention",
+      "probe": {
+        "title": "Retention policy · PlagLens",
+        "bodyLen": 401,
+        "h1": "Retention policy",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 23,
+      "url": "/admin/audit/legal-holds",
+      "slug": "admin-audit-legal-holds",
+      "probe": {
+        "title": "Legal holds · PlagLens",
+        "bodyLen": 359,
+        "h1": "Legal holds",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 24,
+      "url": "/admin/notifications/templates",
+      "slug": "admin-notifications-templates",
+      "probe": {
+        "title": "Шаблоны уведомлений · PlagLens",
+        "bodyLen": 249,
+        "h1": "Шаблоны уведомлений",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 25,
+      "url": "/admin/notifications/deliveries",
+      "slug": "admin-notifications-deliveries",
+      "probe": {
+        "title": "Доставка уведомлений · PlagLens",
+        "bodyLen": 2907,
+        "h1": "Доставки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 26,
+      "url": "/admin/notifications/dlq",
+      "slug": "admin-notifications-dlq",
+      "probe": {
+        "title": "Notifications DLQ · PlagLens",
+        "bodyLen": 230,
+        "h1": "Notifications DLQ",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 27,
+      "url": "/admin/ai/budgets",
+      "slug": "admin-ai-budgets",
+      "probe": {
+        "title": "LLM budgets · PlagLens",
+        "bodyLen": 371,
+        "h1": "LLM budgets",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 28,
+      "url": "/admin/ai/cache",
+      "slug": "admin-ai-cache",
+      "probe": {
+        "title": "LLM cache · PlagLens",
+        "bodyLen": 350,
+        "h1": "LLM cache",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 29,
+      "url": "/admin/ai/prompt-versions",
+      "slug": "admin-ai-prompt-versions",
+      "probe": {
+        "title": "Prompt versions · PlagLens",
+        "bodyLen": 235,
+        "h1": "Prompt versions",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 30,
+      "url": "/admin/exports",
+      "slug": "admin-exports",
+      "probe": {
+        "title": "Экспорты · PlagLens",
+        "bodyLen": 306,
+        "h1": "Экспорты тенанта",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 31,
+      "url": "/admin/plagiarism-corpus",
+      "slug": "admin-plagiarism-corpus",
+      "probe": {
+        "title": "Plagiarism corpus · PlagLens",
+        "bodyLen": 421,
+        "h1": "Plagiarism corpus",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 32,
+      "url": "/admin/providers",
+      "slug": "admin-providers",
+      "probe": {
+        "title": "Провайдеры · PlagLens",
+        "bodyLen": 1325,
+        "h1": "Провайдеры",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 33,
+      "url": "/admin/metrics",
+      "slug": "admin-metrics",
+      "probe": {
+        "title": "Метрики · PlagLens",
+        "bodyLen": 884,
+        "h1": "Метрики",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 34,
+      "url": "/admin/settings",
+      "slug": "admin-settings",
+      "probe": {
+        "title": "Настройки учреждения · PlagLens",
+        "bodyLen": 674,
+        "h1": "Настройки учреждения",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "admin",
+      "idx": 35,
+      "url": "/activity",
+      "slug": "activity",
+      "probe": {
+        "title": "Активность · PlagLens",
+        "bodyLen": 268,
+        "h1": "Активность",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 1,
+      "url": "/",
+      "slug": "root",
+      "probe": {
+        "title": "Мои задания · PlagLens",
+        "bodyLen": 181,
+        "h1": "Мои задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 2,
+      "url": "/me",
+      "slug": "me",
+      "probe": {
+        "title": "Мой обзор · PlagLens",
+        "bodyLen": 267,
+        "h1": "Добрый вечер, Иван Петров",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 3,
+      "url": "/me/assignments",
+      "slug": "me-assignments",
+      "probe": {
+        "title": "Мои задания · PlagLens",
+        "bodyLen": 181,
+        "h1": "Мои задания",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 4,
+      "url": "/me/submissions",
+      "slug": "me-submissions",
+      "probe": {
+        "title": "Мои посылки · PlagLens",
+        "bodyLen": 160,
+        "h1": "Мои посылки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 5,
+      "url": "/me/grades",
+      "slug": "me-grades",
+      "probe": {
+        "title": "Мои оценки · PlagLens",
+        "bodyLen": 95,
+        "h1": "Мои оценки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 6,
+      "url": "/me/settings",
+      "slug": "me-settings",
+      "probe": {
+        "title": "Настройки · PlagLens",
+        "bodyLen": 322,
+        "h1": "Настройки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 7,
+      "url": "/me/profile",
+      "slug": "me-profile",
+      "probe": {
+        "title": "Профиль · PlagLens",
+        "bodyLen": 178,
+        "h1": "Профиль",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 8,
+      "url": "/notifications",
+      "slug": "notifications",
+      "probe": {
+        "title": "Уведомления · PlagLens",
+        "bodyLen": 167,
+        "h1": "Уведомления",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 9,
+      "url": "/me/security",
+      "slug": "me-security",
+      "probe": {
+        "title": "Безопасность · PlagLens",
+        "bodyLen": 169,
+        "h1": "Безопасность",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 10,
+      "url": "/me/api-keys",
+      "slug": "me-api-keys",
+      "probe": {
+        "title": "API keys · PlagLens",
+        "bodyLen": 120,
+        "h1": "API keys",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 11,
+      "url": "/me/external-bindings",
+      "slug": "me-external-bindings",
+      "probe": {
+        "title": "Внешние привязки · PlagLens",
+        "bodyLen": 186,
+        "h1": "Внешние привязки",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 12,
+      "url": "/me/2fa",
+      "slug": "me-2fa",
+      "probe": {
+        "title": "Двухфакторная аутентификация · PlagLens",
+        "bodyLen": 326,
+        "h1": "Двухфакторная аутентификация",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 13,
+      "url": "/me/notifications/preferences",
+      "slug": "me-notifications-preferences",
+      "probe": {
+        "title": "Настройки уведомлений · PlagLens",
+        "bodyLen": 961,
+        "h1": "Настройки уведомлений",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 14,
+      "url": "/me/notifications/web-push",
+      "slug": "me-notifications-web-push",
+      "probe": {
+        "title": "Web Push · PlagLens",
+        "bodyLen": 152,
+        "h1": "Push-уведомления",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    },
+    {
+      "role": "student",
+      "idx": 15,
+      "url": "/me/exports",
+      "slug": "me-exports",
+      "probe": {
+        "title": "Мои экспорты · PlagLens",
+        "bodyLen": 185,
+        "h1": "Мои экспорты",
+        "is404": false,
+        "isError": false,
+        "errBoundary": false,
+        "veryEmpty": false,
+        "fatal": false
+      }
+    }
+  ],
+  "issues": [
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/profile",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/submissions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/notifications",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/notifications",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/reports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/imports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/imports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses/join",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/wizard",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/wizard",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/yandex-contest/setup",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/yandex-contest/setup",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/stepik/setup",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/ejudge/setup",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/ejudge/setup",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/security",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"users\",\"me\",\"api-keys\"]"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/external-bindings",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"users\",\"me\",\"external-bindings\"]"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/external-bindings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/2fa",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/2fa",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/preferences",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/web-push",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/web-push",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/exports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/courses/knad-cpp-24-25",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/integrations/ic_ab80daf0834173",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "teacher",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/submissions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/overview",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/overview",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/users",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/email",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/email",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/providers",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"ai\",\"providers\"]"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/providers",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/system/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/system/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/system/health",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/roles",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/roles",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"system\",\"roles\"]"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/roles",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/profile",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/profile",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/notifications",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/users/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/users/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations/new",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations/oauth-providers",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations/oauth-providers",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations/webhooks",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/search",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/search",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/access-denied",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/retention",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/retention",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/legal-holds",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"audit\",\"legal-holds\"]"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/audit/legal-holds",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/templates",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/templates",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/deliveries",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/deliveries",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/notifications/dlq",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/budgets",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/budgets",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/cache",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/prompt-versions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/ai/prompt-versions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/exports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/plagiarism-corpus",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/plagiarism-corpus",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/providers",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"ai\",\"providers\"]"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/providers",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/metrics",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/metrics",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/system/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/activity",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/activity",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/users",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "admin",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/admin/integrations",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/demo",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/submissions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/submissions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/grades",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/settings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/profile",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/notifications",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/notifications",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/security",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"users\",\"me\",\"api-keys\"]"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/api-keys",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/external-bindings",
+      "msg": "Query data cannot be undefined. Please make sure to return a value other than undefined from your query function. Affected query key: [\"users\",\"me\",\"external-bindings\"]"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/external-bindings",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/2fa",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/2fa",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/preferences",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/web-push",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/notifications/web-push",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/exports",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/assignments",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "role": "student",
+      "kind": "console.error",
+      "route": "http://127.0.0.1:5173/me/submissions",
+      "msg": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    }
+  ]
+}

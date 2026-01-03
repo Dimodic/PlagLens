@@ -1,0 +1,886 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: specs\mobile\mobile-submission-detail.spec.ts >> Mobile submission detail @mobile >> /me/submissions list renders without horizontal overflow
+- Location: e2e\specs\mobile\mobile-submission-detail.spec.ts:13:3
+
+# Error details
+
+```
+Error: expect(received).toBe(expected) // Object.is equality
+
+Expected: false
+Received: true
+```
+
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - link "PlagLens" [ref=e6] [cursor=pointer]:
+        - /url: /
+        - img [ref=e8]
+      - generic [ref=e11]:
+        - generic [ref=e12]: PlagLens
+        - generic [ref=e13]: кабинет студента
+      - button "Свернуть" [ref=e14] [cursor=pointer]:
+        - img [ref=e15]
+    - generic [ref=e18]:
+      - img [ref=e20]
+      - generic [ref=e23]: Поиск заданий, студентов, посылок…
+      - generic [ref=e24]: ⌘K
+    - generic [ref=e26]:
+      - generic [ref=e27]: Учёба
+      - generic [ref=e28]:
+        - link "Главная" [ref=e29] [cursor=pointer]:
+          - /url: /me
+          - img [ref=e31]
+          - generic [ref=e36]: Главная
+        - link "Задания" [ref=e37] [cursor=pointer]:
+          - /url: /me/assignments
+          - img [ref=e39]
+          - generic [ref=e42]: Задания
+        - link "Мои посылки" [ref=e43] [cursor=pointer]:
+          - /url: /me/submissions
+          - img [ref=e45]
+          - generic [ref=e47]: Мои посылки
+        - link "Уведомления" [ref=e48] [cursor=pointer]:
+          - /url: /notifications
+          - img [ref=e50]
+          - generic [ref=e52]: Уведомления
+    - button "ИП Иван Петров Студент" [ref=e54] [cursor=pointer]:
+      - generic [ref=e55]: ИП
+      - generic [ref=e56]:
+        - generic [ref=e57]: Иван Петров
+        - generic [ref=e58]: Студент
+      - img [ref=e60]
+  - main [ref=e62]:
+    - generic [ref=e63]:
+      - button "Назад" [ref=e64] [cursor=pointer]:
+        - img [ref=e65]
+      - generic: Моя посылка
+      - generic [ref=e67]:
+        - button "EN" [ref=e68] [cursor=pointer]
+        - button "RU" [ref=e69] [cursor=pointer]
+      - button "Переключить тему" [ref=e70] [cursor=pointer]:
+        - img [ref=e71]
+      - button [ref=e77]
+    - generic [ref=e79]:
+      - generic [ref=e80]:
+        - generic [ref=e81]:
+          - generic [ref=e82]: Все курсы
+          - generic [ref=e83]: crs_unkn
+          - generic [ref=e84]: "1"
+        - generic [ref=e86]:
+          - generic [ref=e87]: Все
+          - generic [ref=e88]: Помечено
+          - generic [ref=e89]: Обработка
+          - generic [ref=e90]: Проверено
+        - radiogroup [ref=e92]:
+          - generic [ref=e94]:
+            - radio "Все" [checked]
+            - generic [ref=e95] [cursor=pointer]: Все
+          - generic [ref=e96]:
+            - radio "Python"
+            - generic [ref=e97] [cursor=pointer]: Python
+          - generic [ref=e98]:
+            - radio "C++"
+            - generic [ref=e99] [cursor=pointer]: C++
+          - generic [ref=e100]:
+            - radio "Java"
+            - generic [ref=e101] [cursor=pointer]: Java
+        - generic [ref=e102]: 71 из 71
+      - generic [ref=e103]:
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e104] [cursor=pointer]:
+          - /url: /submissions/sub_e3552c8589264c35
+          - generic [ref=e106]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e107]: v1
+              - text: · python
+          - img [ref=e109]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e111] [cursor=pointer]:
+          - /url: /submissions/sub_3079bb7a467b4416
+          - generic [ref=e113]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e114]: v2
+              - text: · python
+          - img [ref=e116]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e118] [cursor=pointer]:
+          - /url: /submissions/sub_bc9c259755904f3e
+          - generic [ref=e120]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e121]: v1
+              - text: · python
+          - img [ref=e123]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e125] [cursor=pointer]:
+          - /url: /submissions/sub_32449a1e9e61432d
+          - generic [ref=e127]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e128]: v2
+              - text: · python
+          - img [ref=e130]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e132] [cursor=pointer]:
+          - /url: /submissions/sub_d38a85f8785e486c
+          - generic [ref=e134]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e135]: v1
+              - text: · python
+          - img [ref=e137]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e139] [cursor=pointer]:
+          - /url: /submissions/sub_c7414d7a09dc4b48
+          - generic [ref=e141]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e142]: v2
+              - text: · python
+          - img [ref=e144]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e146] [cursor=pointer]:
+          - /url: /submissions/sub_847c64cc11ac40d2
+          - generic [ref=e148]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e149]: v1
+              - text: · python
+          - img [ref=e151]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e153] [cursor=pointer]:
+          - /url: /submissions/sub_7d8e1cc3355c4296
+          - generic [ref=e155]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e156]: v2
+              - text: · python
+          - img [ref=e158]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e160] [cursor=pointer]:
+          - /url: /submissions/sub_00d6149fd1f94071
+          - generic [ref=e162]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e163]: v1
+              - text: · python
+          - img [ref=e165]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e167] [cursor=pointer]:
+          - /url: /submissions/sub_6c5febd5c38f40c6
+          - generic [ref=e169]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e170]: v1
+              - text: · python · late
+          - img [ref=e172]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e174] [cursor=pointer]:
+          - /url: /submissions/sub_dc5dd6bd82aa4785
+          - generic [ref=e176]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e177]: v1
+              - text: · python ·
+              - generic [ref=e178]: late hard
+          - img [ref=e180]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e182] [cursor=pointer]:
+          - /url: /submissions/sub_d23d098ae27f4bed
+          - generic [ref=e184]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e185]: v1
+              - text: · python ·
+              - generic [ref=e186]: late hard
+          - img [ref=e188]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e190] [cursor=pointer]:
+          - /url: /submissions/sub_977b9ae2934d4ea4
+          - generic [ref=e192]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e193]: v1
+              - text: · python ·
+              - generic [ref=e194]: late hard
+          - img [ref=e196]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e198] [cursor=pointer]:
+          - /url: /submissions/sub_d0f6973765e34a3b
+          - generic [ref=e200]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e201]: v1
+              - text: · python · late
+          - img [ref=e203]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e205] [cursor=pointer]:
+          - /url: /submissions/sub_b93968d1b6ed482b
+          - generic [ref=e207]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e208]: v1
+              - text: · python ·
+              - generic [ref=e209]: late hard
+          - img [ref=e211]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e213] [cursor=pointer]:
+          - /url: /submissions/sub_be9cd64f9bc34efa
+          - generic [ref=e215]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e216]: v1
+              - text: · python · late
+          - img [ref=e218]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python" [ref=e220] [cursor=pointer]:
+          - /url: /submissions/sub_4d44a6f3bf934dcb
+          - generic [ref=e222]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e223]: v1
+              - text: · python
+          - img [ref=e225]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e227] [cursor=pointer]:
+          - /url: /submissions/sub_8cd0ac921c1341d0
+          - generic [ref=e229]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e230]: v1
+              - text: · python · late
+          - img [ref=e232]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e234] [cursor=pointer]:
+          - /url: /submissions/sub_4c95d48566eb4757
+          - generic [ref=e236]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e237]: v1
+              - text: · python ·
+              - generic [ref=e238]: late hard
+          - img [ref=e240]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e242] [cursor=pointer]:
+          - /url: /submissions/sub_7ded6f55c6ef458b
+          - generic [ref=e244]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e245]: v1
+              - text: · python ·
+              - generic [ref=e246]: late hard
+          - img [ref=e248]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e250] [cursor=pointer]:
+          - /url: /submissions/sub_83908a7feed24f91
+          - generic [ref=e252]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e253]: v1
+              - text: · python ·
+              - generic [ref=e254]: late hard
+          - img [ref=e256]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e258] [cursor=pointer]:
+          - /url: /submissions/sub_1369c0d760964da5
+          - generic [ref=e260]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e261]: v1
+              - text: · python · late
+          - img [ref=e263]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late hard" [ref=e265] [cursor=pointer]:
+          - /url: /submissions/sub_707f116f7b6e4b18
+          - generic [ref=e267]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e268]: v1
+              - text: · python ·
+              - generic [ref=e269]: late hard
+          - img [ref=e271]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python · late" [ref=e273] [cursor=pointer]:
+          - /url: /submissions/sub_adeb787441fc423b
+          - generic [ref=e275]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e276]: v1
+              - text: · python · late
+          - img [ref=e278]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python" [ref=e280] [cursor=pointer]:
+          - /url: /submissions/sub_df13929e16b049cb
+          - generic [ref=e282]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e283]: v1
+              - text: · python
+          - img [ref=e285]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v43 · python" [ref=e287] [cursor=pointer]:
+          - /url: /submissions/sub_e4b1fc0b06064f52
+          - generic [ref=e289]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e290]: v43
+              - text: · python
+          - img [ref=e292]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v42 · python" [ref=e294] [cursor=pointer]:
+          - /url: /submissions/sub_bb8af75e508d49c3
+          - generic [ref=e296]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e297]: v42
+              - text: · python
+          - img [ref=e299]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v41 · python" [ref=e301] [cursor=pointer]:
+          - /url: /submissions/sub_a7549f22cfcc44d3
+          - generic [ref=e303]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e304]: v41
+              - text: · python
+          - img [ref=e306]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v40 · python" [ref=e308] [cursor=pointer]:
+          - /url: /submissions/sub_87290561491c4798
+          - generic [ref=e310]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e311]: v40
+              - text: · python
+          - img [ref=e313]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v39 · python" [ref=e315] [cursor=pointer]:
+          - /url: /submissions/sub_c4a65d2403a246d9
+          - generic [ref=e317]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e318]: v39
+              - text: · python
+          - img [ref=e320]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v38 · python" [ref=e322] [cursor=pointer]:
+          - /url: /submissions/sub_89e4312e704b46bc
+          - generic [ref=e324]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e325]: v38
+              - text: · python
+          - img [ref=e327]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v37 · python" [ref=e329] [cursor=pointer]:
+          - /url: /submissions/sub_419363f270334239
+          - generic [ref=e331]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e332]: v37
+              - text: · python
+          - img [ref=e334]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v36 · python" [ref=e336] [cursor=pointer]:
+          - /url: /submissions/sub_36602c99de0f416f
+          - generic [ref=e338]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e339]: v36
+              - text: · python
+          - img [ref=e341]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v35 · python" [ref=e343] [cursor=pointer]:
+          - /url: /submissions/sub_62c3be8a73f24b13
+          - generic [ref=e345]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e346]: v35
+              - text: · python
+          - img [ref=e348]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v34 · python" [ref=e350] [cursor=pointer]:
+          - /url: /submissions/sub_5db47cb3b8f74d74
+          - generic [ref=e352]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e353]: v34
+              - text: · python
+          - img [ref=e355]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v33 · python" [ref=e357] [cursor=pointer]:
+          - /url: /submissions/sub_d74be74676114aeb
+          - generic [ref=e359]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e360]: v33
+              - text: · python
+          - img [ref=e362]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v32 · python" [ref=e364] [cursor=pointer]:
+          - /url: /submissions/sub_869668fe71e145ba
+          - generic [ref=e366]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e367]: v32
+              - text: · python
+          - img [ref=e369]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v31 · python" [ref=e371] [cursor=pointer]:
+          - /url: /submissions/sub_86b50a05b90f4a3f
+          - generic [ref=e373]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e374]: v31
+              - text: · python
+          - img [ref=e376]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v30 · python" [ref=e378] [cursor=pointer]:
+          - /url: /submissions/sub_d35726ac9e9c4ebb
+          - generic [ref=e380]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e381]: v30
+              - text: · python
+          - img [ref=e383]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v29 · python" [ref=e385] [cursor=pointer]:
+          - /url: /submissions/sub_0d62e9bd512340e3
+          - generic [ref=e387]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e388]: v29
+              - text: · python
+          - img [ref=e390]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v28 · python" [ref=e392] [cursor=pointer]:
+          - /url: /submissions/sub_be0e9554948248bc
+          - generic [ref=e394]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e395]: v28
+              - text: · python
+          - img [ref=e397]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v27 · python" [ref=e399] [cursor=pointer]:
+          - /url: /submissions/sub_283c829f9660444f
+          - generic [ref=e401]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e402]: v27
+              - text: · python
+          - img [ref=e404]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v26 · python" [ref=e406] [cursor=pointer]:
+          - /url: /submissions/sub_664f80cdf7dd4155
+          - generic [ref=e408]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e409]: v26
+              - text: · python
+          - img [ref=e411]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v25 · python" [ref=e413] [cursor=pointer]:
+          - /url: /submissions/sub_8554284444ed4ad6
+          - generic [ref=e415]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e416]: v25
+              - text: · python
+          - img [ref=e418]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v24 · python" [ref=e420] [cursor=pointer]:
+          - /url: /submissions/sub_631ac3ce96664a24
+          - generic [ref=e422]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e423]: v24
+              - text: · python
+          - img [ref=e425]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v23 · python" [ref=e427] [cursor=pointer]:
+          - /url: /submissions/sub_89637aab53894224
+          - generic [ref=e429]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e430]: v23
+              - text: · python
+          - img [ref=e432]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v22 · python" [ref=e434] [cursor=pointer]:
+          - /url: /submissions/sub_70be6cd4a0064a64
+          - generic [ref=e436]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e437]: v22
+              - text: · python
+          - img [ref=e439]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v21 · python" [ref=e441] [cursor=pointer]:
+          - /url: /submissions/sub_df2d953d89744691
+          - generic [ref=e443]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e444]: v21
+              - text: · python
+          - img [ref=e446]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v20 · python" [ref=e448] [cursor=pointer]:
+          - /url: /submissions/sub_46d84cb649e54009
+          - generic [ref=e450]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e451]: v20
+              - text: · python
+          - img [ref=e453]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v19 · python" [ref=e455] [cursor=pointer]:
+          - /url: /submissions/sub_1d5ebd95b6cd4943
+          - generic [ref=e457]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e458]: v19
+              - text: · python
+          - img [ref=e460]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v18 · python" [ref=e462] [cursor=pointer]:
+          - /url: /submissions/sub_3f6ddb0c19ff4974
+          - generic [ref=e464]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e465]: v18
+              - text: · python
+          - img [ref=e467]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v17 · python" [ref=e469] [cursor=pointer]:
+          - /url: /submissions/sub_9a2bd32c4a7f4998
+          - generic [ref=e471]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e472]: v17
+              - text: · python
+          - img [ref=e474]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v16 · python" [ref=e476] [cursor=pointer]:
+          - /url: /submissions/sub_5ad3e32a520346d8
+          - generic [ref=e478]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e479]: v16
+              - text: · python
+          - img [ref=e481]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v15 · python" [ref=e483] [cursor=pointer]:
+          - /url: /submissions/sub_c959bc07c40945da
+          - generic [ref=e485]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e486]: v15
+              - text: · python
+          - img [ref=e488]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v14 · python" [ref=e490] [cursor=pointer]:
+          - /url: /submissions/sub_148e3aa4b08541d7
+          - generic [ref=e492]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e493]: v14
+              - text: · python
+          - img [ref=e495]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v13 · python" [ref=e497] [cursor=pointer]:
+          - /url: /submissions/sub_760d8256bd184f98
+          - generic [ref=e499]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e500]: v13
+              - text: · python
+          - img [ref=e502]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v12 · python" [ref=e504] [cursor=pointer]:
+          - /url: /submissions/sub_a9b4e455462d4425
+          - generic [ref=e506]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e507]: v12
+              - text: · python
+          - img [ref=e509]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v11 · python" [ref=e511] [cursor=pointer]:
+          - /url: /submissions/sub_839ecf97d97d455b
+          - generic [ref=e513]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e514]: v11
+              - text: · python
+          - img [ref=e516]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v10 · python" [ref=e518] [cursor=pointer]:
+          - /url: /submissions/sub_5741ff367444421a
+          - generic [ref=e520]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e521]: v10
+              - text: · python
+          - img [ref=e523]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v9 · python" [ref=e525] [cursor=pointer]:
+          - /url: /submissions/sub_d7031ef80e2a42aa
+          - generic [ref=e527]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e528]: v9
+              - text: · python
+          - img [ref=e530]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v8 · python" [ref=e532] [cursor=pointer]:
+          - /url: /submissions/sub_609ce3d7b5b54b9e
+          - generic [ref=e534]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e535]: v8
+              - text: · python
+          - img [ref=e537]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v7 · python" [ref=e539] [cursor=pointer]:
+          - /url: /submissions/sub_9ad01cc09a834ae8
+          - generic [ref=e541]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e542]: v7
+              - text: · python
+          - img [ref=e544]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v6 · python" [ref=e546] [cursor=pointer]:
+          - /url: /submissions/sub_64e8f42ee54749fd
+          - generic [ref=e548]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e549]: v6
+              - text: · python
+          - img [ref=e551]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v5 · python" [ref=e553] [cursor=pointer]:
+          - /url: /submissions/sub_e783f6d4fb644cef
+          - generic [ref=e555]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e556]: v5
+              - text: · python
+          - img [ref=e558]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v4 · python" [ref=e560] [cursor=pointer]:
+          - /url: /submissions/sub_a6f141fc419f4d9d
+          - generic [ref=e562]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e563]: v4
+              - text: · python
+          - img [ref=e565]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v3 · python" [ref=e567] [cursor=pointer]:
+          - /url: /submissions/sub_2c096e71950e4ea1
+          - generic [ref=e569]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e570]: v3
+              - text: · python
+          - img [ref=e572]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e574] [cursor=pointer]:
+          - /url: /submissions/sub_6c0095f770614c4a
+          - generic [ref=e576]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e577]: v2
+              - text: · python
+          - img [ref=e579]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v1 · python" [ref=e581] [cursor=pointer]:
+          - /url: /submissions/sub_e5b63d2c814d4a6f
+          - generic [ref=e583]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e584]: v1
+              - text: · python
+          - img [ref=e586]
+        - link "US usr_6d625794ca50432aa13cae37 crs_unkn · v2 · python" [ref=e588] [cursor=pointer]:
+          - /url: /submissions/sub_9f493063d9a64c9e
+          - generic [ref=e590]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: crs_unkn ·
+              - generic [ref=e591]: v2
+              - text: · python
+          - img [ref=e593]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python" [ref=e595] [cursor=pointer]:
+          - /url: /submissions/sub_14cd145534034826
+          - generic [ref=e597]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e598]: v1
+              - text: · python
+          - img [ref=e600]
+        - link "US usr_6d625794ca50432aa13cae37 1 · v1 · python" [ref=e602] [cursor=pointer]:
+          - /url: /submissions/sub_92c31785829949fd
+          - generic [ref=e604]: US
+          - generic:
+            - generic: usr_6d625794ca50432aa13cae37
+            - generic:
+              - text: 1 ·
+              - generic [ref=e605]: v1
+              - text: · python
+          - img [ref=e607]
+```
+
+# Test source
+
+```ts
+  1  | /**
+  2  |  * Mobile submission detail — tabs/code-viewer must remain usable.
+  3  |  *
+  4  |  * Without a guaranteed seeded submission we lean on /me/submissions which
+  5  |  * exists for every user role.
+  6  |  */
+  7  | import { test, expect, devices } from '@playwright/test';
+  8  | import { uiLoginAs } from '../../helpers/cross-cutting';
+  9  | 
+  10 | test.use({ ...devices['Pixel 5'] });
+  11 | 
+  12 | test.describe('Mobile submission detail @mobile', () => {
+  13 |   test('/me/submissions list renders without horizontal overflow', async ({ page }) => {
+  14 |     await uiLoginAs(page, 'student1');
+  15 |     await page.goto('/me/submissions');
+  16 |     await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => null);
+  17 |     const overflow = await page.evaluate(
+  18 |       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+  19 |     );
+> 20 |     expect(overflow).toBe(false);
+     |                      ^ Error: expect(received).toBe(expected) // Object.is equality
+  21 |   });
+  22 | 
+  23 |   test('tabs are scrollable horizontally if too many', async ({ page }) => {
+  24 |     await uiLoginAs(page, 'admin');
+  25 |     // Find any first submission link to navigate; otherwise fall back.
+  26 |     await page.goto('/me/submissions');
+  27 |     const firstLink = page.locator('a[href*="/submissions/"]').first();
+  28 |     if ((await firstLink.count()) === 0) {
+  29 |       test.skip(true, 'no submissions link reachable');
+  30 |       return;
+  31 |     }
+  32 |     await firstLink.click();
+  33 |     await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => null);
+  34 |     // Look for Mantine tabs.
+  35 |     const tabsList = page.locator('[role="tablist"]').first();
+  36 |     if ((await tabsList.count()) > 0) {
+  37 |       const bb = await tabsList.boundingBox();
+  38 |       if (bb) {
+  39 |         // Either tabs fit, or they overflow horizontally with internal scroll.
+  40 |         expect(bb.width).toBeLessThanOrEqual(420);
+  41 |       }
+  42 |     }
+  43 |   });
+  44 | 
+  45 |   test('code blocks do not break layout on narrow viewport', async ({ page }) => {
+  46 |     await uiLoginAs(page, 'admin');
+  47 |     await page.goto('/me/submissions');
+  48 |     const firstLink = page.locator('a[href*="/submissions/"]').first();
+  49 |     if ((await firstLink.count()) === 0) {
+  50 |       test.skip(true, 'no submissions link reachable');
+  51 |       return;
+  52 |     }
+  53 |     await firstLink.click();
+  54 |     await page.waitForLoadState('networkidle', { timeout: 8_000 }).catch(() => null);
+  55 |     const overflow = await page.evaluate(
+  56 |       () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 4,
+  57 |     );
+  58 |     expect(overflow).toBe(false);
+  59 |   });
+  60 | });
+  61 | 
+```
