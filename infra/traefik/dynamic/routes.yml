@@ -1,0 +1,95 @@
+# PlagLens — Traefik dynamic config.
+# Most routes are derived from container labels (`traefik.enable=true` on the
+# gateway). This file holds non-Docker routes (Grafana, Jaeger UI, kafka-ui,
+# mailhog, MinIO console, Vault) plus middlewares used by the gateway labels.
+
+http:
+  middlewares:
+    secure-headers:
+      headers:
+        stsSeconds: 31536000
+        stsIncludeSubdomains: true
+        contentTypeNosniff: true
+        browserXssFilter: true
+        referrerPolicy: strict-origin-when-cross-origin
+        forceSTSHeader: true
+
+    rate-limit-public:
+      rateLimit:
+        average: 100
+        burst: 200
+
+  routers:
+    grafana:
+      rule: "Host(`grafana.localhost`)"
+      entryPoints: [websecure]
+      service: grafana
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+    jaeger:
+      rule: "Host(`jaeger.localhost`)"
+      entryPoints: [websecure]
+      service: jaeger
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+    kafka-ui:
+      rule: "Host(`kafka.localhost`)"
+      entryPoints: [websecure]
+      service: kafka-ui
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+    mailhog:
+      rule: "Host(`mail.localhost`)"
+      entryPoints: [websecure]
+      service: mailhog
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+    minio:
+      rule: "Host(`minio.localhost`)"
+      entryPoints: [websecure]
+      service: minio
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+    vault:
+      rule: "Host(`vault.localhost`)"
+      entryPoints: [websecure]
+      service: vault
+      tls:
+        certResolver: letsencrypt
+      middlewares: [secure-headers]
+
+  services:
+    grafana:
+      loadBalancer:
+        servers:
+          - url: "http://grafana:3000"
+    jaeger:
+      loadBalancer:
+        servers:
+          - url: "http://jaeger:16686"
+    kafka-ui:
+      loadBalancer:
+        servers:
+          - url: "http://kafka-ui:8080"
+    mailhog:
+      loadBalancer:
+        servers:
+          - url: "http://mailhog:8025"
+    minio:
+      loadBalancer:
+        servers:
+          - url: "http://minio:9001"
+    vault:
+      loadBalancer:
+        servers:
+          - url: "http://vault:8200"

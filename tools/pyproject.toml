@@ -1,0 +1,34 @@
+[project]
+name = "plaglens-tools"
+version = "0.0.0"
+description = "Operational scripts and end-to-end tests for PlagLens"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["e2e/fixtures"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "RUF", "ASYNC", "S"]
+ignore = [
+    "E501",   # line length handled by formatter
+    "B008",   # FastAPI-style default args
+    "S101",   # asserts in tests are fine
+    "S311",   # random for seed data is fine
+    "S603",   # subprocess use in scripts is intentional
+    "S607",   # likewise
+]
+
+[tool.ruff.lint.per-file-ignores]
+"e2e/**/*.py" = ["S101", "S105", "S106"]
+"scripts/**/*.py" = ["T201"]  # print() is the whole point
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+strict_optional = false
+warn_unused_ignores = true

@@ -1,0 +1,81 @@
+# PlagLens — Prometheus scrape configuration.
+# One job per microservice, scraping `/metrics` on the in-cluster port 8000.
+# Plus self + infra exporters when available.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: plaglens-dev
+    env: dev
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: gateway
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["gateway:8000"]
+        labels: { service: gateway }
+
+  - job_name: identity
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["identity:8000"]
+        labels: { service: identity }
+
+  - job_name: course
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["course:8000"]
+        labels: { service: course }
+
+  - job_name: submission
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["submission:8000"]
+        labels: { service: submission }
+
+  - job_name: integration
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["integration:8000"]
+        labels: { service: integration }
+
+  - job_name: plagiarism
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["plagiarism:8000"]
+        labels: { service: plagiarism }
+
+  - job_name: ai-analysis
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["ai-analysis:8000"]
+        labels: { service: ai-analysis }
+
+  - job_name: notification
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["notification:8000"]
+        labels: { service: notification }
+
+  - job_name: reporting
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["reporting:8000"]
+        labels: { service: reporting }
+
+  - job_name: audit
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["audit:8000"]
+        labels: { service: audit }
+
+  - job_name: traefik
+    metrics_path: /metrics
+    static_configs:
+      - targets: ["traefik:8080"]
+        labels: { service: traefik }

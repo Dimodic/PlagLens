@@ -1,0 +1,16 @@
+# PlagLens — Grafana dashboard provisioning.
+# Auto-imports JSON dashboards from /var/lib/grafana/dashboards on boot.
+
+apiVersion: 1
+
+providers:
+  - name: PlagLens
+    orgId: 1
+    folder: PlagLens
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

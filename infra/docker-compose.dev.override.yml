@@ -1,0 +1,169 @@
+# PlagLens — dev override.
+# Mounts service source as a volume for hot reload (uvicorn --reload),
+# relaxes healthcheck timing, exposes service ports on the host for
+# direct access during development.
+#
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.override.yml up -d
+
+name: plaglens
+
+x-svc-dev-defaults: &svc-dev-defaults
+  command:
+    - sh
+    - -c
+    - >-
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+      --reload-dir /app/app
+  healthcheck:
+    test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+    interval: 30s
+    timeout: 10s
+    retries: 10
+    start_period: 60s
+
+services:
+  gateway:
+    <<: *svc-dev-defaults
+    ports:
+      - "8001:8000"
+    volumes:
+      - ../services/gateway/app:/app/app
+      - ../services/gateway/pyproject.toml:/app/pyproject.toml:ro
+
+  identity:
+    <<: *svc-dev-defaults
+    ports:
+      - "8002:8000"
+    volumes:
+      - ../services/identity/app:/app/app
+      - ../services/identity/pyproject.toml:/app/pyproject.toml:ro
+
+  course:
+    <<: *svc-dev-defaults
+    ports:
+      - "8003:8000"
+    volumes:
+      - ../services/course/app:/app/app
+      - ../services/course/pyproject.toml:/app/pyproject.toml:ro
+
+  submission:
+    <<: *svc-dev-defaults
+    ports:
+      - "8004:8000"
+    volumes:
+      - ../services/submission/app:/app/app
+      - ../services/submission/pyproject.toml:/app/pyproject.toml:ro
+
+  integration:
+    <<: *svc-dev-defaults
+    ports:
+      - "8005:8000"
+    volumes:
+      - ../services/integration/app:/app/app
+      - ../services/integration/pyproject.toml:/app/pyproject.toml:ro
+
+  plagiarism:
+    <<: *svc-dev-defaults
+    ports:
+      - "8006:8000"
+    volumes:
+      - ../services/plagiarism/app:/app/app
+      - ../services/plagiarism/pyproject.toml:/app/pyproject.toml:ro
+
+  ai-analysis:
+    <<: *svc-dev-defaults
+    ports:
+      - "8007:8000"
+    volumes:
+      - ../services/ai-analysis/app:/app/app
+      - ../services/ai-analysis/pyproject.toml:/app/pyproject.toml:ro
+
+  notification:
+    <<: *svc-dev-defaults
+    ports:
+      - "8008:8000"
+    volumes:
+      - ../services/notification/app:/app/app
+      - ../services/notification/pyproject.toml:/app/pyproject.toml:ro
+
+  reporting:
+    <<: *svc-dev-defaults
+    ports:
+      - "8009:8000"
+    volumes:
+      - ../services/reporting/app:/app/app
+      - ../services/reporting/pyproject.toml:/app/pyproject.toml:ro
+
+  audit:
+    <<: *svc-dev-defaults
+    ports:
+      - "8010:8000"
+    volumes:
+      - ../services/audit/app:/app/app
+      - ../services/audit/pyproject.toml:/app/pyproject.toml:ro
+
+  postgres:
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  kafka:
+    healthcheck:
+      interval: 30s
+      timeout: 20s
+      retries: 20
+      start_period: 90s
+
+  minio:
+    healthcheck:
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+
+  # ----- Vite dev server with hot module reload --------------------------
+  # Runs alongside the prod-style nginx (which still serves :5173 from the
+  # baked-in dist). Use http://localhost:5174 during development — every save
+  # is reflected in the browser instantly without `docker compose build`.
+  #
+  # Talks to the existing gateway at gateway:8000 for /api requests via Vite's
+  # built-in proxy (see frontend/vite.config.ts:server.proxy).
+  frontend-dev:
+    image: node:20-alpine
+    container_name: plaglens-frontend-dev
+    restart: unless-stopped
+    networks: [plaglens-net]
+    working_dir: /app
+    environment:
+      # `.env.development` hardcodes VITE_API_BASE_URL=http://localhost:8000/api/v1,
+      # which works for `npm run dev` on a dev's host machine but is wrong inside
+      # docker (no gateway listening on container's localhost). Force a relative
+      # URL so the request goes back to Vite (5173 in-container, 5174 on host)
+      # and gets proxied via `server.proxy` to `gateway:8000`.
+      VITE_API_BASE_URL: /api/v1
+      VITE_API_PROXY_TARGET: http://gateway:8000
+      VITE_HMR_CLIENT_PORT: "5174"  # host-visible port so HMR ws connects back
+      CHOKIDAR_USEPOLLING: "true"   # reliable file-watch on Windows bind mounts
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules            # keep container's node_modules separate
+    ports:
+      - "5174:5173"
+    command: >
+      sh -c "
+        if [ ! -d node_modules ] || [ ! -e node_modules/.installed ]; then
+          npm install --legacy-peer-deps && touch node_modules/.installed;
+        fi;
+        # Override .env.development for the docker case: gateway is at
+        # `gateway:8000` on the docker network, never on the container's
+        # localhost. .env.development.local has higher priority than
+        # .env.development (Vite convention) and is gitignored by default.
+        echo 'VITE_API_BASE_URL=/api/v1' > .env.development.local;
+        npm run dev -- --host 0.0.0.0 --port 5173
+      "
