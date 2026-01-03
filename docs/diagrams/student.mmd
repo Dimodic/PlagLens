@@ -1,0 +1,100 @@
+graph LR
+  Login[/"/login"/]:::pub --> Home
+
+  subgraph Sidebar["Sidebar · Учёба"]
+    direction TB
+    Home["/me"]:::nav
+    Asgs["/me/assignments"]:::nav
+    Subs["/me/submissions"]:::nav
+    Inbox["/me/inbox"]:::nav
+  end
+
+  subgraph UserPill["User pill"]
+    direction TB
+    Profile[("Profile modal")]:::modal
+    Prefs[("Preferences modal")]:::modal
+    Help[("Help modal")]:::modal
+    Logout[/"Logout → /login"/]:::pub
+  end
+
+  Home --> AsgD["/me/assignments/:id"]:::detail
+  Home --> SubD["/me/submissions/:id"]:::detail
+  Home --> Inbox
+
+  Asgs --> AsgGrouping
+  Asgs --> AsgD
+  Asgs --> Join["/courses/join/:code"]:::form
+
+  subgraph AsgGrouping["Assignments grouped by homework"]
+    direction TB
+    AsgGrpNote["/me/assignments rows<br/>grouped by homework_id"]:::tab
+  end
+
+  AsgD --> AsgTabs
+
+  subgraph AsgTabs["AsgD · tabs"]
+    direction TB
+    AsgDesc["tab Описание"]:::tab
+    SubH["tab История версий"]:::tab
+    Upload["Dropzone upload (202)"]:::form
+  end
+
+  Upload --> SubD
+
+  Subs --> SubD
+
+  SubD --> SubTabs
+
+  subgraph SubTabs["SubD · tabs"]
+    direction TB
+    SF["tab Files"]:::tab
+    SG["tab Оценка"]:::tab
+    SC["tab Комментарии"]:::tab
+    SP["tab Антиплагиат · only %"]:::tab
+    SA["tab AI · if shared"]:::tab
+    SH["tab История"]:::tab
+  end
+
+  Inbox --> ActionURL{"action_url"}:::router
+
+  subgraph InboxTargets["Notification → target"]
+    direction TB
+    InGrade["grade"]:::tab
+    InFb["feedback"]:::tab
+    InAI["ai_done"]:::tab
+    InPlag["plag_done"]:::tab
+    InCourse["course_added"]:::tab
+    InAsg["new_assignment"]:::tab
+  end
+
+  ActionURL --> InboxTargets
+  InGrade --> SubD
+  InFb --> SubD
+  InAI --> SubD
+  InPlag --> SubD
+  InCourse --> Course["/courses/:slug · read-only"]:::detail
+  InAsg --> AsgD
+
+  subgraph SelfService["Self-service · /me/settings hub"]
+    direction TB
+    SP1["/me/profile"]:::nav
+    SS1["/me/security"]:::nav
+    S2FA["/me/2fa"]:::nav
+    SAPI["/me/api-keys"]:::nav
+    SBind["/me/external-bindings"]:::nav
+    SExp["/me/exports"]:::nav
+    SPrefs["/me/notifications/preferences"]:::nav
+    SWP["/me/notifications/web-push"]:::nav
+    SGrades["/me/grades"]:::nav
+  end
+
+  SS1 --> S2FA
+  SAPI --> KeyOnce[("Key shown ONCE")]:::modal
+
+  classDef nav fill:#e3ebe5,stroke:#3d5b4f,stroke-width:1.5px,color:#1d1c1a
+  classDef detail fill:#fffefb,stroke:#c8c1b3,stroke-width:1.2px,color:#1d1c1a
+  classDef tab fill:#efece5,stroke:#c8c1b3,stroke-dasharray:3 3,color:#3d3a35
+  classDef modal fill:#f3e6d0,stroke:#b07a2e,color:#1d1c1a
+  classDef form fill:#e3ebe5,stroke:#3d5b4f,stroke-dasharray:5 3,color:#1d1c1a
+  classDef pub fill:#fffefb,stroke:#a8a29a,stroke-dasharray:2 2,color:#3d3a35
+  classDef router fill:#f0dcd6,stroke:#9c3a3a,stroke-width:2px,color:#1d1c1a

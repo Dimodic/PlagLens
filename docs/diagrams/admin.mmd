@@ -1,0 +1,179 @@
+graph LR
+  Login[/"/login"/]:::pub --> Overview
+
+  subgraph SidebarTenant["Sidebar · Учреждение"]
+    direction TB
+    Overview["/admin/overview"]:::nav
+    Users["/admin/users"]:::nav
+    Audit["/admin/audit"]:::nav
+  end
+
+  subgraph SidebarSystem["Sidebar · Система"]
+    direction TB
+    Integ["/admin/integrations"]:::nav
+    SysSet["/admin/system/settings"]:::nav
+  end
+
+  Overview --> OverviewTiles
+
+  subgraph OverviewTiles["Overview · tiles"]
+    direction TB
+    OvUsers["→ Users"]:::tab
+    OvAudit["→ Audit"]:::tab
+    OvInteg["→ Integrations"]:::tab
+    OvProv["→ Providers"]:::tab
+    OvMetrics["→ Metrics"]:::tab
+    OvAI["→ AI providers"]:::tab
+    OvBudget["→ Budgets"]:::tab
+    OvCorpus["→ Corpus"]:::tab
+    OvNotif["→ Notifications"]:::tab
+  end
+
+  OvUsers --> Users
+  OvAudit --> Audit
+  OvInteg --> Integ
+  OvProv --> Providers
+  OvMetrics --> Metrics
+  OvAI --> AIProv
+  OvBudget --> AIBudg
+  OvCorpus --> PlagCorp
+  OvNotif --> Notif
+
+  Users --> UserD["/admin/users/:id"]:::detail
+  Users --> UserNew["/admin/users/new"]:::form
+  Users --> BulkModal[("Bulk modal")]:::modal
+
+  UserD --> UserTabs
+  UserD --> UserActions
+
+  subgraph UserTabs["UserD · tabs"]
+    direction TB
+    UP["tab Profile"]:::tab
+    UE["tab External"]:::tab
+    UO["tab OAuth"]:::tab
+    US["tab Sessions"]:::tab
+    UK["tab API keys"]:::tab
+    UA["tab Audit"]:::tab
+  end
+
+  subgraph UserActions["UserD · actions"]
+    direction TB
+    UAct1["disable / enable"]:::tab
+    UAct2["anonymize"]:::tab
+    UAct3["reset password"]:::tab
+    UAct4["force-logout"]:::tab
+  end
+
+  Audit --> AuditViews
+  Audit --> AuditPolicies
+
+  subgraph AuditViews["Audit · views"]
+    direction TB
+    AuditS["/admin/audit/search"]:::detail
+    AuditAD["/admin/audit/access-denied"]:::detail
+    AuditA["/admin/audit/actors/:userId"]:::detail
+    AuditRes["/admin/audit/resources/:type/:id"]:::detail
+  end
+
+  subgraph AuditPolicies["Audit · policies"]
+    direction TB
+    AuditR["/admin/audit/retention"]:::detail
+    AuditLH["/admin/audit/legal-holds"]:::detail
+  end
+
+  AuditA --> UserD
+  AuditRes --> ResD["deep-link target"]:::detail
+
+  Integ --> IntegD["/admin/integrations/:id"]:::detail
+  Integ --> IntegNew["/admin/integrations/new"]:::form
+  Integ --> IntegWH["/admin/integrations/webhooks"]:::detail
+
+  IntegD --> IntegTabs
+  IntegD --> IntegOps
+
+  subgraph IntegTabs["IntegD · tabs"]
+    direction TB
+    ID1["tab Settings"]:::tab
+    ID2["tab OAuth"]:::tab
+    ID3["tab Schedules"]:::tab
+    ID4["tab Sync history"]:::tab
+  end
+
+  subgraph IntegOps["IntegD · ops"]
+    direction TB
+    TestModal[("Test connection")]:::modal
+    SyncOp["Manual sync (202)"]:::form
+  end
+
+  IntegNew --> OAuthFlow["/authorize → callback"]:::pub
+  OAuthFlow --> IntegD
+
+  Notif["/admin/notifications"]:::detail
+  Notif --> NotifChildren
+
+  subgraph NotifChildren["Notifications · sections"]
+    direction TB
+    EmailC["/admin/notifications/email"]:::detail
+    Tmpl["/admin/notifications/templates"]:::detail
+    Deliv["/admin/notifications/deliveries"]:::detail
+    DLQ["/admin/notifications/dlq"]:::detail
+  end
+
+  SysSet --> SysSetTabs
+
+  subgraph SysSetTabs["SysSet · tabs"]
+    direction TB
+    SS1["System info"]:::tab
+    SS2["Auth"]:::tab
+    SS3["Privacy"]:::tab
+    SS4["AI / LLM defaults"]:::tab
+    SS5["Health checks"]:::tab
+  end
+
+  Providers["/admin/providers"]:::detail
+  Providers --> ProvTiles
+
+  subgraph ProvTiles["Providers · tiles"]
+    direction TB
+    PvLLM["LLM"]:::tab
+    PvPlag["Plagiarism"]:::tab
+    PvEmail["Email"]:::tab
+    PvTG["Telegram"]:::tab
+    PvOAuth["OAuth"]:::tab
+    PvBudg["Budgets"]:::tab
+    PvPrompts["Prompts"]:::tab
+  end
+
+  PvLLM --> AIProv
+  PvPlag --> PlagCorp
+  PvEmail --> EmailC
+  PvBudg --> AIBudg
+  PvPrompts --> Prompts
+  PvOAuth --> Integ
+
+  Metrics["/admin/metrics"]:::detail
+  Metrics --> HealthList["health tiles (10 services)"]:::tab
+  Metrics --> ExternalLinks[/"Grafana / Prometheus / Jaeger / KafkaUI"/]:::pub
+
+  AIProv["/admin/ai/providers"]:::detail
+  AIProv --> ProvModal[("Provider modal")]:::modal
+  AIProv --> EditModal[("Edit modal")]:::modal
+
+  Prompts["/admin/ai/prompt-versions"]:::detail
+  Prompts --> PromptModal[("Editor")]:::modal
+  Prompts --> Sandbox[("Test paste-code")]:::modal
+
+  AIBudg["/admin/ai/budgets"]:::detail
+  AIBudg --> BudgChart["usage chart"]:::tab
+
+  PlagCorp["/admin/plagiarism-corpus"]:::detail
+  PlagCorp --> RebuildOp["rebuild (202)"]:::form
+  PlagCorp --> CourseLink["/courses/:slug"]:::detail
+
+  classDef nav fill:#e3ebe5,stroke:#3d5b4f,stroke-width:1.5px,color:#1d1c1a
+  classDef detail fill:#fffefb,stroke:#c8c1b3,stroke-width:1.2px,color:#1d1c1a
+  classDef tab fill:#efece5,stroke:#c8c1b3,stroke-dasharray:3 3,color:#3d3a35
+  classDef modal fill:#f3e6d0,stroke:#b07a2e,color:#1d1c1a
+  classDef form fill:#e3ebe5,stroke:#3d5b4f,stroke-dasharray:5 3,color:#1d1c1a
+  classDef pub fill:#fffefb,stroke:#a8a29a,stroke-dasharray:2 2,color:#3d3a35
+  classDef router fill:#f0dcd6,stroke:#9c3a3a,stroke-width:2px,color:#1d1c1a

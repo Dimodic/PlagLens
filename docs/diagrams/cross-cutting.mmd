@@ -1,0 +1,105 @@
+graph TB
+  AnyPage["Любой авторизованный экран"]:::page
+
+  subgraph TopBar["Topbar (sticky 56px)"]
+    direction LR
+    Back["Back button (на detail-страницах)"]:::tab
+    Title["Route-driven title"]:::tab
+    LangSeg["EN / RU Segmented"]:::tab
+    Theme["Light / Dark toggle"]:::tab
+  end
+
+  subgraph BellHeader["SSE-driven Bell (sticky)"]
+    direction TB
+    Badge["unread count badge"]:::tab
+    BellDrop[("Recent 10 dropdown")]:::modal
+    OpenAll["→ /notifications"]:::router
+  end
+
+  subgraph UserPill["User pill (внизу sidebar)"]
+    direction TB
+    PMenu[("Profile menu")]:::modal
+    ProfileM[("Profile modal")]:::modal
+    PrefsM[("Preferences modal")]:::modal
+    HelpM[("Help modal")]:::modal
+    LogoutAct[/"Logout → /login"/]:::pub
+  end
+
+  subgraph Search["Cmd+K Search"]
+    direction TB
+    SearchBox["Sidebar search"]:::tab
+    SearchResults[("Results")]:::modal
+  end
+
+  subgraph KbdShortcuts["Keyboard shortcuts (любая страница)"]
+    direction TB
+    GC["g + c · /courses"]:::kbd
+    GA["g + a · /me/assignments"]:::kbd
+    GS["g + s · /me/submissions"]:::kbd
+    GD["g + d · /reports"]:::kbd
+    GI["g + i · /imports / /me/exports"]:::kbd
+    GH["g + h · home"]:::kbd
+    GO["g + o · /admin/overview"]:::kbd
+    GU["g + u · /admin/users"]:::kbd
+    GL["g + l · /admin/audit"]:::kbd
+    CMDK["⌘ K · search"]:::kbd
+    QHelp["? · Help modal"]:::kbd
+    Esc["Esc · close modal"]:::kbd
+    UpDown["↑/↓ · step fragments в diff"]:::kbd
+  end
+
+  AnyPage --> TopBar
+  AnyPage --> BellHeader
+  AnyPage --> UserPill
+  AnyPage --> Search
+  AnyPage --> KbdShortcuts
+
+  Theme -->|writes data-theme| AnyPage
+  LangSeg -->|writes pl_locale| AnyPage
+
+  Badge --> BellDrop
+  BellDrop -->|click row| ActionURL{"action_url"}:::router
+  ActionURL --> SubD["/submissions/:id<br/>or /me/submissions/:id"]:::detail
+  ActionURL --> RunD["/plagiarism-runs/:runId"]:::detail
+  ActionURL --> AsgD["/assignments/:id<br/>or /me/assignments/:id"]:::detail
+  ActionURL --> CourseD["/courses/:slug"]:::detail
+  ActionURL --> BudgetD["/admin/ai/budgets"]:::detail
+  ActionURL --> SuspD["/courses/:slug/suspicious"]:::detail
+  ActionURL --> ImpD["/admin/integrations/:id"]:::detail
+  BellDrop --> OpenAll
+  OpenAll --> NotifPage["/notifications · /me/inbox"]:::detail
+
+  PMenu --> ProfileM
+  PMenu --> PrefsM
+  PMenu --> HelpM
+  PMenu --> LogoutAct
+
+  ProfileM -->|save| AnyPage
+  PrefsM -->|save| AnyPage
+
+  SearchBox --> SearchResults
+  SearchResults --> CourseD
+  SearchResults --> AsgD
+  SearchResults --> SubD
+  SearchResults --> StudentD["/admin/users/:id"]:::detail
+
+  GC -.-> CoursesPage["/courses"]:::nav
+  GA -.-> AsgListPage["/me/assignments"]:::nav
+  GS -.-> SubsPage["/me/submissions"]:::nav
+  GD -.-> ReportsPage["/reports"]:::nav
+  GI -.-> ImportsPage["/imports / /me/exports"]:::nav
+  GH -.-> RoleHome["role-based home"]:::nav
+  GO -.-> AdminOverview["/admin/overview"]:::nav
+  GU -.-> UsersPage["/admin/users"]:::nav
+  GL -.-> AuditPage["/admin/audit"]:::nav
+  CMDK -.-> SearchBox
+  QHelp -.-> HelpM
+
+  classDef page fill:#fffefb,stroke:#3d5b4f,stroke-width:2px,color:#1d1c1a
+  classDef nav fill:#e3ebe5,stroke:#3d5b4f,stroke-width:1.5px,color:#1d1c1a
+  classDef detail fill:#fffefb,stroke:#c8c1b3,stroke-width:1.2px,color:#1d1c1a
+  classDef tab fill:#efece5,stroke:#c8c1b3,stroke-dasharray:3 3,color:#3d3a35
+  classDef modal fill:#f3e6d0,stroke:#b07a2e,color:#1d1c1a
+  classDef pub fill:#fffefb,stroke:#a8a29a,stroke-dasharray:2 2,color:#3d3a35
+  classDef router fill:#f0dcd6,stroke:#9c3a3a,stroke-width:2px,color:#1d1c1a
+  classDef kbd fill:#232117,stroke:#6a6557,color:#f0eadc,stroke-dasharray:2 2
