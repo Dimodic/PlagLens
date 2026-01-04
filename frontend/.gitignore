@@ -11,3 +11,12 @@ coverage
 !.vscode/extensions.json
 .idea
 *.tsbuildinfo
+
+# Playwright / test output
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Vite temp build artifacts
+*.timestamp-*.mjs
