@@ -18,6 +18,12 @@ env/
 ENV/
 .python-version
 
+# Per-service uv lockfiles (transient dev-env artifacts; a workspace lockfile
+# at the repo root is introduced in the dependency-tooling phase)
+services/*/uv.lock
+libs/*/uv.lock
+tools/uv.lock
+
 # build artefacts
 build/
 dist/

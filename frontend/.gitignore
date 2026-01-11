@@ -20,3 +20,7 @@ playwright/.cache/
 
 # Vite temp build artifacts
 *.timestamp-*.mjs
+
+# tsc-emitted config artifacts (vite.config.ts is the source)
+vite.config.js
+vite.config.d.ts
