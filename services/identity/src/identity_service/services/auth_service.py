@@ -8,10 +8,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common.events import KafkaProducer, StubProducer, make_event
-from ..common.ids import gen_id, session_id, user_id
+from ..common.ids import session_id, user_id
 from ..common.problem import ProblemException
 from ..common.security import (
-    decode_access_token,
     hash_password,
     hash_token,
     issue_access_token,
@@ -245,11 +244,3 @@ class AuthService:
             await self.producer.publish(settings.kafka_topic_user, event)
         except Exception as exc:  # pragma: no cover - producer is best-effort
             logger.warning("Failed to publish %s: %s", event_type, exc)
-
-    @staticmethod
-    def decode_access(token: str) -> dict[str, Any]:
-        return decode_access_token(token)
-
-    @staticmethod
-    def operation_id() -> str:
-        return gen_id("op")

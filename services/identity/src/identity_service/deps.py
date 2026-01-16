@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Optional
+from typing import Any, Optional
 
 import jwt
 from fastapi import Depends, Header, Request
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .common.problem import ProblemException
 from .common.security import decode_access_token
 from .db import session_dep
-from .models import User
 
 
 @dataclass
@@ -128,28 +126,6 @@ def require_global_role(*allowed: str):
     return _dep
 
 
-def require_course_role(*allowed: str):
-    """Dependency factory for course-scoped routes; expects ``course_id`` in path."""
-
-    async def _dep(
-        course_id: str,
-        user: CurrentUser = Depends(current_user),
-    ) -> CurrentUser:
-        if user.global_role in ("super_admin", "admin"):
-            return user
-        role = user.course_roles.get(course_id)
-        if role not in allowed:
-            raise ProblemException(
-                status=403,
-                code="FORBIDDEN",
-                title="Insufficient course role",
-                detail=f"Required course role one of: {', '.join(allowed)}",
-            )
-        return user
-
-    return _dep
-
-
 def require_self_or_admin(target_user_id_param: str = "user_id"):
     """Allow if the authenticated user is the target, or has admin/super_admin."""
 
@@ -181,16 +157,3 @@ async def assert_same_tenant(user: CurrentUser, resource_tenant_id: str) -> None
             code="TENANT_MISMATCH",
             title="Cross-tenant access denied",
         )
-
-
-# ---- Helpers used in routers ------------------------------------------- #
-async def load_user_from_db(session: AsyncSession, user_id: str) -> User:
-    result = await session.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
-    if user is None:
-        raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    return user
-
-
-def in_iter(values: Iterable[str], target: str) -> bool:
-    return target in set(values)

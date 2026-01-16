@@ -20,7 +20,6 @@ from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
     Counter,
-    Gauge,
     Histogram,
     generate_latest,
 )
@@ -50,17 +49,6 @@ HTTP_DURATION = Histogram(
     "http_request_duration_seconds",
     "HTTP request duration in seconds",
     ["method", "route"],
-    registry=_REGISTRY,
-)
-ACTIVE_SESSIONS = Gauge(
-    "identity_active_sessions",
-    "Active sessions (refresh tokens)",
-    registry=_REGISTRY,
-)
-LOGIN_TOTAL = Counter(
-    "identity_logins_total",
-    "Identity login attempts",
-    ["result"],
     registry=_REGISTRY,
 )
 

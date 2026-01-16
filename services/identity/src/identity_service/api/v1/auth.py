@@ -186,10 +186,6 @@ async def me(
 
 # -------- Service-to-service token --------
 
-class ServiceTokenRequest:
-    """Container — declared as plain class to keep the import surface minimal.
-    The handler validates the shared secret manually before issuing a JWT."""
-
 
 @router.post(
     "/service-token",
@@ -208,6 +204,7 @@ async def issue_service_token(
     invalidate everything at once.
     """
     from datetime import datetime, timedelta, timezone
+
     from ...common.security import issue_access_token
 
     secret = request.headers.get("x-service-secret")

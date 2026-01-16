@@ -28,7 +28,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import select
 
-from .common.ids import tenant_id as _tenant_id, user_id as _user_id
+from .common.ids import tenant_id as _tenant_id
+from .common.ids import user_id as _user_id
 from .common.security import hash_password
 from .db import get_session_factory
 from .models import Tenant, User
