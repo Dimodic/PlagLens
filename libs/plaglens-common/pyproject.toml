@@ -40,7 +40,7 @@ kafka = ["aiokafka>=0.10,<0.13"]
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
-    "respx>=0.21",
+    "respx>=0.22,<1.0",
     "fakeredis[lua]>=2.21",
     "ruff>=0.4",
     "mypy>=1.10",

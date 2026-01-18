@@ -45,7 +45,7 @@ dev = [
 ]
 
 [tool.uv.sources]
-plaglens-common = { path = "../../libs/plaglens-common", editable = true }
+plaglens-common = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/course_service"]

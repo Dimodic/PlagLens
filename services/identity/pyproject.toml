@@ -43,6 +43,7 @@ dev = [
     "pytest>=8.1,<9.0",
     "pytest-asyncio>=0.23,<0.30",
     "aiosqlite>=0.20,<0.22",
+    "respx>=0.22,<1.0",
     "ruff>=0.4,<0.10",
     "mypy>=1.10,<2.0",
 ]
@@ -51,7 +52,7 @@ dev = [
 identity-service = "identity_service.main:run"
 
 [tool.uv.sources]
-plaglens-common = { path = "../../libs/plaglens-common", editable = true }
+plaglens-common = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

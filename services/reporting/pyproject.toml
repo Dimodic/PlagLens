@@ -51,7 +51,7 @@ weasyprint = ["weasyprint>=60.0,<70.0"]
 reporting-service = "reporting_service.main:run"
 
 [tool.uv.sources]
-plaglens-common = { path = "../../libs/plaglens-common", editable = true }
+plaglens-common = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]

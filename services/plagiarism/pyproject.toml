@@ -47,7 +47,7 @@ dev = [
 plagiarism-service = "plagiarism_service.main:run"
 
 [tool.uv.sources]
-plaglens-common = { path = "../../libs/plaglens-common", editable = true }
+plaglens-common = { workspace = true }
 
 [tool.setuptools.packages.find]
 where = ["src"]
