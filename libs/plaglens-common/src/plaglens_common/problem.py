@@ -1,6 +1,10 @@
-"""RFC 7807 Problem Details for HTTP APIs.
+"""RFC 7807 Problem Details for HTTP APIs — the canonical error envelope.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §5.
+Services raise ``ProblemException(status=..., code=..., title=...)`` from
+anywhere and register the handlers returned by :func:`make_handlers` on their
+FastAPI app. The wire content-type is ``application/problem+json``.
+
+See ``docs/architecture/01-CROSS-CUTTING.md`` §5.
 """
 
 from __future__ import annotations
@@ -10,7 +14,7 @@ from typing import Any, Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .headers import CONTENT_TYPE_PROBLEM, REQUEST_ID
+CONTENT_TYPE_PROBLEM: Final[str] = "application/problem+json"
 
 # fmt: off
 ERROR_CODES: Final[dict[str, str]] = {
@@ -61,8 +65,12 @@ DEFAULT_TYPE_BASE: Final[str] = "https://docs.plaglens.ru/errors/"
 logger = logging.getLogger(__name__)
 
 
+def _type_for(code: str, type_: str | None = None) -> str:
+    return type_ or (DEFAULT_TYPE_BASE + code.lower())
+
+
 class ProblemFieldError(BaseModel):
-    """One per-field validation error inside `Problem.errors`."""
+    """One per-field validation error inside ``Problem.errors``."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -72,10 +80,7 @@ class ProblemFieldError(BaseModel):
 
 
 class Problem(BaseModel):
-    """RFC 7807 Problem Details.
-
-    Wire content-type: `application/problem+json`.
-    """
+    """RFC 7807 Problem Details. Wire content-type: ``application/problem+json``."""
 
     model_config = ConfigDict(extra="allow", populate_by_name=True)
 
@@ -103,9 +108,8 @@ class Problem(BaseModel):
     ) -> Problem:
         resolved_code = code or _DEFAULT_CODE_BY_STATUS.get(status, "INTERNAL")
         resolved_title = title or resolved_code.replace("_", " ").title()
-        resolved_type = type_uri or (DEFAULT_TYPE_BASE + resolved_code.lower())
         return cls(
-            type=resolved_type,
+            type=_type_for(resolved_code, type_uri),
             title=resolved_title,
             status=status,
             detail=detail,
@@ -117,66 +121,133 @@ class Problem(BaseModel):
 
 
 class ProblemException(Exception):
-    """Exception that carries a `Problem` to be rendered by the FastAPI handler."""
+    """Raise from anywhere; the handlers from :func:`make_handlers` render it."""
 
-    def __init__(self, problem: Problem, *, headers: dict[str, str] | None = None) -> None:
-        self.problem = problem
-        self.headers = headers or {}
-        super().__init__(f"{problem.code}: {problem.title}")
-
-    @classmethod
-    def from_status(
-        cls,
-        status: int,
+    def __init__(
+        self,
         *,
+        status: int,
+        code: str,
+        title: str,
         detail: str | None = None,
-        code: str | None = None,
-        title: str | None = None,
+        type_: str | None = None,
         errors: list[ProblemFieldError] | None = None,
         headers: dict[str, str] | None = None,
-    ) -> ProblemException:
-        return cls(
-            Problem.from_status(
-                status, detail=detail, code=code, title=title, errors=errors
-            ),
-            headers=headers,
+    ) -> None:
+        self.status = status
+        self.code = code
+        self.title = title
+        self.detail = detail
+        self.type_ = _type_for(code, type_)
+        self.errors = errors
+        self.headers = headers or {}
+        super().__init__(detail or title)
+
+
+def problem_response(
+    request: Any,
+    *,
+    status: int,
+    code: str,
+    title: str,
+    detail: str | None = None,
+    type_: str | None = None,
+    errors: list[ProblemFieldError] | None = None,
+    headers: dict[str, str] | None = None,
+) -> Any:
+    """Build a JSONResponse carrying an RFC 7807 ``Problem`` body."""
+    from fastapi.encoders import jsonable_encoder
+    from fastapi.responses import JSONResponse
+
+    body = Problem(
+        type=_type_for(code, type_),
+        title=title,
+        status=status,
+        detail=detail,
+        instance=str(request.url.path),
+        code=code,
+        errors=errors,
+        request_id=getattr(getattr(request, "state", None), "request_id", None),
+    )
+    response_headers: dict[str, str] = {"Content-Type": CONTENT_TYPE_PROBLEM}
+    if headers:
+        response_headers.update(headers)
+    return JSONResponse(
+        status_code=status,
+        content=jsonable_encoder(body, exclude_none=True),
+        headers=response_headers,
+    )
+
+
+def make_handlers() -> dict[type[Exception], Any]:
+    """Exception handlers to register via ``app.add_exception_handler``."""
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
+    async def _problem(request: Any, exc: ProblemException) -> Any:
+        return problem_response(
+            request,
+            status=exc.status,
+            code=exc.code,
+            title=exc.title,
+            detail=exc.detail,
+            type_=exc.type_,
+            errors=exc.errors,
+            headers=exc.headers,
         )
 
+    async def _http(request: Any, exc: StarletteHTTPException) -> Any:
+        title = exc.detail if isinstance(exc.detail, str) else "HTTP error"
+        return problem_response(
+            request,
+            status=exc.status_code,
+            code=_DEFAULT_CODE_BY_STATUS.get(exc.status_code, "BAD_REQUEST"),
+            title=title,
+            detail=title,
+        )
 
-def problem_exception_handler(_request: Any, exc: ProblemException) -> Any:
-    """FastAPI exception handler factory output.
+    async def _validation(request: Any, exc: RequestValidationError) -> Any:
+        errors = [
+            ProblemFieldError(
+                field=".".join(str(p) for p in err.get("loc", [])),
+                code=err.get("type", "invalid"),
+                message=err.get("msg", "Invalid value"),
+            )
+            for err in exc.errors()
+        ]
+        return problem_response(
+            request,
+            status=422,
+            code="VALIDATION_FAILED",
+            title="Validation Error",
+            detail="Request body validation failed",
+            errors=errors,
+        )
 
-    Imports `JSONResponse` lazily so the library remains usable without FastAPI installed.
-    """
-    try:
-        from starlette.responses import JSONResponse  # type: ignore[import-not-found]
-    except ImportError as imp_err:  # pragma: no cover - happens only without fastapi extra
-        raise RuntimeError(
-            "FastAPI/Starlette is required for problem_exception_handler"
-        ) from imp_err
+    async def _unhandled(request: Any, exc: Exception) -> Any:
+        return problem_response(
+            request,
+            status=500,
+            code="INTERNAL",
+            title="Internal Server Error",
+            detail=str(exc),
+        )
 
-    headers = dict(exc.headers)
-    request_id = getattr(getattr(_request, "state", None), "request_id", None) or headers.get(
-        REQUEST_ID
-    )
-    if request_id and exc.problem.request_id is None:
-        exc.problem.request_id = str(request_id)
-    if request_id:
-        headers.setdefault(REQUEST_ID, str(request_id))
-
-    return JSONResponse(
-        status_code=exc.problem.status,
-        content=exc.problem.model_dump(exclude_none=True),
-        media_type=CONTENT_TYPE_PROBLEM,
-        headers=headers,
-    )
+    return {
+        ProblemException: _problem,
+        StarletteHTTPException: _http,
+        RequestValidationError: _validation,
+        Exception: _unhandled,
+    }
 
 
 __all__ = [
+    "CONTENT_TYPE_PROBLEM",
     "DEFAULT_TYPE_BASE",
     "ERROR_CODES",
     "Problem",
     "ProblemException",
     "ProblemFieldError",
-    "problem_exception_handler",
+    "make_handlers",
+    "problem_response",
 ]

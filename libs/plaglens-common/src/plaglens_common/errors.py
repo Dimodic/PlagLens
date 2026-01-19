@@ -44,7 +44,13 @@ class PlagLensError(Exception):
         )
 
     def to_exception(self) -> ProblemException:
-        return ProblemException(self.to_problem())
+        return ProblemException(
+            status=self.status,
+            code=self.code,
+            title=self.default_title,
+            detail=self.detail,
+            errors=self.errors,
+        )
 
 
 class NotFoundError(PlagLensError):

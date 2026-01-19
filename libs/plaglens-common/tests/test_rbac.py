@@ -44,7 +44,7 @@ def test_require_global_role_denies_others() -> None:
 
     with pytest.raises(ProblemException) as ei:
         handler(user=_user(global_role="student"))
-    assert ei.value.problem.status == 403
+    assert ei.value.status == 403
 
 
 def test_require_course_role_allows_correct_role() -> None:
@@ -62,7 +62,7 @@ def test_require_course_role_denies_wrong_role() -> None:
 
     with pytest.raises(ProblemException) as ei:
         handler("crs_1", user=_user(course_roles={"crs_1": "assistant"}))
-    assert ei.value.problem.status == 403
+    assert ei.value.status == 403
 
 
 def test_require_course_role_super_admin_override() -> None:
@@ -82,7 +82,7 @@ def test_require_course_role_tenant_mismatch() -> None:
     ctx = AuthzContext(user=user, course_id="crs_1", tenant_id_of_resource="tnt_OTHER")
     with pytest.raises(ProblemException) as ei:
         handler("crs_1", authz=ctx)
-    assert ei.value.problem.code == "TENANT_MISMATCH"
+    assert ei.value.code == "TENANT_MISMATCH"
 
 
 def test_authz_context_helpers() -> None:

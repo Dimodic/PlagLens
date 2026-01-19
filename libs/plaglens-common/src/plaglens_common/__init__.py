@@ -43,7 +43,9 @@ from .problem import (
     ERROR_CODES,
     Problem,
     ProblemException,
-    problem_exception_handler,
+    ProblemFieldError,
+    make_handlers,
+    problem_response,
 )
 from .rbac import (
     AuthzContext,
@@ -77,6 +79,7 @@ __all__ = [
     "ProcessedEventStore",
     "Problem",
     "ProblemException",
+    "ProblemFieldError",
     "RateLimitError",
     "TenantMismatchError",
     "TokenExpiredError",
@@ -88,9 +91,10 @@ __all__ = [
     "__version__",
     "decode_cursor",
     "encode_cursor",
+    "make_handlers",
     "operation_response",
     "parse_pagination_query",
-    "problem_exception_handler",
+    "problem_response",
     "require_course_role",
     "require_global_role",
 ]

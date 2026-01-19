@@ -42,11 +42,12 @@ def test_problem_from_status_with_field_errors() -> None:
     assert dumped["status"] == 422
 
 
-def test_problem_exception_carries_problem() -> None:
-    exc = ProblemException.from_status(409, code="CONFLICT", detail="dup")
-    assert exc.problem.status == 409
-    assert exc.problem.code == "CONFLICT"
-    assert "CONFLICT" in str(exc)
+def test_problem_exception_carries_fields() -> None:
+    exc = ProblemException(status=409, code="CONFLICT", title="Conflict", detail="dup")
+    assert exc.status == 409
+    assert exc.code == "CONFLICT"
+    assert exc.type_.endswith("/conflict")
+    assert "dup" in str(exc)
 
 
 def test_problem_unknown_status_falls_back_to_internal() -> None:

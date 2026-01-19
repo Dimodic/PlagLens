@@ -48,5 +48,5 @@ def test_to_problem_maps_status_and_code(cls: type[PlagLensError], status: int, 
 def test_to_exception_wraps_into_problem_exception() -> None:
     err = NotFoundError("missing")
     pe = err.to_exception()
-    assert pe.problem.status == 404
-    assert pe.problem.code == "NOT_FOUND"
+    assert pe.status == 404
+    assert pe.code == "NOT_FOUND"
