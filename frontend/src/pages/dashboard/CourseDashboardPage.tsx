@@ -4,6 +4,7 @@
  * Tabs: Overview / Grades / Plagiarism / AI / Timeline / Languages /
  *       Activity / Late.
  */
+import { lazy, Suspense } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   BarChart3,
@@ -32,15 +33,37 @@ import {
 import { useCourse } from '@/hooks/api/useCourses';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { GradeHistogram } from '@/components/dashboard/GradeHistogram';
-import { SubmissionsTimeline } from '@/components/dashboard/SubmissionsTimeline';
-import { LanguagePie } from '@/components/dashboard/LanguagePie';
-import { AIUsageDonut } from '@/components/dashboard/AIUsageDonut';
+// Chart components pull recharts (~70 KB gz) — defer them through
+// React.lazy so the KPI grid + tab strip render immediately and each
+// chart streams in only when its tab is active.
+const GradeHistogram = lazy(() =>
+  import('@/components/dashboard/GradeHistogram').then((m) => ({ default: m.GradeHistogram })),
+);
+const SubmissionsTimeline = lazy(() =>
+  import('@/components/dashboard/SubmissionsTimeline').then((m) => ({ default: m.SubmissionsTimeline })),
+);
+const LanguagePie = lazy(() =>
+  import('@/components/dashboard/LanguagePie').then((m) => ({ default: m.LanguagePie })),
+);
+const AIUsageDonut = lazy(() =>
+  import('@/components/dashboard/AIUsageDonut').then((m) => ({ default: m.AIUsageDonut })),
+);
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { LateSubmissionsList } from '@/components/dashboard/LateSubmissionsList';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/layout/Page';
+
+/** Tiny inline spinner for the recharts-bearing tab panels while
+ *  the chunk loads on first tab activation. After that the chunk
+ *  is cached and the fallback flickers for <50ms. */
+function ChartLoader() {
+  return (
+    <div className="flex h-64 items-center justify-center text-muted-foreground">
+      <Loader2 className="h-5 w-5 animate-spin" />
+    </div>
+  );
+}
 import {
   Tabs,
   TabsContent,
@@ -178,10 +201,12 @@ export default function CourseDashboardPage() {
           className="grid grid-cols-1 gap-4 lg:grid-cols-12"
         >
           <div className="lg:col-span-7">
-            <GradeHistogram
-              data={gradesDist.data}
-              loading={gradesDist.isLoading}
-            />
+            <Suspense fallback={<ChartLoader />}>
+              <GradeHistogram
+                data={gradesDist.data}
+                loading={gradesDist.isLoading}
+              />
+            </Suspense>
           </div>
           <div className="lg:col-span-5">
             <Card>
@@ -218,13 +243,15 @@ export default function CourseDashboardPage() {
           className="grid grid-cols-1 gap-4 lg:grid-cols-12"
         >
           <div className="lg:col-span-8">
-            <SubmissionsTimeline
-              data={(plagiarism.data?.series ?? []).map((p) => ({
-                week: p.date,
-                submissions: p.pairs_suspected,
-                graded: Math.round(p.max_similarity * 10) / 10,
-              }))}
-            />
+            <Suspense fallback={<ChartLoader />}>
+              <SubmissionsTimeline
+                data={(plagiarism.data?.series ?? []).map((p) => ({
+                  week: p.date,
+                  submissions: p.pairs_suspected,
+                  graded: Math.round(p.max_similarity * 10) / 10,
+                }))}
+              />
+            </Suspense>
           </div>
           <div className="lg:col-span-4">
             <Card>
@@ -261,25 +288,33 @@ export default function CourseDashboardPage() {
           className="grid grid-cols-1 gap-4 lg:grid-cols-12"
         >
           <div className="lg:col-span-5">
-            <AIUsageDonut data={ai.data} />
+            <Suspense fallback={<ChartLoader />}>
+              <AIUsageDonut data={ai.data} />
+            </Suspense>
           </div>
           <div className="lg:col-span-7">
-            <SubmissionsTimeline
-              data={(ai.data?.series ?? []).map((p) => ({
-                week: p.date,
-                submissions: p.runs,
-                graded: Math.round(p.cost_usd * 100) / 100,
-              }))}
-            />
+            <Suspense fallback={<ChartLoader />}>
+              <SubmissionsTimeline
+                data={(ai.data?.series ?? []).map((p) => ({
+                  week: p.date,
+                  submissions: p.runs,
+                  graded: Math.round(p.cost_usd * 100) / 100,
+                }))}
+              />
+            </Suspense>
           </div>
         </TabsContent>
 
         <TabsContent value="timeline" data-testid="tab-timeline">
-          <SubmissionsTimeline data={timeline.data} />
+          <Suspense fallback={<ChartLoader />}>
+            <SubmissionsTimeline data={timeline.data} />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="languages" data-testid="tab-languages">
-          <LanguagePie data={languages.data} />
+          <Suspense fallback={<ChartLoader />}>
+            <LanguagePie data={languages.data} />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="activity" data-testid="tab-activity">

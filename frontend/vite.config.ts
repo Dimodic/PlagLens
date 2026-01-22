@@ -11,6 +11,71 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  // Pre-bundle the heavy deps tree at dev-server boot so the first
+  // page navigation doesn't trigger a cascade of on-demand transforms
+  // (each radix-ui-* / recharts subpath was costing ~150 ms cold).
+  // Without this list Vite discovers them lazily as routes mount and
+  // the cold-load skeleton hangs around for tens of seconds.
+  // Keep in sync with package.json — adding a new heavy dep without
+  // adding it here re-introduces the slow first paint.
+  optimizeDeps: {
+    include: [
+      'react',
+      'react-dom',
+      'react-dom/client',
+      'react-router-dom',
+      '@tanstack/react-query',
+      'axios',
+      'sonner',
+      'zod',
+      'clsx',
+      'class-variance-authority',
+      'tailwind-merge',
+      'lucide-react',
+      'dayjs',
+      'date-fns',
+      'react-hook-form',
+      '@hookform/resolvers/zod',
+      'cmdk',
+      'vaul',
+      'embla-carousel-react',
+      'input-otp',
+      'react-day-picker',
+      'react-resizable-panels',
+      'next-themes',
+      'rxjs',
+      '@radix-ui/react-accordion',
+      '@radix-ui/react-alert-dialog',
+      '@radix-ui/react-aspect-ratio',
+      '@radix-ui/react-avatar',
+      '@radix-ui/react-checkbox',
+      '@radix-ui/react-collapsible',
+      '@radix-ui/react-context-menu',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-hover-card',
+      '@radix-ui/react-label',
+      '@radix-ui/react-menubar',
+      '@radix-ui/react-navigation-menu',
+      '@radix-ui/react-popover',
+      '@radix-ui/react-progress',
+      '@radix-ui/react-radio-group',
+      '@radix-ui/react-scroll-area',
+      '@radix-ui/react-select',
+      '@radix-ui/react-separator',
+      '@radix-ui/react-slider',
+      '@radix-ui/react-slot',
+      '@radix-ui/react-switch',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-toggle',
+      '@radix-ui/react-toggle-group',
+      '@radix-ui/react-tooltip',
+    ],
+    // Recharts ships ESM but its barrel imports pull in d3-* with
+    // weird CJS shims; excluding it lets it stay lazy-loaded by
+    // dashboards only when those routes are visited.
+    exclude: ['recharts', '@univerjs/presets', '@univerjs/preset-sheets-core'],
+  },
   server: {
     port: 5173,
     host: true,

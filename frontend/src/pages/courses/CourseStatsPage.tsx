@@ -6,6 +6,7 @@
  * scrollable page (no tabs). For the full multi-tab dashboard use
  * /courses/:slug/dashboard.
  */
+import { lazy, Suspense } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { BarChart3, Book, Brain, ClipboardList, Loader2, Shield, Users } from 'lucide-react';
 import { useCourse } from '@/hooks/api/useCourses';
@@ -19,8 +20,16 @@ import { useSuspiciousSubmissions } from '@/hooks/api/usePlagiarism';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { Card, CardContent } from '@/components/ui/card';
 import { KPICard } from '@/components/dashboard/KPICard';
-import { GradeHistogram } from '@/components/dashboard/GradeHistogram';
-import { SubmissionsTimeline } from '@/components/dashboard/SubmissionsTimeline';
+// Defer recharts behind React.lazy so the KPI strip + lists render
+// while the chart bundle is still on the wire. The whole page sits
+// inside the same chunk so once recharts arrives once, both lazy
+// imports resolve together.
+const GradeHistogram = lazy(() =>
+  import('@/components/dashboard/GradeHistogram').then((m) => ({ default: m.GradeHistogram })),
+);
+const SubmissionsTimeline = lazy(() =>
+  import('@/components/dashboard/SubmissionsTimeline').then((m) => ({ default: m.SubmissionsTimeline })),
+);
 import { ActivityFeed } from '@/components/dashboard/ActivityFeed';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
@@ -105,10 +114,12 @@ export default function CourseStatsPage() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
               <div className="md:col-span-7">
-                <GradeHistogram
-                  data={gradesDist.data}
-                  loading={gradesDist.isLoading}
-                />
+                <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+                  <GradeHistogram
+                    data={gradesDist.data}
+                    loading={gradesDist.isLoading}
+                  />
+                </Suspense>
               </div>
               <div className="md:col-span-5">
                 <Card data-testid="course-stats-suspicious-card">
@@ -160,7 +171,9 @@ export default function CourseStatsPage() {
 
             <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
               <div className="md:col-span-7">
-                <SubmissionsTimeline data={timeline.data} />
+                <Suspense fallback={<div className="flex h-64 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>}>
+                  <SubmissionsTimeline data={timeline.data} />
+                </Suspense>
               </div>
               <div className="md:col-span-5">
                 <Card>

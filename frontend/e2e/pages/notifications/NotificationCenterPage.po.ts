@@ -9,9 +9,7 @@ export class NotificationCenterPagePo {
   readonly tabAll: Locator;
   readonly tabArchived: Locator;
   readonly markAllBtn: Locator;
-  readonly severityFilter: Locator;
-  readonly eventTypeFilter: Locator;
-  readonly sinceFilter: Locator;
+  readonly settingsLink: Locator;
   readonly list: Locator;
 
   constructor(page: Page) {
@@ -20,9 +18,7 @@ export class NotificationCenterPagePo {
     this.tabAll = page.getByTestId('tab-all');
     this.tabArchived = page.getByTestId('tab-archived');
     this.markAllBtn = page.getByTestId('mark-all-btn');
-    this.severityFilter = page.getByTestId('severity-filter');
-    this.eventTypeFilter = page.getByTestId('event-type-filter');
-    this.sinceFilter = page.getByTestId('since-filter');
+    this.settingsLink = page.getByTestId('notif-settings-link');
     this.list = page.getByTestId('notifications-list');
   }
 

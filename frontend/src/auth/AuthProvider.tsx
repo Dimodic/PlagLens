@@ -103,7 +103,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyToken]);
 
   // Bootstrap: try refresh once on mount.
+  //
+  // Public paths (login / register / forgot / reset / verify / oauth
+  // callback / demo) don't need a refresh — there's no protected page
+  // to gate, and waiting on the network call adds 200-500 ms of empty
+  // viewport before /login or /demo can render its form. Short-circuit
+  // to 'anonymous' immediately for those paths and only attempt refresh
+  // when the URL actually points into the protected shell.
   useEffect(() => {
+    const path = window.location.pathname;
+    const isPublic =
+      path === '/login' ||
+      path === '/register' ||
+      path === '/demo' ||
+      path.startsWith('/auth/');
+    if (isPublic) {
+      setStatus('anonymous');
+      return;
+    }
     let cancelled = false;
     (async () => {
       const ok = await refresh();

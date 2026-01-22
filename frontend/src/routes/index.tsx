@@ -7,14 +7,17 @@
  * Protected (under <AppShell />):
  *   / → role-based redirect
  *   /me, /me/assignments, /me/submissions, /me/2fa, /me/settings
- *   /courses (placeholder)
- *   /grading (placeholder)
- *   /reports (placeholder)
- *   /notifications (placeholder)
- *   /admin/* (placeholder)
+ *   /courses, /grading, /reports, /notifications, /admin/*
  *
- * Placeholders are filled in by later agents.
+ * Bundle strategy: every page is `React.lazy()`'d so the initial JS
+ * chunk ships only the router, auth providers, layout shell, and the
+ * three pages most commonly hit on a cold load (login + demo + home
+ * redirect). The Suspense boundary lives inside `AppShell` so route
+ * transitions show a uniform `<PageSkeleton />` while the chunk
+ * resolves. Public-route fallbacks are scoped at each `element` to
+ * keep the page-level skeleton inside the auth shell consistent.
  */
+import { lazy, Suspense } from 'react';
 import {
   createBrowserRouter,
   Navigate,
@@ -24,103 +27,123 @@ import {
 import { ProtectedRoute } from '@/auth/ProtectedRoute';
 import { RoleGuard } from '@/auth/RoleGuard';
 import { AppShell } from '@/layout/AppShell';
+import { PageSkeleton } from '@/components/common/Skeleton';
+
+// Eagerly imported: tiny modules every cold load needs immediately
+// (the unauth landing surface + the not-found / error boundaries).
 import LoginPage from '@/pages/auth/LoginPage';
-import RegisterPage from '@/pages/auth/RegisterPage';
-import ForgotPasswordPage from '@/pages/auth/ForgotPasswordPage';
-import ResetPasswordPage from '@/pages/auth/ResetPasswordPage';
-import VerifyEmailPage from '@/pages/auth/VerifyEmailPage';
-import OAuthCallbackPage from '@/pages/auth/OAuthCallbackPage';
-import TwoFactorEnrollPage from '@/pages/auth/TwoFactorEnrollPage';
-import DemoLoginPage from '@/pages/auth/DemoLoginPage';
 import HomeRedirect from '@/pages/app/HomeRedirect';
-import MyAssignmentsPage from '@/pages/me/MyAssignmentsPage';
-import MyGradesPage from '@/pages/me/MyGradesPage';
-import MySettingsPage from '@/pages/me/MySettingsPage';
-import GradingQueuePage from '@/pages/teacher/GradingQueuePage';
-import AdminProvidersPage from '@/pages/admin/AdminProvidersPage';
-import AdminMetricsPage from '@/pages/admin/AdminMetricsPage';
 import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorPage from '@/pages/ErrorPage';
-import PlagiarismRunsListPage from '@/pages/plagiarism/PlagiarismRunsListPage';
-import PlagiarismRunDetailPage from '@/pages/plagiarism/PlagiarismRunDetailPage';
-import PlagiarismPairDiffPage from '@/pages/plagiarism/PlagiarismPairDiffPage';
-import PlagiarismCorpusPage from '@/pages/plagiarism/PlagiarismCorpusPage';
-import AnalysisListPage from '@/pages/ai/AnalysisListPage';
-import SubmissionAIReportPage from '@/pages/ai/SubmissionAIReportPage';
-import PromptVersionsPage from '@/pages/admin/PromptVersionsPage';
-import LLMProvidersPage from '@/pages/admin/LLMProvidersPage';
-import LLMBudgetsPage from '@/pages/admin/LLMBudgetsPage';
-import LLMCacheAdminPage from '@/pages/admin/LLMCacheAdminPage';
 
-// Course / assignment / submission pages
-import CoursesListPage from '@/pages/courses/CoursesListPage';
-import CourseCreatePage from '@/pages/courses/CourseCreatePage';
-import CourseDetailPage from '@/pages/courses/CourseDetailPage';
-import CourseSettingsPage from '@/pages/courses/CourseSettingsPage';
-import JoinByCodePage from '@/pages/courses/JoinByCodePage';
-import AssignmentDetailPage from '@/pages/assignments/AssignmentDetailPage';
-import AssignmentCreatePage from '@/pages/assignments/AssignmentCreatePage';
-import HomeworkCreatePage from '@/pages/homeworks/HomeworkCreatePage';
-import HomeworkAssignmentCreatePage from '@/pages/homeworks/HomeworkAssignmentCreatePage';
-import AssignmentSettingsPage from '@/pages/assignments/AssignmentSettingsPage';
-import AssignmentSubmissionsPage from '@/pages/assignments/AssignmentSubmissionsPage';
-import AssignmentDeadlinesPage from '@/pages/assignments/AssignmentDeadlinesPage';
-import SubmissionDetailPage from '@/pages/submissions/SubmissionDetailPage';
-import SubmissionUploadPage from '@/pages/submissions/SubmissionUploadPage';
-import SubmissionsListPage from '@/pages/submissions/SubmissionsListPage';
+// Auth — public pages, lazy except LoginPage itself.
+const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
+const VerifyEmailPage = lazy(() => import('@/pages/auth/VerifyEmailPage'));
+const OAuthCallbackPage = lazy(() => import('@/pages/auth/OAuthCallbackPage'));
+const TwoFactorEnrollPage = lazy(() => import('@/pages/auth/TwoFactorEnrollPage'));
+const DemoLoginPage = lazy(() => import('@/pages/auth/DemoLoginPage'));
 
-// Dashboards / Reporting / Notifications
-import MyDashboardPage from '@/pages/dashboard/MyDashboardPage';
-import TenantDashboardPage from '@/pages/dashboard/TenantDashboardPage';
-import GlobalDashboardPage from '@/pages/dashboard/GlobalDashboardPage';
-import ExportsListPage from '@/pages/reporting/ExportsListPage';
-import ExportPage from '@/pages/reporting/ExportPage';
-import NotificationCenterPage from '@/pages/notifications/NotificationCenterPage';
-import PreferencesPage from '@/pages/notifications/PreferencesPage';
-import WebPushSettingsPage from '@/pages/notifications/WebPushSettingsPage';
+// Self pages.
+const MyAssignmentsPage = lazy(() => import('@/pages/me/MyAssignmentsPage'));
+const MyGradesPage = lazy(() => import('@/pages/me/MyGradesPage'));
+const MySettingsPage = lazy(() => import('@/pages/me/MySettingsPage'));
+const ProfilePage = lazy(() => import('@/pages/me/ProfilePage'));
+const SecurityPage = lazy(() => import('@/pages/me/SecurityPage'));
+const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
+const MyExternalBindingsPage = lazy(() => import('@/pages/me/MyExternalBindingsPage'));
+const MyAssignmentDetailPage = lazy(() => import('@/pages/me/MyAssignmentDetailPage'));
+const MySubmissionDetailPage = lazy(() => import('@/pages/me/MySubmissionDetailPage'));
+const UserSettingsLanding = lazy(() => import('@/pages/me/UserSettingsLandingPage'));
 
-// Admin / Audit / Profile / Settings (P5c).
-import AdminDashboardPage from '@/pages/admin/AdminDashboardPage';
-import TenantsListPage from '@/pages/admin/TenantsListPage';
-import TenantCreatePage from '@/pages/admin/TenantCreatePage';
-import TenantDetailPage from '@/pages/admin/TenantDetailPage';
-import UsersListPage from '@/pages/admin/UsersListPage';
-import UserCreatePage from '@/pages/admin/UserCreatePage';
-import UserDetailPage from '@/pages/admin/UserDetailPage';
-import IntegrationsListPage from '@/pages/admin/IntegrationsListPage';
-import OAuthProvidersPage from '@/pages/admin/OAuthProvidersPage';
-import IntegrationCreatePage from '@/pages/admin/IntegrationCreatePage';
-import IntegrationDetailPage from '@/pages/admin/IntegrationDetailPage';
-import ImportWizardPage from '@/pages/integrations/ImportWizardPage';
-import YandexContestSetupPage from '@/pages/integrations/YandexContestSetupPage';
-import StepikSetupPage from '@/pages/integrations/StepikSetupPage';
-import EjudgeSetupPage from '@/pages/integrations/EjudgeSetupPage';
-import IntegrationOAuthCallbackPage from '@/pages/integrations/IntegrationOAuthCallbackPage';
-import YandexContestImportPage from '@/pages/integrations/YandexContestImportPage';
-import GoogleSheetsSetupPage from '@/pages/integrations/GoogleSheetsSetupPage';
-import WebhooksAdminPage from '@/pages/admin/WebhooksAdminPage';
-import EmailConfigPage from '@/pages/admin/EmailConfigPage';
-import NotificationTemplatesPage from '@/pages/admin/NotificationTemplatesPage';
-import NotificationDeliveriesPage from '@/pages/admin/NotificationDeliveriesPage';
-import NotificationDLQPage from '@/pages/admin/NotificationDLQPage';
-import AuditEventsPage from '@/pages/admin/audit/AuditEventsPage';
-import AuditSearchPage from '@/pages/admin/audit/AuditSearchPage';
-import AuditByActorPage from '@/pages/admin/audit/AuditByActorPage';
-import AuditByResourcePage from '@/pages/admin/audit/AuditByResourcePage';
-import AuditAccessDeniedPage from '@/pages/admin/audit/AuditAccessDeniedPage';
-import AuditRetentionPolicyPage from '@/pages/admin/audit/AuditRetentionPolicyPage';
-import AuditLegalHoldPage from '@/pages/admin/audit/AuditLegalHoldPage';
-import RolesPermissionsPage from '@/pages/admin/settings/RolesPermissionsPage';
-import SystemHealthPage from '@/pages/admin/settings/SystemHealthPage';
-import SystemSettingsPage from '@/pages/admin/settings/SystemSettingsPage';
-import ProfilePage from '@/pages/me/ProfilePage';
-import SecurityPage from '@/pages/me/SecurityPage';
-import MyApiKeysPage from '@/pages/me/MyApiKeysPage';
-import MyExternalBindingsPage from '@/pages/me/MyExternalBindingsPage';
-import MyAssignmentDetailPage from '@/pages/me/MyAssignmentDetailPage';
-import MySubmissionDetailPage from '@/pages/me/MySubmissionDetailPage';
-import ActivityLogPage from '@/pages/teacher/ActivityLogPage';
-import UserSettingsLanding from '@/pages/me/UserSettingsLandingPage';
+// Teacher / admin shortcuts.
+const GradingQueuePage = lazy(() => import('@/pages/teacher/GradingQueuePage'));
+const ActivityLogPage = lazy(() => import('@/pages/teacher/ActivityLogPage'));
+const AdminProvidersPage = lazy(() => import('@/pages/admin/AdminProvidersPage'));
+const AdminMetricsPage = lazy(() => import('@/pages/admin/AdminMetricsPage'));
+
+// Plagiarism + AI.
+const PlagiarismRunsListPage = lazy(() => import('@/pages/plagiarism/PlagiarismRunsListPage'));
+const PlagiarismRunDetailPage = lazy(() => import('@/pages/plagiarism/PlagiarismRunDetailPage'));
+const PlagiarismPairDiffPage = lazy(() => import('@/pages/plagiarism/PlagiarismPairDiffPage'));
+const PlagiarismCorpusPage = lazy(() => import('@/pages/plagiarism/PlagiarismCorpusPage'));
+const AnalysisListPage = lazy(() => import('@/pages/ai/AnalysisListPage'));
+const SubmissionAIReportPage = lazy(() => import('@/pages/ai/SubmissionAIReportPage'));
+const PromptVersionsPage = lazy(() => import('@/pages/admin/PromptVersionsPage'));
+const LLMProvidersPage = lazy(() => import('@/pages/admin/LLMProvidersPage'));
+const LLMBudgetsPage = lazy(() => import('@/pages/admin/LLMBudgetsPage'));
+const LLMCacheAdminPage = lazy(() => import('@/pages/admin/LLMCacheAdminPage'));
+
+// Course / assignment / submission pages.
+const CoursesListPage = lazy(() => import('@/pages/courses/CoursesListPage'));
+const CourseCreatePage = lazy(() => import('@/pages/courses/CourseCreatePage'));
+const CourseDetailPage = lazy(() => import('@/pages/courses/CourseDetailPage'));
+const CourseSettingsPage = lazy(() => import('@/pages/courses/CourseSettingsPage'));
+const JoinByCodePage = lazy(() => import('@/pages/courses/JoinByCodePage'));
+const AssignmentDetailPage = lazy(() => import('@/pages/assignments/AssignmentDetailPage'));
+const AssignmentCreatePage = lazy(() => import('@/pages/assignments/AssignmentCreatePage'));
+const HomeworkCreatePage = lazy(() => import('@/pages/homeworks/HomeworkCreatePage'));
+const HomeworkAssignmentCreatePage = lazy(() => import('@/pages/homeworks/HomeworkAssignmentCreatePage'));
+const AssignmentSettingsPage = lazy(() => import('@/pages/assignments/AssignmentSettingsPage'));
+const AssignmentSubmissionsPage = lazy(() => import('@/pages/assignments/AssignmentSubmissionsPage'));
+const AssignmentDeadlinesPage = lazy(() => import('@/pages/assignments/AssignmentDeadlinesPage'));
+const SubmissionDetailPage = lazy(() => import('@/pages/submissions/SubmissionDetailPage'));
+const SubmissionUploadPage = lazy(() => import('@/pages/submissions/SubmissionUploadPage'));
+const SubmissionsListPage = lazy(() => import('@/pages/submissions/SubmissionsListPage'));
+
+// Dashboards / Reporting / Notifications.
+const MyDashboardPage = lazy(() => import('@/pages/dashboard/MyDashboardPage'));
+const TenantDashboardPage = lazy(() => import('@/pages/dashboard/TenantDashboardPage'));
+const GlobalDashboardPage = lazy(() => import('@/pages/dashboard/GlobalDashboardPage'));
+const ExportsListPage = lazy(() => import('@/pages/reporting/ExportsListPage'));
+const ExportPage = lazy(() => import('@/pages/reporting/ExportPage'));
+const NotificationCenterPage = lazy(() => import('@/pages/notifications/NotificationCenterPage'));
+const PreferencesPage = lazy(() => import('@/pages/notifications/PreferencesPage'));
+const WebPushSettingsPage = lazy(() => import('@/pages/notifications/WebPushSettingsPage'));
+
+// Admin / Audit / Settings.
+const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
+const TenantsListPage = lazy(() => import('@/pages/admin/TenantsListPage'));
+const TenantCreatePage = lazy(() => import('@/pages/admin/TenantCreatePage'));
+const TenantDetailPage = lazy(() => import('@/pages/admin/TenantDetailPage'));
+const UsersListPage = lazy(() => import('@/pages/admin/UsersListPage'));
+const UserCreatePage = lazy(() => import('@/pages/admin/UserCreatePage'));
+const UserDetailPage = lazy(() => import('@/pages/admin/UserDetailPage'));
+const IntegrationsListPage = lazy(() => import('@/pages/admin/IntegrationsListPage'));
+const OAuthProvidersPage = lazy(() => import('@/pages/admin/OAuthProvidersPage'));
+const IntegrationCreatePage = lazy(() => import('@/pages/admin/IntegrationCreatePage'));
+const IntegrationDetailPage = lazy(() => import('@/pages/admin/IntegrationDetailPage'));
+const ImportWizardPage = lazy(() => import('@/pages/integrations/ImportWizardPage'));
+const YandexContestSetupPage = lazy(() => import('@/pages/integrations/YandexContestSetupPage'));
+const StepikSetupPage = lazy(() => import('@/pages/integrations/StepikSetupPage'));
+const EjudgeSetupPage = lazy(() => import('@/pages/integrations/EjudgeSetupPage'));
+const IntegrationOAuthCallbackPage = lazy(() => import('@/pages/integrations/IntegrationOAuthCallbackPage'));
+const YandexContestImportPage = lazy(() => import('@/pages/integrations/YandexContestImportPage'));
+const GoogleSheetsSetupPage = lazy(() => import('@/pages/integrations/GoogleSheetsSetupPage'));
+const WebhooksAdminPage = lazy(() => import('@/pages/admin/WebhooksAdminPage'));
+const EmailConfigPage = lazy(() => import('@/pages/admin/EmailConfigPage'));
+const NotificationTemplatesPage = lazy(() => import('@/pages/admin/NotificationTemplatesPage'));
+const NotificationDeliveriesPage = lazy(() => import('@/pages/admin/NotificationDeliveriesPage'));
+const NotificationDLQPage = lazy(() => import('@/pages/admin/NotificationDLQPage'));
+const AuditEventsPage = lazy(() => import('@/pages/admin/audit/AuditEventsPage'));
+const AuditSearchPage = lazy(() => import('@/pages/admin/audit/AuditSearchPage'));
+const AuditByActorPage = lazy(() => import('@/pages/admin/audit/AuditByActorPage'));
+const AuditByResourcePage = lazy(() => import('@/pages/admin/audit/AuditByResourcePage'));
+const AuditAccessDeniedPage = lazy(() => import('@/pages/admin/audit/AuditAccessDeniedPage'));
+const AuditRetentionPolicyPage = lazy(() => import('@/pages/admin/audit/AuditRetentionPolicyPage'));
+const AuditLegalHoldPage = lazy(() => import('@/pages/admin/audit/AuditLegalHoldPage'));
+const RolesPermissionsPage = lazy(() => import('@/pages/admin/settings/RolesPermissionsPage'));
+const SystemHealthPage = lazy(() => import('@/pages/admin/settings/SystemHealthPage'));
+const SystemSettingsPage = lazy(() => import('@/pages/admin/settings/SystemSettingsPage'));
+
+/** Small wrapper for the unauth-shell pages so we don't repeat the
+ *  Suspense fallback at each route element. The public chunks are
+ *  tiny but they still need a `Suspense` parent — without it React
+ *  throws when the lazy component suspends. */
+function PublicChunk({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<PageSkeleton width="narrow" />}>{children}</Suspense>;
+}
 
 /**
  * Tiny helper: an old ``/courses/:slug/<sub>`` URL used to render a
@@ -870,18 +893,21 @@ const protectedRoutes: RouteObject[] = [
 ];
 
 export const router = createBrowserRouter([
-  // Public auth pages
+  // Public auth pages.  LoginPage is eagerly imported so the cold-load
+  // first paint doesn't need to wait on a chunk request; the rest are
+  // lazy and need a <Suspense> parent (PublicChunk) because they sit
+  // outside <AppShell />, which is where the protected Suspense lives.
   { path: '/login', element: <LoginPage />, errorElement: <ErrorPage /> },
-  { path: '/register', element: <RegisterPage />, errorElement: <ErrorPage /> },
-  { path: '/auth/forgot', element: <ForgotPasswordPage />, errorElement: <ErrorPage /> },
-  { path: '/auth/reset', element: <ResetPasswordPage />, errorElement: <ErrorPage /> },
-  { path: '/auth/verify', element: <VerifyEmailPage />, errorElement: <ErrorPage /> },
+  { path: '/register', element: <PublicChunk><RegisterPage /></PublicChunk>, errorElement: <ErrorPage /> },
+  { path: '/auth/forgot', element: <PublicChunk><ForgotPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
+  { path: '/auth/reset', element: <PublicChunk><ResetPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
+  { path: '/auth/verify', element: <PublicChunk><VerifyEmailPage /></PublicChunk>, errorElement: <ErrorPage /> },
   {
     path: '/auth/oauth/callback',
-    element: <OAuthCallbackPage />,
+    element: <PublicChunk><OAuthCallbackPage /></PublicChunk>,
     errorElement: <ErrorPage />,
   },
-  { path: '/demo', element: <DemoLoginPage />, errorElement: <ErrorPage /> },
+  { path: '/demo', element: <PublicChunk><DemoLoginPage /></PublicChunk>, errorElement: <ErrorPage /> },
   // Legacy alias
   { path: '/auth/login', element: <Navigate to="/login" replace /> },
 

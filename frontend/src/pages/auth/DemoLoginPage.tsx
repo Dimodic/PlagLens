@@ -15,8 +15,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react';
-import { authApi } from '@/api/endpoints/auth';
-import { tokenStore } from '@/api/client';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import type { Problem } from '@/api/types';
@@ -57,13 +55,13 @@ const ACCOUNTS: DemoAccount[] = [
     description: 'Горденко М.К. — лектор курса C++ КНАД 24/25',
   },
   {
-    email: 'bityukov.p@edu.hse.ru',
+    email: 'assistant.ivanova@edu.hse.ru',
     password: 'changeme',
     label: 'Ассистент',
     role: 'teacher',
     roleLabel: 'ассистент',
     testId: 'assistant',
-    description: 'Битюков Павел — проверяет посылки группы КНАД242',
+    description: 'Иванова Анна — ассистент активного курса C++',
   },
   {
     email: 'student.test@edu.hse.ru',
@@ -87,7 +85,7 @@ export function DemoLoginPage() {
   useDocumentTitle('Демо-режим');
 
   const navigate = useNavigate();
-  const { reloadMe } = useAuth();
+  const { login } = useAuth();
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   const [mfaForEmail, setMfaForEmail] = useState<string | null>(null);
@@ -98,12 +96,14 @@ export function DemoLoginPage() {
     setMfaForEmail(null);
     setBusyEmail(acct.email);
     try {
-      const resp = await authApi.login({
+      const result = await login({
         email: acct.email,
         password: acct.password,
       });
-      tokenStore.set(resp.access_token);
-      await reloadMe();
+      if (result.requiresMfa) {
+        setMfaForEmail(acct.email);
+        return;
+      }
       navigate('/', { replace: true });
     } catch (raw) {
       const p = raw as Problem;

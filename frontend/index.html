@@ -7,6 +7,38 @@
     <meta name="description" content="PlagLens — антиплагиат-платформа для программных заданий" />
     <meta name="theme-color" content="#0a0a0a" />
     <title>PlagLens</title>
+    <!--
+      Critical splash styles are inlined here (not pulled from global.css)
+      so they apply with the HTML itself instead of waiting for the JS
+      entry to import global.css. Without this the user sees a brief
+      flash of unstyled "PlagLens" text in the top-left on a white body
+      during reload — the splash div renders as plain inline text until
+      the CSS bundle arrives. Inline rules also honour the system theme
+      via `prefers-color-scheme` so the splash background matches the
+      eventual app background instead of flashing white→dark.
+    -->
+    <style>
+      html, body { margin: 0; padding: 0; height: 100%; }
+      body {
+        background: #ffffff;
+        color: #71717a;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          'Helvetica Neue', Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #0a0a0a; color: #a1a1aa; }
+      }
+      #root { min-height: 100%; }
+      .pl-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        letter-spacing: 0.01em;
+      }
+    </style>
   </head>
   <body>
     <div id="root">

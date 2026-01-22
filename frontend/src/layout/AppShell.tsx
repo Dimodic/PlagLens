@@ -1,5 +1,7 @@
 import { useState } from 'react';
+import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
+import { PageSkeleton } from '@/components/common/Skeleton';
 import { Sidebar } from '@/components/shell/Sidebar';
 import { Header } from '@/components/shell/Header';
 import { Breadcrumbs } from '@/components/shell/Breadcrumbs';
@@ -78,7 +80,13 @@ export function AppShell() {
             </div>
           </div>
           <div className="w-full px-6 pb-12 pt-6">
-            <Outlet />
+            {/* Every child route is React.lazy()'d in routes/index.tsx
+                so the initial bundle ships only the shell + auth.
+                Suspense here catches the chunk-load for any of them
+                with a uniform skeleton. */}
+            <Suspense fallback={<PageSkeleton width="regular" />}>
+              <Outlet />
+            </Suspense>
           </div>
         </main>
       </div>

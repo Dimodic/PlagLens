@@ -12,8 +12,8 @@ export class PreferencesPagePo {
   readonly resetBtn: Locator;
   readonly saveBtn: Locator;
   readonly matrix: Locator;
-  readonly testInapp: Locator;
-  readonly testEmail: Locator;
+  readonly pushSubscribeBtn: Locator;
+  readonly pushUnsubscribeBtn: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -24,8 +24,8 @@ export class PreferencesPagePo {
     this.resetBtn = page.getByTestId('reset-btn');
     this.saveBtn = page.getByTestId('save-btn');
     this.matrix = page.getByTestId('preferences-matrix');
-    this.testInapp = page.getByTestId('test-inapp');
-    this.testEmail = page.getByTestId('test-email');
+    this.pushSubscribeBtn = page.getByTestId('subscribe-btn');
+    this.pushUnsubscribeBtn = page.getByTestId('unsubscribe-btn');
   }
 
   async goto(): Promise<void> {

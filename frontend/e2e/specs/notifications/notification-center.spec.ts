@@ -1,8 +1,12 @@
 /**
  * E2E: /notifications — NotificationCenterPage
  *
- * Tabs: Unread / All / Archived; severity filter; per-event_type filter;
- * mark-all-read; per-row mark-read / archive; click → navigate action_url.
+ * Tabs: Unread / All / Archived; mark-all-read; per-row mark-read / archive;
+ * settings link in the header; click → navigate action_url.
+ *
+ * Filters by severity / event_type / since were intentionally dropped from
+ * the UI — they were developer jargon. If you need to filter, use the
+ * preferences page or query the API directly.
  */
 import { expect, test } from '../../setup/fixtures';
 import { NotificationCenterPagePo } from '../../pages/notifications/NotificationCenterPage.po';
@@ -26,14 +30,14 @@ test.describe('Notification Center', () => {
     await expect(po.tabAll).toHaveAttribute('aria-selected', 'true');
   });
 
-  test('severity filter renders without errors', async ({ studentPage }) => {
+  test('settings icon links to the preferences page', async ({
+    studentPage,
+  }) => {
     const po = new NotificationCenterPagePo(studentPage);
     await po.goto();
-    await po.severityFilter.click();
-    // Mantine Select renders options as listbox items.
-    await expect(
-      studentPage.getByRole('option', { name: 'Info' }).first(),
-    ).toBeVisible();
+    await expect(po.settingsLink).toBeVisible();
+    await po.settingsLink.click();
+    await expect(studentPage).toHaveURL(/\/me\/notifications\/preferences$/);
   });
 
   test('"Прочитать все" button calls API and stays on the page', async ({
@@ -45,16 +49,6 @@ test.describe('Notification Center', () => {
     await po.markAllBtn.click();
     // Page should not navigate.
     await expect(studentPage).toHaveURL(/\/notifications/);
-  });
-
-  test('event_type and since filter accept input', async ({ studentPage }) => {
-    const po = new NotificationCenterPagePo(studentPage);
-    await po.goto();
-    await po.eventTypeFilter.fill('submission.grade.assigned.v1');
-    await po.sinceFilter.fill('2024-01-01T00:00:00Z');
-    await expect(po.eventTypeFilter).toHaveValue(
-      'submission.grade.assigned.v1',
-    );
   });
 
   test('clicking on a notification navigates to its action_url when present', async ({
