@@ -11,22 +11,13 @@ test.describe('Notification Preferences', () => {
   test('opens with three channel toggles visible', async ({ studentPage }) => {
     const po = new PreferencesPagePo(studentPage);
     await po.goto();
-    // Mantine Switch's <input role="switch"> is the actual checkbox — the
-    // visual track is its sibling. The input is a hidden form element, so
-    // assert it exists and is attached rather than visually visible.
     await expect(po.chInapp).toBeAttached();
     await expect(po.chEmail).toBeAttached();
     await expect(po.chTelegram).toBeAttached();
-    // The Switch labels are spans with mantine-Switch-label class.
-    await expect(
-      studentPage.locator('.mantine-Switch-label', { hasText: 'In-app' }),
-    ).toBeVisible();
-    await expect(
-      studentPage.locator('.mantine-Switch-label', { hasText: /^Email$/ }),
-    ).toBeVisible();
-    await expect(
-      studentPage.locator('.mantine-Switch-label', { hasText: /^Telegram$/ }),
-    ).toBeVisible();
+    // Labels rendered as plain <label> elements next to the switches.
+    await expect(studentPage.getByText('В приложении')).toBeVisible();
+    await expect(studentPage.getByText(/^Email$/)).toBeVisible();
+    await expect(studentPage.getByText(/^Telegram$/)).toBeVisible();
   });
 
   test('per-event matrix renders at least 1 row when events are seeded', async ({
@@ -52,7 +43,12 @@ test.describe('Notification Preferences', () => {
     const po = new PreferencesPagePo(studentPage);
     await po.goto();
     await po.digestSelect.click();
-    for (const v of ['Мгновенно', 'Раз в час', 'Раз в день', 'Никогда']) {
+    for (const v of [
+      'Каждое событие',
+      'Раз в час',
+      'Раз в день',
+      'Не присылать',
+    ]) {
       await expect(studentPage.getByRole('option', { name: v })).toBeVisible();
     }
   });
@@ -85,16 +81,15 @@ test.describe('Notification Preferences', () => {
     await po.goto();
     await po.digestSelect.click();
     await studentPage.getByRole('option', { name: 'Раз в час' }).click();
-    // Mantine Select shows label as the input value.
-    await expect(po.digestSelect).toHaveValue('Раз в час');
+    // shadcn Select renders the chosen label inside the trigger.
+    await expect(po.digestSelect).toContainText('Раз в час');
   });
 
-  test('quiet hours fields accept HH:MM input', async ({ studentPage }) => {
+  test('quiet hours fields accept time input', async ({ studentPage }) => {
     const po = new PreferencesPagePo(studentPage);
     await po.goto();
-    await studentPage.getByLabel('Тихие часы — начало (HH:MM)').fill('22:00');
-    await studentPage.getByLabel('Тихие часы — конец (HH:MM)').fill('08:00');
-    await studentPage.getByLabel('Часовой пояс').fill('Europe/Moscow');
+    await studentPage.getByLabel('Не беспокоить с').fill('22:00');
+    await studentPage.getByLabel('до').fill('08:00');
   });
 
   test('"Reset" button sends POST :reset-to-defaults', async ({

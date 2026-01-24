@@ -19,7 +19,10 @@ test.describe('Integration detail — test / sync', () => {
     const hasRow = await adminPage.locator('[data-testid^="integration-row-"]').first().isVisible().catch(() => false);
     if (hasRow) {
       await expect(adminPage.getByRole('button', { name: /Тест/i }).first()).toBeVisible();
-      await expect(adminPage.getByRole('button', { name: /Sync/ }).first()).toBeVisible();
+      // Button copy was localised — old `/Sync/` regex now matches nothing.
+      await expect(
+        adminPage.getByRole('button', { name: /Запустить импорт/i }).first(),
+      ).toBeVisible();
     } else {
       await expect(adminPage.getByText(/Интеграций нет|Empty/i).first()).toBeVisible();
     }
@@ -49,9 +52,10 @@ test.describe('Integration detail — test / sync', () => {
     if (await openButton.isVisible().catch(() => false)) {
       await openButton.click();
       await adminPage.waitForURL(/\/admin\/integrations\/[^/]+/, { timeout: 10_000 });
-      await expect(adminPage.getByRole('tab', { name: 'Configuration' })).toBeVisible();
-      await expect(adminPage.getByRole('tab', { name: 'Sync history' })).toBeVisible();
-      await expect(adminPage.getByRole('tab', { name: 'Schedules' })).toBeVisible();
+      // Tab copy was localised during the admin-UI sweep.
+      await expect(adminPage.getByRole('tab', { name: 'Настройки' })).toBeVisible();
+      await expect(adminPage.getByRole('tab', { name: 'История импортов' })).toBeVisible();
+      await expect(adminPage.getByRole('tab', { name: 'Расписание' })).toBeVisible();
     } else {
       test.skip();
     }

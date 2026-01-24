@@ -11,6 +11,7 @@
  */
 import { FormEvent, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { authApi } from '@/api/endpoints/auth';
 import { tokenStore } from '@/api/client';
@@ -30,13 +31,12 @@ export function LoginPage() {
 
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const { reloadMe } = useAuth();
+  const queryClient = useQueryClient();
+  const { login, reloadMe } = useAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [tenantSlug, setTenantSlug] = useState('');
   const [totpCode, setTotpCode] = useState('');
-  const [showTenant, setShowTenant] = useState(false);
 
   const [problem, setProblem] = useState<Problem | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -72,18 +72,22 @@ export function LoginPage() {
     try {
       if (mfaToken && mfaToken !== 'mfa-required') {
         const resp = await authApi.twoFactorVerify(mfaToken, totpCode);
+        await queryClient.cancelQueries();
+        queryClient.clear();
         tokenStore.set(resp.access_token);
         await reloadMe();
         goNext();
         return;
       }
-      const resp = await authApi.login({
+      const result = await login({
         email, password,
-        tenant_slug: tenantSlug || undefined,
         totp_code: totpCode || undefined,
       });
-      tokenStore.set(resp.access_token);
-      await reloadMe();
+      if (result.requiresMfa) {
+        setMfaToken(result.mfaToken ?? 'mfa-required');
+        setProblem(null);
+        return;
+      }
       goNext();
     } catch (raw) {
       const p = raw as Problem & { mfa_token?: string };
@@ -189,35 +193,6 @@ export function LoginPage() {
             )}
           </div>
 
-          {!showTenant ? (
-            <button
-              type="button"
-              onClick={() => setShowTenant(true)}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Указать организацию
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <Label
-                htmlFor="login-tenant-slug"
-                className="text-sm font-medium"
-              >
-                Организация
-              </Label>
-              <Input
-                id="login-tenant-slug"
-                type="text"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                placeholder="hse"
-                disabled={!!mfaToken}
-                data-testid="login-tenant-slug"
-                className="h-11"
-              />
-            </div>
-          )}
-
           {mfaToken && (
             <div className="space-y-2">
               <Label htmlFor="login-totp-code" className="text-sm font-medium">
@@ -287,7 +262,6 @@ export function LoginPage() {
                     next
                       ? decodeURIComponent(next)
                       : window.location.origin + '/',
-                    tenantSlug || undefined,
                   );
                 }}
                 className="h-10"
@@ -298,19 +272,11 @@ export function LoginPage() {
           </div>
         </div>
 
-        {/* Footer links — small, muted, with dot separators consistent
-            with the rest of the app. Demo + Регистрация only; «Забыли
-            пароль?» moved up next to the password input where it
-            actually belongs. */}
-        <div className="flex justify-center gap-x-3 text-xs text-muted-foreground">
-          <Link
-            to="/demo"
-            data-testid="login-demo-link"
-            className="hover:text-foreground transition-colors"
-          >
-            Demo-вход
-          </Link>
-          <span aria-hidden>·</span>
+        {/* Footer links — just the signup CTA. The Demo-вход link
+            existed for the dev environment and has no place in prod;
+            «Забыли пароль?» moved up next to the password input where
+            it actually belongs. */}
+        <div className="flex justify-center text-xs text-muted-foreground">
           <Link
             to="/register"
             data-testid="login-register-link"

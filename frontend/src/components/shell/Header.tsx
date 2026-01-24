@@ -1,5 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { Bell, LogOut, Menu, Search, User as UserIcon, Settings, Moon, Sun } from 'lucide-react';
+import { LogOut, Menu, Search, User as UserIcon, Settings, Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +14,7 @@ import {
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/auth/useAuth';
 import { useTranslation } from '@/i18n';
+import { NotificationsBellDropdown } from '@/components/notifications/NotificationsBellDropdown';
 import { Wordmark } from './Wordmark';
 
 interface HeaderProps {
@@ -60,9 +61,15 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
         </Button>
       )}
 
-      {/* On mobile the wordmark sits in the header (no rail visible). On
-        * desktop the rail owns it — hide here. */}
-      <div className="md:hidden">
+      {/* Wordmark is the global «home» affordance. When the sidebar is
+        * present on desktop, the rail owns the wordmark — header hides
+        * it to avoid two side-by-side plaglens marks. When there's no
+        * sidebar (MonoShell pages, students after the workspace-role
+        * hide), the header is the only place to put it, and clicking
+        * it takes the user to / → role-based HomeRedirect. The
+        * `onOpenMobileNav` prop being set is the signal that a sidebar
+        * exists on this layout. */}
+      <div className={onOpenMobileNav ? 'md:hidden' : ''}>
         <Wordmark variant="full" data-testid="wordmark-header" />
       </div>
 
@@ -101,11 +108,13 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
           <Moon className="hidden h-4 w-4 dark:block" />
         </Button>
 
-        <Button variant="ghost" size="icon" aria-label={t('shell.notifications')} asChild>
-          <Link to="/notifications" data-testid="header-notifications">
-            <Bell className="h-4 w-4" />
-          </Link>
-        </Button>
+        <NotificationsBellDropdown />
+        {/* Hidden link preserves the `header-notifications` testid for older
+          * smoke scripts that still navigate via it; the visible UI is now the
+          * bell dropdown above. */}
+        <Link to="/notifications" data-testid="header-notifications" className="sr-only">
+          {t('shell.notifications')}
+        </Link>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -7,7 +7,7 @@
  * navigates to the matching nested route. Existing data-testids on every
  * tab and row are preserved so Playwright specs continue to pass.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   Link,
   Outlet,
@@ -35,7 +35,13 @@ import {
 import { cn } from '@/components/ui/utils';
 import { HomeworkDrawer } from '@/components/courses/HomeworkDrawer';
 import { MembersPanel } from '@/components/courses/MembersPanel';
-import { StatsPanel } from '@/components/courses/StatsPanel';
+// StatsPanel pulls in recharts (~70 KB gzipped). It only renders when the
+// user opens the "Статистика" tab — defer it through React.lazy so the
+// main course page (homeworks list, members, etc.) renders without paying
+// the recharts parse cost up-front.
+const StatsPanel = lazy(() =>
+  import('@/components/courses/StatsPanel').then((m) => ({ default: m.StatsPanel })),
+);
 import { SuspiciousPanel } from '@/components/courses/SuspiciousPanel';
 import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import {
@@ -681,7 +687,9 @@ export default function CourseDetailPage() {
       )}
 
       {tab === 'stats' && course && (
-        <StatsPanel courseId={course.id} courseSlug={course.slug} />
+        <Suspense fallback={<SkeletonList rows={3} />}>
+          <StatsPanel courseId={course.id} courseSlug={course.slug} />
+        </Suspense>
       )}
 
       {tab === 'suspicious' && course && (
