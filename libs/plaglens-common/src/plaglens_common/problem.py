@@ -241,6 +241,59 @@ def make_handlers() -> dict[type[Exception], Any]:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Factory helpers — ergonomic constructors for the common error shapes.
+# --------------------------------------------------------------------------- #
+def bad_request(
+    detail: str = "Bad request", *, errors: list[ProblemFieldError] | None = None
+) -> ProblemException:
+    return ProblemException(
+        status=400, code="BAD_REQUEST", title="Bad Request", detail=detail, errors=errors
+    )
+
+
+def unauthenticated(detail: str = "Authentication required") -> ProblemException:
+    return ProblemException(status=401, code="UNAUTHENTICATED", title="Unauthenticated", detail=detail)
+
+
+def forbidden(detail: str = "Forbidden") -> ProblemException:
+    return ProblemException(status=403, code="FORBIDDEN", title="Forbidden", detail=detail)
+
+
+def not_found(detail: str = "Resource not found") -> ProblemException:
+    return ProblemException(status=404, code="NOT_FOUND", title="Not Found", detail=detail)
+
+
+def conflict(detail: str = "Conflict", code: str = "CONFLICT") -> ProblemException:
+    return ProblemException(status=409, code=code, title="Conflict", detail=detail)
+
+
+def validation(
+    detail: str = "Validation failed", errors: list[ProblemFieldError] | None = None
+) -> ProblemException:
+    return ProblemException(
+        status=422, code="VALIDATION_FAILED", title="Validation Error", detail=detail, errors=errors
+    )
+
+
+def rate_limited(detail: str = "Rate limited", *, retry_after: int = 60) -> ProblemException:
+    return ProblemException(
+        status=429, code="RATE_LIMITED", title="Too Many Requests", detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def budget_exceeded(detail: str = "Budget exceeded", *, retry_after: int = 3600) -> ProblemException:
+    return ProblemException(
+        status=429, code="BUDGET_EXCEEDED", title="Budget Exceeded", detail=detail,
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def upstream_failed(detail: str = "Upstream failed") -> ProblemException:
+    return ProblemException(status=502, code="UPSTREAM_FAILED", title="Upstream Failed", detail=detail)
+
+
 __all__ = [
     "CONTENT_TYPE_PROBLEM",
     "DEFAULT_TYPE_BASE",
@@ -248,6 +301,15 @@ __all__ = [
     "Problem",
     "ProblemException",
     "ProblemFieldError",
+    "bad_request",
+    "budget_exceeded",
+    "conflict",
+    "forbidden",
     "make_handlers",
+    "not_found",
     "problem_response",
+    "rate_limited",
+    "unauthenticated",
+    "upstream_failed",
+    "validation",
 ]
