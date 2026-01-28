@@ -56,7 +56,7 @@ def _decode_jwt(token: str) -> dict[str, Any]:
         )
     except jwt.PyJWTError as e:
         raise ProblemException(
-            status_code=401,
+            status=401,
             code="UNAUTHENTICATED",
             title="Unauthenticated",
             detail=str(e),
@@ -90,7 +90,7 @@ def get_principal(
 
     if not authorization or not authorization.lower().startswith("bearer "):
         raise ProblemException(
-            status_code=401,
+            status=401,
             code="UNAUTHENTICATED",
             title="Unauthenticated",
             detail="Bearer token required",

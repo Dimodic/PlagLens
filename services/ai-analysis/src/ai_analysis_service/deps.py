@@ -130,7 +130,7 @@ def request_id(request: Request) -> str | None:
 def parse_principal_or_403(p: Principal) -> Principal:
     if not p.user_id or not p.tenant_id:
         raise ProblemException(
-            status_code=401,
+            status=401,
             code="UNAUTHENTICATED",
             title="Unauthenticated",
             detail="missing principal",

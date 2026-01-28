@@ -235,7 +235,7 @@ async def test_provider(
     sample = ""
     try:
         sample = resp.choices[0].message.content or ""
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110 - best-effort sample extraction
         pass
     return {
         "provider_id": provider_id,

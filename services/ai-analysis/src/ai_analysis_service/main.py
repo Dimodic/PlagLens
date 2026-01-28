@@ -12,8 +12,8 @@ from pydantic import ValidationError
 from .api import build_router
 from .common.logging import configure_logging
 from .common.problem import (
-    Problem,
-    ProblemException,
+    ProblemFieldError,
+    make_handlers,
     problem_response,
 )
 from .config import get_settings
@@ -57,30 +57,27 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Request-Id", rid)
         return response
 
-    @app.exception_handler(ProblemException)
-    async def _problem_handler(request: Request, exc: ProblemException) -> JSONResponse:
-        return problem_response(request, exc)
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
 
     @app.exception_handler(ValidationError)
-    async def _validation_handler(
+    async def _pydantic_validation_handler(
         request: Request, exc: ValidationError
     ) -> JSONResponse:
-        from .common.problem import DOC_BASE
-
-        body = Problem(
-            type=f"{DOC_BASE}/validation_failed",
-            title="Validation Error",
+        errors = [
+            ProblemFieldError(
+                field=".".join(map(str, e["loc"])), message=e["msg"], code=e["type"]
+            )
+            for e in exc.errors()
+        ]
+        return problem_response(
+            request,
             status=422,
-            detail=str(exc),
-            instance=str(request.url.path),
             code="VALIDATION_FAILED",
-            errors=[
-                {"field": ".".join(map(str, e["loc"])), "message": e["msg"], "code": e["type"]}
-                for e in exc.errors()
-            ],
-            request_id=getattr(request.state, "request_id", None),
-        ).model_dump(exclude_none=True)
-        return JSONResponse(status_code=422, content=body, media_type="application/problem+json")
+            title="Validation Error",
+            detail=str(exc),
+            errors=errors,
+        )
 
     app.include_router(build_router())
     return app

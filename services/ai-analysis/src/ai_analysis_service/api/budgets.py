@@ -1,7 +1,7 @@
 """Budget configuration + usage endpoints."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -112,7 +112,7 @@ async def tenant_usage(
             scope="tenant",
             scope_id=tenant_id,
             period="month",
-            period_start=datetime.now(timezone.utc),
+            period_start=datetime.now(UTC),
             prompt_tokens=0,
             completion_tokens=0,
             total_tokens=0,
@@ -181,7 +181,7 @@ async def course_usage(
             scope="course",
             scope_id=course_id,
             period="month",
-            period_start=datetime.now(timezone.utc),
+            period_start=datetime.now(UTC),
             prompt_tokens=0,
             completion_tokens=0,
             total_tokens=0,
