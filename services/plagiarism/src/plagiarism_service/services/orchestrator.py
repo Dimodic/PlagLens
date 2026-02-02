@@ -31,8 +31,9 @@ from ..common.events import (
     EVT_SUSPICIOUS_FLAGGED,
     build_event,
 )
+from ..common.ids import cluster_id as new_cluster_id
 from ..common.ids import pair_id as new_pair_id
-from ..common.ids import cluster_id as new_cluster_id, run_id as new_run_id
+from ..common.ids import run_id as new_run_id
 from ..common.logging import get_logger
 from ..config import settings
 from ..events.producer import EventProducer

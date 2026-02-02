@@ -4,13 +4,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 
 from .api.deps import get_orchestrator, set_producer
 from .api.v1 import api_router, health_router
 from .common.logging import configure_logging, get_logger
-from .common.problem import ProblemError, problem_response, validation_failed
+from .common.problem import make_handlers
 from .config import settings
 from .events.producer import EventProducer, NullEventProducer
 from .scheduler import build_scheduler
@@ -49,24 +48,8 @@ def create_app() -> FastAPI:
     app.include_router(health_router)
     app.include_router(api_router)
 
-    @app.exception_handler(ProblemError)
-    async def _problem_handler(request: Request, exc: ProblemError):  # type: ignore[override]
-        return problem_response(request, exc)
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation_handler(request: Request, exc: RequestValidationError):  # type: ignore[override]
-        problem = validation_failed(
-            "Request body failed validation",
-            errors=[
-                {
-                    "field": ".".join(str(p) for p in err.get("loc", [])),
-                    "code": err.get("type", "invalid"),
-                    "message": err.get("msg", ""),
-                }
-                for err in exc.errors()
-            ],
-        )
-        return problem_response(request, problem)
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
 
     return app
 

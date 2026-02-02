@@ -294,6 +294,20 @@ def upstream_failed(detail: str = "Upstream failed") -> ProblemException:
     return ProblemException(status=502, code="UPSTREAM_FAILED", title="Upstream Failed", detail=detail)
 
 
+def upstream_timeout(detail: str = "External provider timed out") -> ProblemException:
+    return ProblemException(status=504, code="UPSTREAM_TIMEOUT", title="Upstream Timeout", detail=detail)
+
+
+def tenant_mismatch(
+    detail: str = "Resource does not belong to the caller's tenant",
+) -> ProblemException:
+    return ProblemException(status=403, code="TENANT_MISMATCH", title="Tenant Mismatch", detail=detail)
+
+
+def locked(detail: str = "Resource is locked") -> ProblemException:
+    return ProblemException(status=423, code="LOCKED", title="Locked", detail=detail)
+
+
 __all__ = [
     "CONTENT_TYPE_PROBLEM",
     "DEFAULT_TYPE_BASE",
@@ -305,11 +319,14 @@ __all__ = [
     "budget_exceeded",
     "conflict",
     "forbidden",
+    "locked",
     "make_handlers",
     "not_found",
     "problem_response",
     "rate_limited",
+    "tenant_mismatch",
     "unauthenticated",
     "upstream_failed",
+    "upstream_timeout",
     "validation",
 ]
