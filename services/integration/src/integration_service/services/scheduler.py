@@ -23,10 +23,9 @@ The pulled bearer is the cached super_admin service token (see
 """
 from __future__ import annotations
 
-import asyncio
 import re
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any, Optional
 
 import httpx
@@ -161,7 +160,7 @@ async def _record_job(
 
 async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
     """Pull every contest tied to this config; report aggregate stats."""
-    started = datetime.now(timezone.utc)
+    started = datetime.now(UTC)
     headers = await auth_headers()
     course_id = cfg.course_id
     if not course_id:
@@ -173,7 +172,7 @@ async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
             cfg.id,
             cfg.tenant_id,
             started,
-            datetime.now(timezone.utc),
+            datetime.now(UTC),
             "completed",
             {"contests": 0, "participants_imported": 0},
         )
@@ -259,7 +258,7 @@ async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
             fresh.cursor = cursor_map
             await s.commit()
 
-    finished = datetime.now(timezone.utc)
+    finished = datetime.now(UTC)
     stats = {
         "contests": len(contest_ids),
         "participants_imported": total_pp,

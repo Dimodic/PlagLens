@@ -96,9 +96,9 @@ class ImportResult:
     failed: int = 0
     cursor: Dict[str, Any] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
-    participants: List["RemoteParticipant"] = field(default_factory=list)
-    submissions: List["RemoteSubmission"] = field(default_factory=list)
-    problems: List["RemoteProblem"] = field(default_factory=list)
+    participants: List[RemoteParticipant] = field(default_factory=list)
+    submissions: List[RemoteSubmission] = field(default_factory=list)
+    problems: List[RemoteProblem] = field(default_factory=list)
 
 
 @dataclass

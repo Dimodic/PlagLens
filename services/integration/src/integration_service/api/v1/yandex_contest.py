@@ -14,9 +14,6 @@ from typing import Any
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Request
-
-from integration_service.common.db import get_sessionmaker
-from integration_service.common.redis_client import get_redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration_service.adapters.base import RemoteProblem
@@ -26,7 +23,9 @@ from integration_service.adapters.yandex_contest import (
 )
 from integration_service.api.v1.configs import ensure_owner_or_admin
 from integration_service.common.auth import Principal
+from integration_service.common.db import get_sessionmaker
 from integration_service.common.problems import ProblemException, not_found
+from integration_service.common.redis_client import get_redis
 from integration_service.config import get_settings
 from integration_service.deps import principal_dep, session_dep
 from integration_service.repositories import IntegrationConfigRepo

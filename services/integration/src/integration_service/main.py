@@ -3,18 +3,17 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator
+from typing import AsyncIterator
 
 import structlog
-from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from integration_service import __version__
 from integration_service.api.v1 import build_router
 from integration_service.api.v1.health import router as health_router
 from integration_service.common.kafka_bus import get_bus
-from integration_service.common.problems import ProblemException, problem_response
+from integration_service.common.problems import make_handlers
 from integration_service.config import get_settings
 from integration_service.services.events_consumer import register as register_consumers
 from integration_service.services.scheduler import start_scheduler, stop_scheduler
@@ -74,39 +73,8 @@ def create_app() -> FastAPI:
     # Top-level health endpoints (also exposed via /api/v1/healthz for tests).
     app.include_router(health_router)
 
-    @app.exception_handler(ProblemException)
-    async def _problem_handler(request: Request, exc: ProblemException) -> Any:
-        return problem_response(
-            status=exc.status_code,
-            code=exc.code,
-            title=exc.title,
-            detail=exc.problem_detail,
-            instance=str(request.url.path),
-            errors=exc.errors,
-            request_id=request.headers.get("X-Request-Id"),
-        )
-
-    @app.exception_handler(RequestValidationError)
-    async def _validation_handler(
-        request: Request, exc: RequestValidationError
-    ) -> Any:
-        errors = [
-            {
-                "field": ".".join(str(p) for p in e.get("loc", [])),
-                "code": e.get("type", "invalid"),
-                "message": e.get("msg", ""),
-            }
-            for e in exc.errors()
-        ]
-        return problem_response(
-            status=422,
-            code="VALIDATION_FAILED",
-            title="Validation Error",
-            detail="request body validation failed",
-            instance=str(request.url.path),
-            errors=errors,
-            request_id=request.headers.get("X-Request-Id"),
-        )
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
 
     return app
 
