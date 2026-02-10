@@ -82,4 +82,11 @@ def configure_structlog(
     structlog.contextvars.bind_contextvars(service=service_name)
 
 
-__all__ = ["SENSITIVE_KEYS", "configure_structlog"]
+def get_logger(name: str | None = None) -> Any:
+    """Return a structlog logger (falls back to stdlib if structlog is absent)."""
+    if structlog is None:  # pragma: no cover
+        return logging.getLogger(name)
+    return structlog.get_logger(name)
+
+
+__all__ = ["SENSITIVE_KEYS", "configure_structlog", "get_logger"]
