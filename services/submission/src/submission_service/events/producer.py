@@ -112,7 +112,7 @@ class EventPublisher:
                 ),
                 timeout=_PUBLISH_TIMEOUT_S,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "Kafka publish timed out after %.1fs for topic=%s; dropping",
                 _PUBLISH_TIMEOUT_S,

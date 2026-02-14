@@ -1,61 +1,27 @@
-"""RFC 7807 problem+json responses.
+"""RFC 7807 problem helpers — thin adapter over :mod:`plaglens_common.problem`.
 
-Service-specific adapter that re-uses the shared error-code catalog from
-:mod:`plaglens_common.problem`.  Keeps the local factory helpers
-(:func:`not_found`, :func:`forbidden`, ...) used by routers.
+submission's call-sites use a *positional* ``ProblemException(status_code,
+code, title, detail)`` plus local factories. This keeps those signatures while
+the shared module provides the ``Problem`` model and the exception handlers
+(the local class subclasses the shared one, so ``make_handlers`` catches it).
 """
+
 from __future__ import annotations
 
 from typing import Any
 
-from fastapi import HTTPException
-from fastapi.responses import JSONResponse
-
-# Import shared error codes from plaglens_common (single source of truth).
-from plaglens_common.problem import ERROR_CODES as _SHARED_ERROR_CODES  # noqa: F401
-from pydantic import BaseModel
-
-
-class ProblemDetail(BaseModel):
-    type: str = "about:blank"
-    title: str
-    status: int
-    detail: str | None = None
-    instance: str | None = None
-    code: str
-    errors: list[dict[str, Any]] | None = None
-    request_id: str | None = None
+from plaglens_common.problem import (
+    ERROR_CODES,
+    Problem,
+    ProblemFieldError,
+    make_handlers,
+)
+from plaglens_common.problem import ProblemException as _BaseProblemException
 
 
-def problem_response(
-    status: int,
-    code: str,
-    title: str,
-    detail: str | None = None,
-    *,
-    errors: list[dict[str, Any]] | None = None,
-    instance: str | None = None,
-    request_id: str | None = None,
-    type_: str = "about:blank",
-) -> JSONResponse:
-    body = ProblemDetail(
-        type=type_,
-        title=title,
-        status=status,
-        detail=detail,
-        instance=instance,
-        code=code,
-        errors=errors,
-        request_id=request_id,
-    ).model_dump(exclude_none=True)
-    return JSONResponse(
-        status_code=status,
-        content=body,
-        media_type="application/problem+json",
-    )
+class ProblemException(_BaseProblemException):
+    """Positional-arg adapter over the shared keyword-only ProblemException."""
 
-
-class ProblemException(HTTPException):
     def __init__(
         self,
         status_code: int,
@@ -65,10 +31,7 @@ class ProblemException(HTTPException):
         *,
         errors: list[dict[str, Any]] | None = None,
     ) -> None:
-        super().__init__(status_code=status_code, detail=detail)
-        self.code = code
-        self.title = title
-        self.errors = errors
+        super().__init__(status=status_code, code=code, title=title, detail=detail, errors=errors)
 
 
 def not_found(detail: str = "Resource not found") -> ProblemException:
@@ -93,3 +56,18 @@ def validation_error(detail: str, errors: list[dict[str, Any]] | None = None) ->
 
 def payload_too_large(detail: str = "Payload too large") -> ProblemException:
     return ProblemException(413, "PAYLOAD_TOO_LARGE", "Payload Too Large", detail)
+
+
+__all__ = [
+    "ERROR_CODES",
+    "Problem",
+    "ProblemException",
+    "ProblemFieldError",
+    "conflict",
+    "forbidden",
+    "make_handlers",
+    "not_found",
+    "payload_too_large",
+    "unauthenticated",
+    "validation_error",
+]

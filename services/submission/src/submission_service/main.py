@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from submission_service.api.errors import install_exception_handlers
 from submission_service.api.middleware import install_middleware, metrics_response
 from submission_service.api.routers import (
     bulk,
@@ -17,6 +16,7 @@ from submission_service.api.routers import (
     submissions,
 )
 from submission_service.common.logging import configure_logging
+from submission_service.common.problem import make_handlers
 from submission_service.config import get_settings
 from submission_service.events.consumer import get_consumer
 from submission_service.events.producer import get_publisher
@@ -44,7 +44,8 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     install_middleware(app)
-    install_exception_handlers(app)
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
 
     app.include_router(health.router)
     app.add_api_route("/metrics", metrics_response, methods=["GET"], include_in_schema=False)
