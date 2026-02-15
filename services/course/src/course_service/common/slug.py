@@ -55,7 +55,7 @@ def _translate(text: str) -> str:
     try:
         out = GoogleTranslator(source="auto", target="en").translate(text)
         return out or ""
-    except Exception as exc:  # noqa: BLE001 — translator is best-effort
+    except Exception as exc:
         logger.warning("slug translation failed, falling back: %s", exc)
         return ""
 
@@ -80,7 +80,7 @@ async def slugify(text: str, *, fallback: str = "item") -> str:
             asyncio.to_thread(_translate, raw),
             timeout=_TRANSLATE_TIMEOUT_S,
         )
-    except (TimeoutError, Exception) as exc:  # noqa: BLE001
+    except (TimeoutError, Exception) as exc:
         logger.warning("slug translation timed out / errored: %s", exc)
 
     # python-slugify normalises (lowercase, hyphenate, transliterate any

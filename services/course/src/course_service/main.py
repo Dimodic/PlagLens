@@ -7,10 +7,8 @@ from contextlib import asynccontextmanager
 
 import structlog
 from fastapi import FastAPI
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import ORJSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .api import (
@@ -36,11 +34,7 @@ from .api import (
 )
 from .common.events import KafkaProducer
 from .common.idempotency import IdempotencyMiddleware
-from .common.problem import (
-    problem_exception_handler,
-    unhandled_exception_handler,
-    validation_exception_handler,
-)
+from .common.problem import make_handlers
 from .common.redis_client import RedisClient
 from .common.request_id import RequestIdMiddleware
 from .config import Settings, get_settings
@@ -121,9 +115,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
 
     # ---- Exception handlers (RFC 7807) -------------------------------------
-    app.add_exception_handler(StarletteHTTPException, problem_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
-    app.add_exception_handler(Exception, unhandled_exception_handler)
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
 
     # ---- Routers -----------------------------------------------------------
     app.include_router(health_api.router)

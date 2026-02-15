@@ -120,6 +120,7 @@ async def list_assignments_flat(
     if user.global_role not in {"super_admin", "admin"}:
         # Build the set of course_ids visible to the actor (member or owner).
         from sqlalchemy import select  # local import to avoid top-level churn
+
         from ..models import CourseMember, CourseOwner
 
         member_stmt = select(CourseMember.course_id).where(

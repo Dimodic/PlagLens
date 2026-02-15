@@ -1,23 +1,18 @@
-"""RFC 7807 ``application/problem+json`` helpers.
+"""RFC 7807 problem helpers.
 
-Service-specific adapter that re-uses the shared error-code catalog from
-:mod:`plaglens_common.problem`.  Keeps the local ``ProblemException``
-HTTPException subclass for backward-compatibility with router call-sites.
+``ProblemException`` is a thin positional adapter over
+:class:`plaglens_common.problem.ProblemException` (keeps course's call
+signature so the ~85 call-sites are unchanged; the shared ``make_handlers``
+renders it). ``Problem`` / ``problem_response`` are kept local because course's
+idempotency middleware reuses ``problem_response`` directly.
 """
 
 from __future__ import annotations
 
-from typing import Any
-
-from fastapi import HTTPException, Request
-from fastapi.encoders import jsonable_encoder
-from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-
-# Import shared error codes from plaglens_common (single source of truth).
-from plaglens_common.problem import ERROR_CODES as _SHARED_ERROR_CODES  # noqa: F401
+from plaglens_common.problem import ProblemException as _BaseProblemException
+from plaglens_common.problem import make_handlers
 from pydantic import BaseModel, Field
-from starlette.exceptions import HTTPException as StarletteHTTPException
 
 PROBLEM_BASE = "https://docs.plaglens.ru/errors/"
 PROBLEM_MEDIA_TYPE = "application/problem+json"
@@ -105,8 +100,8 @@ def problem_response(
     return JSONResponse(payload, status_code=status, headers=headers)
 
 
-class ProblemException(HTTPException):
-    """HTTPException carrying a structured RFC 7807 payload."""
+class ProblemException(_BaseProblemException):
+    """Positional adapter over the shared keyword-only ProblemException."""
 
     def __init__(
         self,
@@ -116,67 +111,22 @@ class ProblemException(HTTPException):
         errors: list[FieldError] | None = None,
         headers: dict[str, str] | None = None,
     ) -> None:
-        super().__init__(status_code=status_code, detail=detail, headers=headers)
-        self.code = code or _DEFAULT_CODES.get(status_code, "INTERNAL")
-        self.errors = errors
-
-
-async def problem_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
-    request_id = request.headers.get("X-Request-Id") or getattr(
-        request.state, "request_id", None
-    )
-    code: str | None = getattr(exc, "code", None)
-    errors: list[FieldError] | None = getattr(exc, "errors", None)
-    return problem_response(
-        status=exc.status_code,
-        detail=exc.detail if isinstance(exc.detail, str) else None,
-        code=code,
-        instance=str(request.url.path),
-        errors=errors,
-        request_id=request_id,
-        extra_headers=dict(exc.headers) if exc.headers else None,
-    )
-
-
-async def validation_exception_handler(
-    request: Request, exc: RequestValidationError
-) -> JSONResponse:
-    errors: list[FieldError] = []
-    for err in exc.errors():
-        loc = ".".join(str(p) for p in err.get("loc", []) if p != "body")
-        errors.append(
-            FieldError(
-                field=loc or "body",
-                code=str(err.get("type", "invalid")),
-                message=str(err.get("msg", "")),
-            )
+        super().__init__(
+            status=status_code,
+            code=code or _DEFAULT_CODES.get(status_code, "INTERNAL"),
+            title=_DEFAULT_TITLES.get(status_code, "Error"),
+            detail=detail,
+            errors=errors,  # type: ignore[arg-type]
+            headers=headers,
         )
-    request_id = request.headers.get("X-Request-Id") or getattr(
-        request.state, "request_id", None
-    )
-    return problem_response(
-        status=422,
-        detail="Request body validation failed",
-        code="VALIDATION_FAILED",
-        instance=str(request.url.path),
-        errors=errors,
-        request_id=request_id,
-    )
 
 
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    request_id = request.headers.get("X-Request-Id") or getattr(
-        request.state, "request_id", None
-    )
-    return problem_response(
-        status=500,
-        detail=str(exc) if request.app.debug else "Internal server error",
-        instance=str(request.url.path),
-        request_id=request_id,
-    )
-
-
-def jsonable(obj: Any) -> Any:
-    return jsonable_encoder(obj)
+__all__ = [
+    "PROBLEM_BASE",
+    "PROBLEM_MEDIA_TYPE",
+    "FieldError",
+    "Problem",
+    "ProblemException",
+    "make_handlers",
+    "problem_response",
+]

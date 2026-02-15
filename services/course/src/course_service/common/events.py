@@ -112,7 +112,7 @@ class KafkaProducer:
                 self._producer.send_and_wait(topic, payload, key=key),
                 timeout=_PUBLISH_TIMEOUT_S,
             )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.warning(
                 "event.publish_timeout",
                 topic=topic,
