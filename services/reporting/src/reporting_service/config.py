@@ -77,7 +77,7 @@ class Settings(BaseSettings):
         path = self.google_service_account_json_path
         if path and os.path.isfile(path):
             try:
-                with open(path, "r", encoding="utf-8") as f:
+                with open(path, encoding="utf-8") as f:
                     content = f.read().strip()
                 return content or None
             except OSError:

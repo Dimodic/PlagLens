@@ -163,7 +163,7 @@ async def _build_homework_matrix(
     students: dict[str, str] = {}
     score_by: dict[str, dict[str, float]] = {}
     comment_by: dict[str, dict[str, str]] = {}
-    for (_, col), rows in zip(assignment_cols, grade_lists):
+    for (_, col), rows in zip(assignment_cols, grade_lists, strict=False):
         for row in rows:
             author_id = row.get("author_id")
             if not author_id:
