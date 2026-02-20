@@ -6,9 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
-from fastapi.exceptions import RequestValidationError
 from pydantic import ValidationError
-from starlette.exceptions import HTTPException
 
 from notification_service.api.health import router as health_router
 from notification_service.api.v1 import router as v1_router
@@ -17,14 +15,7 @@ from notification_service.consumers import KafkaDispatcher
 from notification_service.db import dispose_engine, init_engine
 from notification_service.delivery import close_channels, init_channels
 from notification_service.digest import setup_scheduler
-from notification_service.errors import (
-    Problem,
-    http_exception_handler,
-    problem_handler,
-    pydantic_validation_handler,
-    unhandled_exception_handler,
-    validation_exception_handler,
-)
+from notification_service.errors import make_handlers, pydantic_validation_handler
 from notification_service.logging import configure_logging, get_logger
 from notification_service.redis_bus import close_redis, init_redis
 
@@ -84,11 +75,9 @@ def create_app() -> FastAPI:
         response.headers.setdefault("X-Request-Id", rid)
         return response
 
-    app.add_exception_handler(Problem, problem_handler)
-    app.add_exception_handler(HTTPException, http_exception_handler)
-    app.add_exception_handler(RequestValidationError, validation_exception_handler)
+    for _exc_type, _handler in make_handlers().items():
+        app.add_exception_handler(_exc_type, _handler)
     app.add_exception_handler(ValidationError, pydantic_validation_handler)
-    app.add_exception_handler(Exception, unhandled_exception_handler)
 
     app.include_router(health_router)
     app.include_router(v1_router)
