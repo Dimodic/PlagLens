@@ -1,0 +1,39 @@
+"""Test fixtures for the merged service.
+
+In-memory aiosqlite DB built directly from the course ORM metadata (no
+Alembic). ``COURSE_DB_SCHEMA=`` (empty) is set before importing models so all
+tables live in SQLite's default schema.
+"""
+
+from __future__ import annotations
+
+import os
+
+os.environ.setdefault("COURSE_DB_SCHEMA", "")
+os.environ.setdefault("SQLITE_TESTS", "1")
+
+import pytest_asyncio
+from course_service.models import Base
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
+
+
+@pytest_asyncio.fixture
+async def engine():
+    eng = create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        future=True,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    async with eng.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        yield eng
+    finally:
+        await eng.dispose()
+
+
+@pytest_asyncio.fixture
+async def session_factory(engine):
+    return async_sessionmaker(engine, expire_on_commit=False)
