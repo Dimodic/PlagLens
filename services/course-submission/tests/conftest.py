@@ -10,7 +10,14 @@ from __future__ import annotations
 import os
 
 os.environ.setdefault("COURSE_DB_SCHEMA", "")
+os.environ.setdefault("SUBMISSION_DB_SCHEMA", "")
 os.environ.setdefault("SQLITE_TESTS", "1")
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("KAFKA_ENABLED", "false")
+os.environ.setdefault("KAFKA_DISABLED", "true")
+os.environ.setdefault("REDIS_ENABLED", "false")
+os.environ.setdefault("JWT_HS_SECRET", "test-secret")
+os.environ.setdefault("JWT_ALGORITHM", "HS256")
 
 import pytest_asyncio
 from course_service.models import Base
