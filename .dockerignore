@@ -5,6 +5,17 @@
 .gitignore
 .gitattributes
 
+# Claude Code worktrees + meta (worktrees carry their own node_modules/.venv —
+# excluding keeps the build context small)
+.claude/
+
+# Node / frontend build output (backend images don't need them)
+node_modules/
+**/node_modules/
+frontend/dist/
+frontend/test-results/
+frontend/playwright-report/
+
 # Python
 __pycache__/
 *.py[cod]
