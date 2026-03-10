@@ -58,7 +58,15 @@ def wire_shared_session(factory: async_sessionmaker[Any]) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_course_settings()
-    engine = create_async_engine(settings.database_url, future=True)
+    # submission's ORM is unqualified — it resolves table names via the
+    # connection's search_path; course is always schema-qualified to "course".
+    # Pin search_path on every connection so correctness does not depend on the
+    # DB role's default search_path.
+    engine = create_async_engine(
+        settings.database_url,
+        future=True,
+        connect_args={"server_settings": {"search_path": "submission,public"}},
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     wire_shared_session(factory)
 

@@ -25,8 +25,11 @@ DO \$\$
 DECLARE
     svc TEXT;
     role_name TEXT;
+    -- NOTE: course + submission are NOT in this loop — they were merged into
+    -- one service whose role (course_submission_app) owns BOTH schemas; it is
+    -- provisioned in a dedicated block below.
     services TEXT[] := ARRAY[
-        'identity', 'course', 'submission', 'integration', 'plagiarism',
+        'identity', 'integration', 'plagiarism',
         'ai_analysis', 'notification', 'reporting', 'audit', 'gateway'
     ];
 BEGIN
@@ -47,6 +50,32 @@ BEGIN
         EXECUTE format('ALTER ROLE %I SET search_path TO %I, public', role_name, svc);
         RAISE NOTICE 'Provisioned role % for schema %', role_name, svc;
     END LOOP;
+END
+\$\$;
+
+-- Merged course+submission service: ONE role owning BOTH schemas (course +
+-- submission were merged in the Phase 3 refactor). submission's ORM is
+-- unqualified and resolves via search_path; course is always schema-qualified
+-- to "course", so search_path = submission, public is correct for both.
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'course_submission_app') THEN
+        EXECUTE format('CREATE ROLE course_submission_app LOGIN PASSWORD %L', '${APP_PASSWORD}');
+    ELSE
+        EXECUTE format('ALTER ROLE course_submission_app WITH PASSWORD %L', '${APP_PASSWORD}');
+    END IF;
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO course_submission_app', current_database());
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO course_submission_app', current_database());
+    ALTER SCHEMA course OWNER TO course_submission_app;
+    ALTER SCHEMA submission OWNER TO course_submission_app;
+    GRANT USAGE, CREATE ON SCHEMA course TO course_submission_app;
+    GRANT USAGE, CREATE ON SCHEMA submission TO course_submission_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA course GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO course_submission_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA submission GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO course_submission_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA course GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO course_submission_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA submission GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO course_submission_app;
+    ALTER ROLE course_submission_app SET search_path TO submission, public;
+    RAISE NOTICE 'Provisioned role course_submission_app for schemas course+submission';
 END
 \$\$;
 EOSQL

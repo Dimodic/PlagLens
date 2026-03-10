@@ -41,21 +41,13 @@ services:
       - ../services/identity/app:/app/app
       - ../services/identity/pyproject.toml:/app/pyproject.toml:ro
 
-  course:
+  # course + submission merged into one service. Just expose a host port for
+  # direct debugging; the source-mount hot-reload pattern used by other blocks
+  # is a no-op here (the entrypoint hardcodes the uvicorn target).
+  course-submission:
     <<: *svc-dev-defaults
     ports:
       - "8003:8000"
-    volumes:
-      - ../services/course/app:/app/app
-      - ../services/course/pyproject.toml:/app/pyproject.toml:ro
-
-  submission:
-    <<: *svc-dev-defaults
-    ports:
-      - "8004:8000"
-    volumes:
-      - ../services/submission/app:/app/app
-      - ../services/submission/pyproject.toml:/app/pyproject.toml:ro
 
   integration:
     <<: *svc-dev-defaults
