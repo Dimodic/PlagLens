@@ -1,0 +1,10 @@
+# PlagLens — line-ending normalization.
+# Shell scripts run inside Linux containers; CRLF breaks the `#!/usr/bin/env`
+# shebang ("bash\r: No such file or directory"). Force LF on checkout for all
+# shell scripts and other container-executed text, on every platform.
+*.sh text eol=lf
+*.bash text eol=lf
+entrypoint.sh text eol=lf
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

@@ -61,7 +61,11 @@ COPY services/submission/alembic ./submission_alembic
 COPY services/course-submission/course_alembic.ini ./course_alembic.ini
 COPY services/course-submission/submission_alembic.ini ./submission_alembic.ini
 COPY services/course-submission/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh && chown -R plaglens:plaglens /app
+# Strip any CR (defensive: a Windows checkout may carry CRLF, which breaks the
+# shebang inside the Linux container). .gitattributes also enforces LF in-repo.
+RUN sed -i 's/\r$//' /app/entrypoint.sh \
+    && chmod +x /app/entrypoint.sh \
+    && chown -R plaglens:plaglens /app
 
 USER plaglens
 
