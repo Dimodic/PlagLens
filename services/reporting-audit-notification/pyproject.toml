@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "plaglens-reporting-audit-notification-service"
+version = "0.1.0"
+description = "PlagLens merged Reporting+Audit+Notification service"
+requires-python = ">=3.12"
+dependencies = [
+    "plaglens-common>=0.1.0",
+    "plaglens-reporting-service",
+    "plaglens-audit-service",
+    "plaglens-notification-service",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.1,<9.0",
+    "pytest-asyncio>=0.23,<0.30",
+    "aiosqlite>=0.20,<0.22",
+    "ruff>=0.4,<0.10",
+    "mypy>=1.10,<2.0",
+]
+
+[tool.uv.sources]
+plaglens-common = { workspace = true }
+plaglens-reporting-service = { workspace = true }
+plaglens-audit-service = { workspace = true }
+plaglens-notification-service = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/reporting_audit_notification_service"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
