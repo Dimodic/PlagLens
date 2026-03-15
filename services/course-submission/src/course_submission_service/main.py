@@ -133,4 +133,9 @@ def create_app() -> FastAPI:
     return app
 
 
-__all__ = ["create_app", "lifespan", "wire_shared_session"]
+# Module-level ASGI app for uvicorn (`course_submission_service.main:app`),
+# matching the entrypoint and the sibling services' convention.
+app = create_app()
+
+
+__all__ = ["app", "create_app", "lifespan", "wire_shared_session"]
