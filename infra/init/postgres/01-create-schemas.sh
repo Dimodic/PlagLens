@@ -25,12 +25,12 @@ DO \$\$
 DECLARE
     svc TEXT;
     role_name TEXT;
-    -- NOTE: course + submission are NOT in this loop — they were merged into
-    -- one service whose role (course_submission_app) owns BOTH schemas; it is
-    -- provisioned in a dedicated block below.
+    -- NOTE: course+submission and reporting+audit+notification are NOT in this
+    -- loop — each group was merged into one service whose role owns all of that
+    -- group's schemas; both are provisioned in dedicated blocks below.
     services TEXT[] := ARRAY[
         'identity', 'integration', 'plagiarism',
-        'ai_analysis', 'notification', 'reporting', 'audit', 'gateway'
+        'ai_analysis', 'gateway'
     ];
 BEGIN
     FOREACH svc IN ARRAY services LOOP
@@ -76,6 +76,35 @@ BEGIN
     ALTER DEFAULT PRIVILEGES IN SCHEMA submission GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO course_submission_app;
     ALTER ROLE course_submission_app SET search_path TO submission, public;
     RAISE NOTICE 'Provisioned role course_submission_app for schemas course+submission';
+END
+\$\$;
+
+-- Merged reporting+audit+notification service: ONE role owning ALL THREE
+-- schemas (merged in the Phase 4 refactor). All three ORMs are fully
+-- schema-qualified, so search_path only matters for the public extensions.
+DO \$\$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_audit_notification_app') THEN
+        EXECUTE format('CREATE ROLE reporting_audit_notification_app LOGIN PASSWORD %L', '${APP_PASSWORD}');
+    ELSE
+        EXECUTE format('ALTER ROLE reporting_audit_notification_app WITH PASSWORD %L', '${APP_PASSWORD}');
+    END IF;
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO reporting_audit_notification_app', current_database());
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO reporting_audit_notification_app', current_database());
+    ALTER SCHEMA reporting OWNER TO reporting_audit_notification_app;
+    ALTER SCHEMA audit OWNER TO reporting_audit_notification_app;
+    ALTER SCHEMA notification OWNER TO reporting_audit_notification_app;
+    GRANT USAGE, CREATE ON SCHEMA reporting TO reporting_audit_notification_app;
+    GRANT USAGE, CREATE ON SCHEMA audit TO reporting_audit_notification_app;
+    GRANT USAGE, CREATE ON SCHEMA notification TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
+    ALTER ROLE reporting_audit_notification_app SET search_path TO reporting, audit, notification, public;
+    RAISE NOTICE 'Provisioned role reporting_audit_notification_app for schemas reporting+audit+notification';
 END
 \$\$;
 EOSQL

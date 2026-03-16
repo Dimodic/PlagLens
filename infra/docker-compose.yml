@@ -1,6 +1,7 @@
 # PlagLens — main Docker Compose stack
-# 9 application services + supporting infrastructure
-# (course+submission merged into one "course-submission" service)
+# 7 application services + supporting infrastructure
+# (course+submission merged into "course-submission";
+#  reporting+audit+notification merged into "reporting-audit-notification")
 # Usage: cp .env.example .env && docker compose up -d
 
 name: plaglens
@@ -86,9 +87,11 @@ services:
       GATEWAY_BACKEND_INTEGRATION: http://integration:8000
       GATEWAY_BACKEND_PLAGIARISM: http://plagiarism:8000
       GATEWAY_BACKEND_AI_ANALYSIS: http://ai-analysis:8000
-      GATEWAY_BACKEND_NOTIFICATION: http://notification:8000
-      GATEWAY_BACKEND_REPORTING: http://reporting:8000
-      GATEWAY_BACKEND_AUDIT: http://audit:8000
+      # reporting + audit + notification merged into one service. All three
+      # routing-table backends resolve to it (routing table unchanged).
+      GATEWAY_BACKEND_NOTIFICATION: http://reporting-audit-notification:8000
+      GATEWAY_BACKEND_REPORTING: http://reporting-audit-notification:8000
+      GATEWAY_BACKEND_AUDIT: http://reporting-audit-notification:8000
       GATEWAY_JWKS_URL: http://identity:8000/api/v1/.well-known/jwks.json
       GATEWAY_REDIS_URL: redis://redis:6379/0
       GATEWAY_JWT_ISSUER: ${JWT_ISSUER:-https://plaglens.local}
@@ -311,60 +314,49 @@ services:
       retries: 5
       start_period: 60s
 
-  notification:
+  # reporting + audit + notification merged into ONE service (Phase 4 refactor).
+  # One Postgres DB, three schemas (reporting + audit + notification); the
+  # reporting_audit_notification_app role owns all three. Each sub-service keeps
+  # its own engine + Kafka consumer group; reporting<->audit talk via in-container
+  # loopback (their *_BASE_URL point at self). The src packages live on as libs.
+  reporting-audit-notification:
     <<: *svc-defaults
     build:
       context: ..
-      dockerfile: services/notification/Dockerfile
-    image: plaglens/notification:${IMAGE_TAG:-dev}
-    container_name: plaglens-notification
+      dockerfile: services/reporting-audit-notification/Dockerfile
+    image: plaglens/reporting-audit-notification:${IMAGE_TAG:-dev}
+    container_name: plaglens-reporting-audit-notification
     environment:
       <<: *common-env
-      SERVICE_NAME: notification
+      SERVICE_NAME: reporting-audit-notification
       PORT: "8000"
-      DATABASE_URL: postgresql+asyncpg://notification_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
-      DATABASE_SCHEMA: notification
-      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-mailhog}
-      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
-      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
-      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      DATABASE_URL: postgresql+asyncpg://reporting_audit_notification_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
+      # reporting reads *_SERVICE_BASE_URL (NOT *_BASE_URL); point at the merged
+      # course-submission service, identity + integration, and SELF for the two
+      # internal reporting<->audit hops.
+      COURSE_SERVICE_BASE_URL: http://course-submission:8000
+      SUBMISSION_SERVICE_BASE_URL: http://course-submission:8000
+      IDENTITY_SERVICE_BASE_URL: http://identity:8000
+      INTEGRATION_SERVICE_BASE_URL: http://integration:8000
+      AUDIT_SERVICE_BASE_URL: http://reporting-audit-notification:8000
+      REPORTING_BASE_URL: http://reporting-audit-notification:8000
+      GOOGLE_SERVICE_ACCOUNT_JSON_PATH: /run/secrets/google_sa.json
+      # notification email transport (dev → Mailhog; these match the real
+      # EMAIL_TRANSPORT/SMTP_* setting names the service reads).
+      EMAIL_TRANSPORT: ${EMAIL_TRANSPORT:-smtp}
       SMTP_HOST: mailhog
       SMTP_PORT: "1025"
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@plaglens.local}
+      MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
+      MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # NB: deliberately NOT setting KAFKA_CONSUMER_GROUP — reporting AND
+      # notification both read it; each must keep its own default group so they
+      # don't share one consumer group (audit uses KAFKA_GROUP_ID separately).
     volumes:
       - ./secrets:/run/secrets:ro
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
-
-  reporting:
-    <<: *svc-defaults
-    build:
-      context: ..
-      dockerfile: services/reporting/Dockerfile
-    image: plaglens/reporting:${IMAGE_TAG:-dev}
-    container_name: plaglens-reporting
-    environment:
-      <<: *common-env
-      SERVICE_NAME: reporting
-      PORT: "8000"
-      DATABASE_URL: postgresql+asyncpg://reporting_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
-      DATABASE_SCHEMA: reporting
-      DATABASE_URL_FALLBACK_NOTE: "reporting service uses /api/v1/healthz path"
-      SUBMISSION_BASE_URL: http://course-submission:8000
-      COURSE_BASE_URL: http://course-submission:8000
-      PLAGIARISM_BASE_URL: http://plagiarism:8000
-      AI_BASE_URL: http://ai-analysis:8000
-      AUDIT_BASE_URL: http://audit:8000
-      EXPORT_TTL_DAYS: "7"
-      GOOGLE_SERVICE_ACCOUNT_JSON_PATH: /run/secrets/google_sa.json
-    healthcheck:
-      # Reporting mounts health under /api/v1/healthz (intentional: all routes prefix /api/v1)
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/healthz"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -374,30 +366,6 @@ services:
       redis: { condition: service_healthy }
       kafka: { condition: service_healthy }
       minio: { condition: service_healthy }
-
-  audit:
-    <<: *svc-defaults
-    build:
-      context: ..
-      dockerfile: services/audit/Dockerfile
-    image: plaglens/audit:${IMAGE_TAG:-dev}
-    container_name: plaglens-audit
-    environment:
-      <<: *common-env
-      SERVICE_NAME: audit
-      PORT: "8000"
-      DATABASE_URL: postgresql+asyncpg://audit_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
-      DATABASE_SCHEMA: audit
-      DEFAULT_RETENTION_DAYS: "365"
-      LONG_RETENTION_DAYS: "2555"
-    volumes:
-      - ./secrets:/run/secrets:ro
-    healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
-      start_period: 60s
 
   # ----------------------------------------------------------------------
   # Frontend (Vite SPA served by nginx; reverse-proxies /api → gateway)

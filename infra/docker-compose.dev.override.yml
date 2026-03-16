@@ -73,29 +73,12 @@ services:
       - ../services/ai-analysis/app:/app/app
       - ../services/ai-analysis/pyproject.toml:/app/pyproject.toml:ro
 
-  notification:
+  # reporting + audit + notification merged into one service; expose a host
+  # port for direct debugging.
+  reporting-audit-notification:
     <<: *svc-dev-defaults
     ports:
       - "8008:8000"
-    volumes:
-      - ../services/notification/app:/app/app
-      - ../services/notification/pyproject.toml:/app/pyproject.toml:ro
-
-  reporting:
-    <<: *svc-dev-defaults
-    ports:
-      - "8009:8000"
-    volumes:
-      - ../services/reporting/app:/app/app
-      - ../services/reporting/pyproject.toml:/app/pyproject.toml:ro
-
-  audit:
-    <<: *svc-dev-defaults
-    ports:
-      - "8010:8000"
-    volumes:
-      - ../services/audit/app:/app/app
-      - ../services/audit/pyproject.toml:/app/pyproject.toml:ro
 
   postgres:
     healthcheck:
