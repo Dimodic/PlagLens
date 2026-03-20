@@ -1,6 +1,6 @@
 # PlagLens — Infrastructure
 
-Self-contained Docker Compose stack for the 10 PlagLens microservices and
+Self-contained Docker Compose stack for the 9 PlagLens microservices and
 their supporting infrastructure (Postgres, Redis, Kafka, MinIO, Prometheus,
 Grafana, Jaeger, Vault, Traefik, Mailhog).
 
@@ -15,11 +15,16 @@ docker compose up -d
 docker compose ps
 ```
 
-For development with hot reload of service code:
+For local development (per-service host ports, relaxed healthcheck timings, and
+a Vite dev server with frontend hot module reload on http://localhost:5174):
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.override.yml up -d
 ```
+
+Backend code is baked into each image, so there is no Python hot-reload — rebuild
+the affected service (`docker compose build <svc>` / `make build`) to pick up
+changes. Frontend changes reload live via the `frontend-dev` service.
 
 ## Endpoints
 
@@ -37,8 +42,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.override.yml up -d
 | Postgres | localhost:5432 (user: `plaglens_admin`) |
 | Redis | localhost:6379 |
 
-In dev override, each service is also exposed:
-gateway 8001, identity 8002, course 8003, submission 8004, integration 8005,
+In dev override, each service is also exposed on the host:
+gateway 8001, identity 8002, course-submission 8003, integration 8005,
 plagiarism 8006, ai-analysis 8007, notification 8008, reporting 8009, audit 8010.
 
 ## What lives here
@@ -46,7 +51,7 @@ plagiarism 8006, ai-analysis 8007, notification 8008, reporting 8009, audit 8010
 ```
 infra/
   docker-compose.yml                       # main stack
-  docker-compose.dev.override.yml          # hot-reload + relaxed health
+  docker-compose.dev.override.yml          # host ports + relaxed health + frontend HMR
   .env.example                             # all env vars (placeholders only)
   README.md
   init/

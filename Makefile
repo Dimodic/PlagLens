@@ -74,8 +74,8 @@ up: ## docker compose up -d (production-like)
 	$(COMPOSE) up -d
 
 .PHONY: up-dev
-up-dev: ## docker compose up -d with dev override (hot reload, debug)
-	$(COMPOSE) -f infra/docker-compose.dev.yml up -d
+up-dev: ## docker compose up -d with dev override (host ports, frontend HMR, relaxed health)
+	$(COMPOSE) -f infra/docker-compose.dev.override.yml up -d
 
 .PHONY: down
 down: ## docker compose down

@@ -36,7 +36,7 @@ TENANT_SLUG = "hse-fkn"
 TENANT_NAME = "ФКН ВШЭ"
 
 TEACHERS: list[tuple[str, str]] = [
-    ("gordenko.mk@edu.hse.ru", "Горденко М.К."),
+    ("teacher@plaglens.local", "Горденко М.К."),
     ("beresneva.en@edu.hse.ru", "Береснева Е.Н."),
     ("eremin.a@edu.hse.ru", "Еремин А."),
 ]

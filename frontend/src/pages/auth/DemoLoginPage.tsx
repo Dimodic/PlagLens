@@ -46,7 +46,7 @@ const ACCOUNTS: DemoAccount[] = [
     description: '«Бог» учреждения — назначает преподавателей, общий ключ LLM',
   },
   {
-    email: 'gordenko.mk@edu.hse.ru',
+    email: 'teacher@plaglens.local',
     password: 'changeme',
     label: 'Преподаватель',
     role: 'teacher',
@@ -55,7 +55,7 @@ const ACCOUNTS: DemoAccount[] = [
     description: 'Горденко М.К. — лектор курса C++ КНАД 24/25',
   },
   {
-    email: 'assistant.ivanova@edu.hse.ru',
+    email: 'assistant@plaglens.local',
     password: 'changeme',
     label: 'Ассистент',
     role: 'teacher',
@@ -64,7 +64,7 @@ const ACCOUNTS: DemoAccount[] = [
     description: 'Иванова Анна — ассистент активного курса C++',
   },
   {
-    email: 'student.test@edu.hse.ru',
+    email: 'student@plaglens.local',
     password: 'changeme',
     label: 'Студент',
     role: 'student',

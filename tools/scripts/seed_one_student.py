@@ -19,7 +19,7 @@ from identity_service.models import Tenant, User
 
 
 TENANT_SLUG = "hse-fkn"
-EMAIL = "student.test@edu.hse.ru"
+EMAIL = "student@plaglens.local"
 NAME = "Иван Петров"
 
 
