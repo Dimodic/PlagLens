@@ -1,24 +1,26 @@
 # PlagLens — dev override.
-# Mounts service source as a volume for hot reload (uvicorn --reload),
-# relaxes healthcheck timing, exposes service ports on the host for
-# direct access during development.
+# Layered on top of docker-compose.yml for local development. It:
+#   - exposes every application service on a host port (direct debugging),
+#   - relaxes healthcheck timings (more retries / longer timeout, kinder to
+#     slow machines and cold starts),
+#   - adds a Vite dev server (frontend-dev) with hot module reload.
+#
+# NOTE — no backend hot-reload. Each service image bakes the code in: the wheel
+# is pip-installed into site-packages and the entrypoint execs a fixed
+# `uvicorn <pkg>_service.main:app`. There is no editable source on disk to
+# watch, so edit + `docker compose build <svc>` (or `make build`) to pick up
+# Python changes. Frontend hot-reload IS real — see the frontend-dev service.
 #
 # Usage: docker compose -f docker-compose.yml -f docker-compose.dev.override.yml up -d
 
 name: plaglens
 
+# Relaxed healthcheck *timings* only. Deliberately NO `test:` here: a test key
+# would clobber each service's correct health path from the base file (most
+# expose /healthz, reporting exposes /api/v1/healthz). Compose merges these
+# four keys on top of the base healthcheck mapping and leaves `test` intact.
 x-svc-dev-defaults: &svc-dev-defaults
-  command:
-    - sh
-    - -c
-    - >-
-      uvicorn app.main:app
-      --host 0.0.0.0
-      --port 8000
-      --reload
-      --reload-dir /app/app
   healthcheck:
-    test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
     interval: 30s
     timeout: 10s
     retries: 10
@@ -29,21 +31,13 @@ services:
     <<: *svc-dev-defaults
     ports:
       - "8001:8000"
-    volumes:
-      - ../services/gateway/app:/app/app
-      - ../services/gateway/pyproject.toml:/app/pyproject.toml:ro
 
   identity:
     <<: *svc-dev-defaults
     ports:
       - "8002:8000"
-    volumes:
-      - ../services/identity/app:/app/app
-      - ../services/identity/pyproject.toml:/app/pyproject.toml:ro
 
-  # course + submission merged into one service. Just expose a host port for
-  # direct debugging; the source-mount hot-reload pattern used by other blocks
-  # is a no-op here (the entrypoint hardcodes the uvicorn target).
+  # course + submission are merged into one service (host port 8003).
   course-submission:
     <<: *svc-dev-defaults
     ports:
@@ -53,25 +47,16 @@ services:
     <<: *svc-dev-defaults
     ports:
       - "8005:8000"
-    volumes:
-      - ../services/integration/app:/app/app
-      - ../services/integration/pyproject.toml:/app/pyproject.toml:ro
 
   plagiarism:
     <<: *svc-dev-defaults
     ports:
       - "8006:8000"
-    volumes:
-      - ../services/plagiarism/app:/app/app
-      - ../services/plagiarism/pyproject.toml:/app/pyproject.toml:ro
 
   ai-analysis:
     <<: *svc-dev-defaults
     ports:
       - "8007:8000"
-    volumes:
-      - ../services/ai-analysis/app:/app/app
-      - ../services/ai-analysis/pyproject.toml:/app/pyproject.toml:ro
 
   # reporting + audit + notification merged into one service; expose a host
   # port for direct debugging.

@@ -38,7 +38,7 @@ COURSE_DESC = (
 # Owner is the first one; the other teachers are co-owners; assistants are
 # course_members with role=assistant.
 ROSTER: list[tuple[str, str]] = [
-    ("gordenko.mk@edu.hse.ru", "owner"),
+    ("teacher@plaglens.local", "owner"),
     ("beresneva.en@edu.hse.ru", "co_owner"),
     ("eremin.a@edu.hse.ru", "co_owner"),
     ("korablina.m@edu.hse.ru", "assistant"),

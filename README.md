@@ -96,7 +96,7 @@ or `http://localhost:3000` for the bundled Grafana dashboard.
 | Goal                                | Command                                        |
 | ----------------------------------- | ---------------------------------------------- |
 | Show every Make target              | `make help`                                    |
-| Boot the stack                      | `make up` (or `make up-dev` for hot reload)    |
+| Boot the stack                      | `make up` (or `make up-dev`: host ports + frontend HMR) |
 | Tail one service's logs             | `make logs SERVICE=gateway`                    |
 | Run all unit tests                  | `make test-all`                                |
 | Run one service's tests             | `make test SERVICE=identity`                   |
