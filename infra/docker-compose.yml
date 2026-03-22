@@ -187,6 +187,10 @@ services:
       # via search_path) while course is always schema-qualified to "course".
       DATABASE_URL: postgresql+asyncpg://course_submission_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
       COURSE_DB_SCHEMA: course
+      # Course's Kafka producer + consumer are gated by KAFKA_ENABLED (default
+      # off in code). Turn them on so course/assignment domain events actually
+      # flow (submission already publishes; this completes the course side).
+      KAFKA_ENABLED: "true"
       IDENTITY_BASE_URL: http://identity:8000
       # COURSE_BASE_URL is unused at runtime (in-process client) — kept pointing
       # at self so any stray HTTP fallback is harmless.
@@ -226,6 +230,10 @@ services:
       PORT: "8000"
       DATABASE_URL: postgresql+asyncpg://integration_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
       DATABASE_SCHEMA: integration
+      # Integration's Kafka producer + consumer are gated by ENABLE_KAFKA
+      # (default off in code) — without this it publishes import/config events
+      # only to an in-memory fallback. Turn it on for the real bus.
+      ENABLE_KAFKA: "true"
       SUBMISSION_BASE_URL: http://course-submission:8000
       COURSE_BASE_URL: http://course-submission:8000
       # Autosync scheduler — APScheduler in-process, fenced by Redis lock so
