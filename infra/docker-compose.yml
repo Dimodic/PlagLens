@@ -26,6 +26,10 @@ x-common-env: &common-env
   LOG_LEVEL: ${LOG_LEVEL:-INFO}
   REDIS_URL: redis://redis:6379/0
   KAFKA_BROKERS: kafka:9092
+  # Alias for services whose settings field is named kafka_bootstrap_servers
+  # (e.g. integration) instead of kafka_brokers — without this they fall back to
+  # the localhost default and fail to connect once Kafka is enabled.
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
   KAFKA_SECURITY_PROTOCOL: PLAINTEXT
   S3_ENDPOINT: http://minio:9000
   S3_ACCESS_KEY: ${MINIO_ROOT_USER}

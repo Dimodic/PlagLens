@@ -10,6 +10,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any
 
+import course_service.api._helpers as course_helpers
 import course_service.deps as course_deps
 import submission_service.api.deps as submission_api_deps
 import submission_service.db as submission_db
@@ -74,6 +75,11 @@ async def lifespan(app: FastAPI):
     producer = KafkaProducer(settings.kafka_brokers, enabled=settings.kafka_enabled)
     await producer.start()
     publisher = CourseEventPublisher(producer, settings)
+    # Course route handlers resolve the publisher via a module-level singleton
+    # (course_service.api._helpers.get_publisher), which otherwise lazily builds
+    # an UNSTARTED producer that silently no-ops. Inject the started publisher so
+    # course/assignment events actually reach Kafka.
+    course_helpers.configure_publisher(publisher)
     redis = RedisClient(settings.redis_url, enabled=settings.redis_enabled)
     consumer = IdentityEventsConsumer(settings, factory)
     await consumer.start()
