@@ -1,6 +1,7 @@
 """FastAPI application factory + ASGI entrypoint."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -100,6 +101,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         idempotency = IdempotencyStore(redis_client, namespace=f"{settings.redis_prefix}:idem")
         consumer = EventConsumer(session_maker, build_handler_registry())
         await consumer.start(settings.kafka_bootstrap)
+        # start() only joins the consumer group; spawn the consume loop so the
+        # read-models actually receive events. Without this the group registers
+        # but never pumps and every dashboard read-model stays empty.
+        consumer_task = asyncio.create_task(consumer.run_forever())
         scheduler = ReportingScheduler(
             session_maker,
             run_export=lambda sched, period_start, sess: _run_scheduled_export(
@@ -133,6 +138,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         try:
             yield
         finally:
+            consumer_task.cancel()
+            try:
+                await consumer_task
+            except asyncio.CancelledError:
+                pass
             await producer.stop()
             await consumer.stop()
             await scheduler.stop()
