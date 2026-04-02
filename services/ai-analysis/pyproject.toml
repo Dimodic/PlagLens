@@ -13,18 +13,20 @@ license = { text = "Proprietary" }
 
 dependencies = [
     "plaglens-common>=0.1.0",
-    "fastapi>=0.110",
-    "uvicorn[standard]>=0.29",
+    # Upper caps aligned with the rest of the workspace (drift prevention).
+    "fastapi>=0.110,<0.120",
+    "uvicorn[standard]>=0.29,<0.40",
     "pydantic>=2.6,<3.0",
     "pydantic-settings>=2.2,<3.0",
     "sqlalchemy[asyncio]>=2.0.29,<3.0",
     "alembic>=1.13,<2.0",
-    "redis>=5.0,<7.0",
-    "aiokafka>=0.10,<0.16",
-    "structlog>=24.1",
-    "httpx>=0.27",
-    "pyjwt>=2.8,<3.0",
-    "prometheus-client>=0.20",
+    "redis>=5.0,<6.0",
+    "aiokafka>=0.10,<0.13",
+    "structlog>=24.1,<26.0",
+    "httpx>=0.27,<0.30",
+    # crypto extra is required — this service verifies RS256 JWTs at runtime.
+    "pyjwt[crypto]>=2.8,<3.0",
+    "prometheus-client>=0.20,<0.22",
     "openai>=1.30",
     "asyncpg>=0.29",
     "psycopg2-binary>=2.9",
