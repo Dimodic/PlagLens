@@ -27,6 +27,7 @@ from course_service.events.consumer import IdentityEventsConsumer
 from course_service.events.producer import CourseEventPublisher
 from fastapi import FastAPI
 from plaglens_common.health import health_router
+from plaglens_common.observability import install_observability
 from plaglens_common.problem import make_handlers
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from submission_service.api.routers import bulk as submission_bulk
@@ -136,6 +137,9 @@ def create_app() -> FastAPI:
 
     # --- Single shared health/metrics/version surface -----------------------
     app.include_router(health_router(service_name="course-submission", version="0.1.0"))
+
+    # Real app metrics (Prometheus) + traces (OpenTelemetry -> Jaeger).
+    install_observability(app, service_name="course-submission")
     return app
 
 

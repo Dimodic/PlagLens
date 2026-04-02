@@ -26,17 +26,12 @@ scrape_configs:
       - targets: ["identity:8000"]
         labels: { service: identity }
 
-  - job_name: course
+  # course + submission merged into one service.
+  - job_name: course-submission
     metrics_path: /metrics
     static_configs:
-      - targets: ["course:8000"]
-        labels: { service: course }
-
-  - job_name: submission
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["submission:8000"]
-        labels: { service: submission }
+      - targets: ["course-submission:8000"]
+        labels: { service: course-submission }
 
   - job_name: integration
     metrics_path: /metrics
@@ -56,23 +51,12 @@ scrape_configs:
       - targets: ["ai-analysis:8000"]
         labels: { service: ai-analysis }
 
-  - job_name: notification
+  # reporting + audit + notification merged into one service.
+  - job_name: reporting-audit-notification
     metrics_path: /metrics
     static_configs:
-      - targets: ["notification:8000"]
-        labels: { service: notification }
-
-  - job_name: reporting
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["reporting:8000"]
-        labels: { service: reporting }
-
-  - job_name: audit
-    metrics_path: /metrics
-    static_configs:
-      - targets: ["audit:8000"]
-        labels: { service: audit }
+      - targets: ["reporting-audit-notification:8000"]
+        labels: { service: reporting-audit-notification }
 
   - job_name: traefik
     metrics_path: /metrics

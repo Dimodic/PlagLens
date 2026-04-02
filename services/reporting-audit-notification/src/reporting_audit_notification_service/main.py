@@ -37,6 +37,7 @@ from notification_service.api.v1 import router as _notification_v1_router
 from notification_service.errors import pydantic_validation_handler
 from notification_service.main import app as _notification_app
 from plaglens_common.health import health_router
+from plaglens_common.observability import install_observability
 from plaglens_common.problem import make_handlers
 from pydantic import ValidationError
 from reporting_service.api.v1 import (
@@ -136,6 +137,9 @@ def create_app() -> FastAPI:
     app.include_router(
         health_router(service_name="reporting-audit-notification", version="0.1.0")
     )
+
+    # Real app metrics (Prometheus) + traces (OpenTelemetry -> Jaeger).
+    install_observability(app, service_name="reporting-audit-notification")
     return app
 
 

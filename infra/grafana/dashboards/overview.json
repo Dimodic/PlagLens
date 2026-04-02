@@ -22,7 +22,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum by (service) (rate(http_server_requests_total[1m]))",
+          "expr": "sum by (service) (rate(http_requests_total[1m])) or sum by (service) (rate(gateway_requests_total[1m]))",
           "legendFormat": "{{service}}"
         }
       ]
@@ -42,7 +42,7 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_server_request_duration_seconds_bucket[5m])))",
+          "expr": "histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m]))) or histogram_quantile(0.95, sum by (service, le) (rate(gateway_request_duration_seconds_bucket[5m])))",
           "legendFormat": "{{service}}"
         }
       ]
@@ -62,18 +62,18 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum by (service) (rate(http_server_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum by (service) (rate(http_server_requests_total[5m])), 1e-9)",
+          "expr": "sum by (service) (rate(http_requests_total{status=~\"5..\"}[5m]) or rate(gateway_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum by (service) (rate(http_requests_total[5m]) or rate(gateway_requests_total[5m])), 1e-9)",
           "legendFormat": "{{service}}"
         }
       ]
     },
     {
       "type": "timeseries",
-      "title": "Kafka consumer lag (messages)",
+      "title": "External call latency p95 (s) per provider",
       "datasource": { "type": "prometheus", "uid": "Prometheus" },
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
       "id": 4,
-      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
       "options": {
         "tooltip": { "mode": "multi" },
         "legend": { "displayMode": "table", "placement": "right" }
@@ -82,8 +82,8 @@
         {
           "refId": "A",
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
-          "expr": "sum by (consumer_group, topic) (kafka_consumer_lag)",
-          "legendFormat": "{{consumer_group}} - {{topic}}"
+          "expr": "histogram_quantile(0.95, sum by (provider, le) (rate(external_call_duration_seconds_bucket[5m])))",
+          "legendFormat": "{{provider}}"
         }
       ]
     }
