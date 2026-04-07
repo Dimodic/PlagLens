@@ -9,6 +9,8 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from plaglens_common.observability import install_observability
+
 from integration_service import __version__
 from integration_service.api.v1 import build_router
 from integration_service.api.v1.health import router as health_router
@@ -76,6 +78,8 @@ def create_app() -> FastAPI:
     for _exc_type, _handler in make_handlers().items():
         app.add_exception_handler(_exc_type, _handler)
 
+    # Prometheus app metrics + OpenTelemetry traces -> Jaeger.
+    install_observability(app, service_name="integration")
     return app
 
 

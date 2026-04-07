@@ -9,6 +9,8 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
+from plaglens_common.observability import install_observability
+
 from .api import build_router
 from .common.logging import configure_logging
 from .common.problem import (
@@ -80,6 +82,9 @@ def create_app() -> FastAPI:
         )
 
     app.include_router(build_router())
+
+    # Prometheus app metrics + OpenTelemetry traces -> Jaeger.
+    install_observability(app, service_name="ai-analysis")
     return app
 
 

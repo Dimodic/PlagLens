@@ -23,6 +23,7 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
+from plaglens_common.observability import install_observability
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api.v1 import api_v1
@@ -173,6 +174,9 @@ def create_app() -> FastAPI:
     app.include_router(health)
     app.include_router(api_v1)
 
+    # OpenTelemetry traces -> Jaeger (metrics are served from identity's own
+    # registry above; install_observability's metrics middleware is harmless).
+    install_observability(app, service_name="identity")
     return app
 
 

@@ -6,6 +6,8 @@ from typing import AsyncIterator
 
 from fastapi import FastAPI
 
+from plaglens_common.observability import install_observability
+
 from .api.deps import get_orchestrator, set_producer
 from .api.v1 import api_router, health_router
 from .common.logging import configure_logging, get_logger
@@ -51,6 +53,8 @@ def create_app() -> FastAPI:
     for _exc_type, _handler in make_handlers().items():
         app.add_exception_handler(_exc_type, _handler)
 
+    # Prometheus app metrics + OpenTelemetry traces -> Jaeger.
+    install_observability(app, service_name="plagiarism")
     return app
 
 
