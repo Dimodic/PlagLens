@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+import jwt
 from fastapi import Depends, Header, Request
-from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .common.problem import ProblemException
@@ -83,7 +83,7 @@ async def get_current_user(
             algorithms=[alg],
             options={"verify_aud": False, "verify_iss": False},
         )
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         raise ProblemException(
             status_code=401, detail=f"Invalid token: {exc}", code="UNAUTHENTICATED"
         ) from exc
