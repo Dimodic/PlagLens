@@ -31,13 +31,19 @@ def install_observability(
     *,
     service_name: str,
     otlp_endpoint: str | None = None,
+    metrics: bool = True,
 ) -> None:
-    """Wire Prometheus metrics + OpenTelemetry tracing into a FastAPI app."""
+    """Wire Prometheus metrics + OpenTelemetry tracing into a FastAPI app.
+
+    Set ``metrics=False`` for services that already expose their own Prometheus
+    registry/middleware (e.g. the gateway) — tracing is still installed.
+    """
     # 1. Prometheus application metrics (default registry -> health_router /metrics).
-    try:
-        app.add_middleware(PrometheusMiddleware)
-    except Exception as exc:  # pragma: no cover - never break startup
-        logger.warning("prometheus middleware not installed: %s", exc)
+    if metrics:
+        try:
+            app.add_middleware(PrometheusMiddleware)
+        except Exception as exc:  # pragma: no cover - never break startup
+            logger.warning("prometheus middleware not installed: %s", exc)
 
     # 2. OpenTelemetry traces -> OTLP/gRPC (Jaeger).
     endpoint = otlp_endpoint or os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")

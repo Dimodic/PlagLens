@@ -22,6 +22,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from plaglens_common.observability import install_observability
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gateway_service.api.v1 import (
@@ -133,6 +134,10 @@ def create_app() -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
+    # OpenTelemetry tracing only (gateway has its own Prometheus registry). The
+    # bundled httpx instrumentation propagates W3C traceparent to backends, so
+    # traces span gateway -> service end to end.
+    install_observability(app, service_name="gateway", metrics=False)
     return app
 
 
