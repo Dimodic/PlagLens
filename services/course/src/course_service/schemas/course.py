@@ -23,10 +23,8 @@ class CourseBase(BaseModel):
 
 
 class CourseCreate(CourseBase):
-    # Slug is auto-derived from ``name`` server-side and never shown to
-    # or typed by users. Kept here as optional only so an older client
-    # that still sends one doesn't fail validation — the service
-    # ignores any provided value and always regenerates.
+    # Optional slug: if provided it is honored verbatim (uniqueness enforced by
+    # the DB -> 409); if omitted the service auto-derives one from ``name``.
     slug: str | None = Field(
         default=None, max_length=120, pattern=r"^[a-z0-9][a-z0-9._-]*$"
     )

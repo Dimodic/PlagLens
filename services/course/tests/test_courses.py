@@ -123,7 +123,7 @@ async def test_duplicate_course_deep_copies_assignments(
     assert list_r.status_code == 200
     assert len(list_r.json()["data"]) == 1
     assert list_r.json()["data"][0]["slug"] == "lab-1"
-    assert list_r.json()["data"][0]["status"] == "draft"
+    assert list_r.json()["data"][0]["status"] == "active"
 
 
 async def test_owners_add_promote_remove(client, teacher_headers, make_course):

@@ -66,14 +66,17 @@ class CourseService:
 
     # ----- Courses -----------------------------------------------------------------
     async def create_course(self, payload: CourseCreate, user: CurrentUser) -> Course:
-        # Slug is auto-derived from the name — users never type it. Any
-        # client-provided ``payload.slug`` is intentionally ignored.
-        base = await slugify(payload.name, fallback="course")
+        # Honor a client-provided slug verbatim (uniqueness is enforced by the
+        # DB constraint -> 409 below); otherwise auto-derive it from the name.
+        if payload.slug:
+            slug = payload.slug
+        else:
+            base = await slugify(payload.name, fallback="course")
 
-        async def _taken(s: str) -> bool:
-            return await self.courses.get_by_slug(user.tenant_id, s) is not None
+            async def _taken(s: str) -> bool:
+                return await self.courses.get_by_slug(user.tenant_id, s) is not None
 
-        slug = await unique_slug(base, exists=_taken)
+            slug = await unique_slug(base, exists=_taken)
         course = Course(
             tenant_id=user.tenant_id,
             slug=slug,

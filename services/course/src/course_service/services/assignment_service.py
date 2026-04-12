@@ -74,14 +74,17 @@ class AssignmentService:
             payload.external_bindings or [], tenant_id=course.tenant_id, bearer=bearer_token
         )
         bindings = [b.model_dump() for b in (payload.external_bindings or [])]
-        # Slug auto-derived from the title — never user-typed. Any
-        # client-provided ``payload.slug`` is ignored.
-        base = await slugify(payload.title, fallback="assignment")
+        # Honor a client-provided slug verbatim (uniqueness enforced by the DB
+        # constraint -> 409); otherwise auto-derive it from the title.
+        if payload.slug:
+            slug = payload.slug
+        else:
+            base = await slugify(payload.title, fallback="assignment")
 
-        async def _taken(s: str) -> bool:
-            return await self.repo.get_by_slug(course.id, s) is not None
+            async def _taken(s: str) -> bool:
+                return await self.repo.get_by_slug(course.id, s) is not None
 
-        slug = await unique_slug(base, exists=_taken)
+            slug = await unique_slug(base, exists=_taken)
         assignment = Assignment(
             course_id=course.id,
             homework_id=payload.homework_id,
@@ -219,13 +222,17 @@ class AssignmentService:
                 status_code=404, detail="Target course not found", code="NOT_FOUND"
             )
         clone_title = payload.new_title or f"{source.title} (copy)"
-        # Slug auto-derived from the clone's title — never user-typed.
-        base = await slugify(clone_title, fallback="assignment")
+        # Honor a client-provided slug verbatim; otherwise auto-derive it from
+        # the clone's title.
+        if payload.new_slug:
+            new_slug = payload.new_slug
+        else:
+            base = await slugify(clone_title, fallback="assignment")
 
-        async def _taken(s: str) -> bool:
-            return await self.repo.get_by_slug(target_course.id, s) is not None
+            async def _taken(s: str) -> bool:
+                return await self.repo.get_by_slug(target_course.id, s) is not None
 
-        new_slug = await unique_slug(base, exists=_taken)
+            new_slug = await unique_slug(base, exists=_taken)
         clone = Assignment(
             course_id=target_course.id,
             slug=new_slug,

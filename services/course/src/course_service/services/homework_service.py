@@ -63,14 +63,17 @@ class HomeworkService:
     async def create(
         self, course: Course, payload: HomeworkCreate, user: CurrentUser
     ) -> Homework:
-        # Slug auto-derived from the title — never user-typed. Any
-        # client-provided ``payload.slug`` is ignored.
-        base = await slugify(payload.title, fallback="homework")
+        # Honor a client-provided slug verbatim (uniqueness enforced by the DB
+        # constraint -> 409); otherwise auto-derive it from the title.
+        if payload.slug:
+            slug = payload.slug
+        else:
+            base = await slugify(payload.title, fallback="homework")
 
-        async def _taken(s: str) -> bool:
-            return await self.repo.get_by_slug(course.id, s) is not None
+            async def _taken(s: str) -> bool:
+                return await self.repo.get_by_slug(course.id, s) is not None
 
-        slug = await unique_slug(base, exists=_taken)
+            slug = await unique_slug(base, exists=_taken)
         homework = Homework(
             course_id=course.id,
             slug=slug,

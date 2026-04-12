@@ -41,17 +41,14 @@ async def test_create_and_get_assignment(client, teacher_headers):
     r = await client.get(f"/api/v1/assignments/{a_id}", headers=teacher_headers)
     assert r.status_code == 200
     assert r.json()["slug"] == "lab-1"
-    assert r.json()["status"] == "draft"
+    assert r.json()["status"] == "active"
 
 
-async def test_publish_archive_assignment(client, teacher_headers):
+async def test_archive_assignment(client, teacher_headers):
     c = await _create_course(client, teacher_headers)
     a_id = await _create_assignment(client, teacher_headers, c)
-    r1 = await client.post(
-        f"/api/v1/assignments/{a_id}:publish", headers=teacher_headers
-    )
-    assert r1.status_code == 200
-    assert r1.json()["status"] == "published"
+    # Archive-only lifecycle: assignments are created "active"; the legacy
+    # :publish action was removed, leaving :archive as the only transition.
     r2 = await client.post(
         f"/api/v1/assignments/{a_id}:archive", headers=teacher_headers
     )

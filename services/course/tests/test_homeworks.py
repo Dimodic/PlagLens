@@ -32,7 +32,7 @@ async def _create_homework(
         "slug": slug,
         "title": "Week 1",
         "position": 0,
-        "status": "draft",
+        "status": "active",
     }
     body.update(extra)
     r = await client.post(
@@ -52,7 +52,7 @@ async def test_homework_create_get_update_delete(client, teacher_headers):
     hw_id = hw["id"]
     assert hw["slug"] == "w1"
     assert hw["course_id"] == c_id
-    assert hw["status"] == "draft"
+    assert hw["status"] == "active"
     assert hw["position"] == 0
 
     # Get
@@ -63,14 +63,14 @@ async def test_homework_create_get_update_delete(client, teacher_headers):
     # Update
     r = await client.patch(
         f"/api/v1/homeworks/{hw_id}",
-        json={"title": "Updated", "position": 5, "status": "published"},
+        json={"title": "Updated", "position": 5, "status": "archived"},
         headers=teacher_headers,
     )
     assert r.status_code == 200
     body = r.json()
     assert body["title"] == "Updated"
     assert body["position"] == 5
-    assert body["status"] == "published"
+    assert body["status"] == "archived"
 
     # Delete (soft)
     r = await client.delete(f"/api/v1/homeworks/{hw_id}", headers=teacher_headers)
@@ -85,7 +85,7 @@ async def test_homework_duplicate_slug_409(client, teacher_headers):
     await _create_homework(client, teacher_headers, c_id, slug="dup-1")
     r = await client.post(
         f"/api/v1/courses/{c_id}/homeworks",
-        json={"slug": "dup-1", "title": "Other", "status": "draft"},
+        json={"slug": "dup-1", "title": "Other", "status": "active"},
         headers=teacher_headers,
     )
     assert r.status_code == 409
@@ -97,7 +97,7 @@ async def test_list_homeworks_for_course(client, teacher_headers):
     await _create_homework(client, teacher_headers, c_id, slug="a")
     await _create_homework(client, teacher_headers, c_id, slug="b", position=1)
     await _create_homework(
-        client, teacher_headers, c_id, slug="c", position=2, status="published"
+        client, teacher_headers, c_id, slug="c", position=2, status="archived"
     )
     r = await client.get(
         f"/api/v1/courses/{c_id}/homeworks", headers=teacher_headers
@@ -107,7 +107,7 @@ async def test_list_homeworks_for_course(client, teacher_headers):
 
     # Filter by status.
     r2 = await client.get(
-        f"/api/v1/courses/{c_id}/homeworks?status=published",
+        f"/api/v1/courses/{c_id}/homeworks?status=archived",
         headers=teacher_headers,
     )
     assert r2.status_code == 200
@@ -120,9 +120,10 @@ async def test_student_only_sees_published_homeworks(
     client, teacher_headers, student_headers, add_member
 ):
     c_id = await _create_course(client, teacher_headers, slug="hw-stu")
-    await _create_homework(client, teacher_headers, c_id, slug="draft-w", status="draft")
+    # archived = hidden from students; active = visible.
+    await _create_homework(client, teacher_headers, c_id, slug="draft-w", status="archived")
     await _create_homework(
-        client, teacher_headers, c_id, slug="pub-w", status="published"
+        client, teacher_headers, c_id, slug="pub-w", status="active"
     )
     await add_member(c_id, "usr_student", role="student")
     r = await client.get(
@@ -221,7 +222,7 @@ async def test_homework_student_create_forbidden(
     await add_member(c_id, "usr_student", role="student")
     r = await client.post(
         f"/api/v1/courses/{c_id}/homeworks",
-        json={"slug": "stu", "title": "x", "status": "draft"},
+        json={"slug": "stu", "title": "x", "status": "active"},
         headers=student_headers,
     )
     assert r.status_code == 403
