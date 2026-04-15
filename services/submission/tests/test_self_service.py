@@ -25,7 +25,7 @@ async def test_student_lists_own_submissions(
         "/api/v1/users/me/submissions", headers=student_headers
     )
     assert r.status_code == 200
-    items = r.json()
+    items = r.json()["data"]
     assert all(s["author_id"] == "usr_stu_1" for s in items)
     assert len(items) == 1
 

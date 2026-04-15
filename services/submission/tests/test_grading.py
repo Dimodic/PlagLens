@@ -96,15 +96,23 @@ async def test_student_cannot_grade(client, student_headers, teacher_headers):
 
 
 @pytest.mark.asyncio
-async def test_remove_requires_owner(client, assistant_headers, teacher_headers):
+async def test_remove_grade_rbac(
+    client, student_headers, assistant_headers, teacher_headers
+):
     sub_id = await _create(client, teacher_headers)
     await client.post(
         f"/api/v1/submissions/{sub_id}/grade",
         headers=teacher_headers,
         json={"score": 5.0},
     )
-    d = await client.delete(
+    # A student cannot delete a grade.
+    d_stu = await client.delete(
+        f"/api/v1/submissions/{sub_id}/grade", headers=student_headers
+    )
+    assert d_stu.status_code == 403
+    # Course staff who can grade can also remove a grade (symmetric with
+    # POST/PATCH — deliberately not owner-only, so graders can fix a misclick).
+    d_asst = await client.delete(
         f"/api/v1/submissions/{sub_id}/grade", headers=assistant_headers
     )
-    # assistant is not owner — cannot delete grade
-    assert d.status_code == 403
+    assert d_asst.status_code == 204
