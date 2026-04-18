@@ -1145,7 +1145,7 @@ async def _run_import_as_homework(
                     )
                 )
             else:
-                created, failed = 0, 0
+                created, _failed = 0, 0
 
             # 4. Submissions — same client, same service token. This is the
             # slow stage (1000+ /full GETs); the op state ticks per page +

@@ -215,12 +215,12 @@ def _to_remote_problem(raw: dict[str, Any], position: int) -> RemoteProblem:
         title_with_letter = str(title)
     time_limit_ms: Optional[int] = None
     raw_time = raw.get("timeLimit") or raw.get("time_limit")
-    if isinstance(raw_time, (int, float)):
+    if isinstance(raw_time, int | float):
         # YC reports seconds; convert to ms for downstream uniformity.
         time_limit_ms = int(raw_time * 1000) if raw_time < 100 else int(raw_time)
     memory_limit_bytes: Optional[int] = None
     raw_mem = raw.get("memoryLimit") or raw.get("memory_limit")
-    if isinstance(raw_mem, (int, float)):
+    if isinstance(raw_mem, int | float):
         memory_limit_bytes = int(raw_mem)
     statement_html = raw.get("statement") or raw.get("statementHtml")
     return RemoteProblem(
@@ -574,29 +574,28 @@ class YandexContestAdapter(IntegrationAdapter):
         async def _fetch_statement(alias: str | None) -> Optional[str]:
             if not alias:
                 return None
-            async with sem:
-                async with httpx.AsyncClient(
-                    timeout=get_settings().httpx_timeout_seconds
-                ) as detail_client:
-                    url = (
-                        get_settings().yandex_contest_api_base_url.rstrip("/")
-                        + f"/contests/{contest_id}/problems/{alias}/statement"
+            async with sem, httpx.AsyncClient(
+                timeout=get_settings().httpx_timeout_seconds
+            ) as detail_client:
+                url = (
+                    get_settings().yandex_contest_api_base_url.rstrip("/")
+                    + f"/contests/{contest_id}/problems/{alias}/statement"
+                )
+                # YC declares the endpoint as ``produces:
+                # application/octet-stream`` — sending the default
+                # ``Accept: application/json`` (from _auth_headers)
+                # gets a 406. Override it so the server gives us the
+                # rendered HTML bytes.
+                base_headers = _auth_headers(token)
+                base_headers["Accept"] = "application/octet-stream"
+                try:
+                    resp = await detail_client.get(
+                        url,
+                        params={"locale": "ru"},
+                        headers=base_headers,
                     )
-                    # YC declares the endpoint as ``produces:
-                    # application/octet-stream`` — sending the default
-                    # ``Accept: application/json`` (from _auth_headers)
-                    # gets a 406. Override it so the server gives us the
-                    # rendered HTML bytes.
-                    base_headers = _auth_headers(token)
-                    base_headers["Accept"] = "application/octet-stream"
-                    try:
-                        resp = await detail_client.get(
-                            url,
-                            params={"locale": "ru"},
-                            headers=base_headers,
-                        )
-                    except httpx.HTTPError:
-                        return None
+                except httpx.HTTPError:
+                    return None
             if resp.status_code != 200:
                 return None
             try:

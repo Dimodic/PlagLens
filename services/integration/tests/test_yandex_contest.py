@@ -31,6 +31,12 @@ async def test_yandex_endpoints(client, settings):
                 json={"problems": [{"id": 1, "alias": "A", "name": "МКАД C++"}]},
             )
         )
+        # sync-contest-structure fetches each problem's rendered statement
+        # (GET /problems/{alias}/statement?locale=ru); mock it so the sync
+        # completes instead of raising "not mocked".
+        m.get(base + "/contests/100/problems/A/statement").mock(
+            return_value=Response(200, json={"statement": "<p>Condition for A</p>"})
+        )
         m.get(base + "/contests/100/participants").mock(
             return_value=Response(200, json={"participants": [{"id": 7}]})
         )
