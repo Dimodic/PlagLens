@@ -58,9 +58,10 @@ def _clear_refresh_cookie(response: Response) -> None:
 )
 async def register(
     payload: RegisterRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> RegisterResponse:
-    auth = AuthService(session)
+    auth = AuthService(session, producer=getattr(request.app.state, "producer", None))
     user = await auth.register(
         email=payload.email,
         password=payload.password,
@@ -82,7 +83,7 @@ async def login(
     response: Response,
     session: AsyncSession = Depends(get_session),
 ) -> LoginResponse:
-    auth = AuthService(session)
+    auth = AuthService(session, producer=getattr(request.app.state, "producer", None))
     ip = request.client.host if request.client else None
     ua = request.headers.get("user-agent")
     user, access, refresh, ttl = await auth.login(
@@ -115,10 +116,11 @@ async def login(
 )
 async def logout(
     response: Response,
+    request: Request,
     session: AsyncSession = Depends(get_session),
     refresh: Optional[str] = Cookie(default=None, alias=settings.refresh_cookie_name),
 ) -> Response:
-    auth = AuthService(session)
+    auth = AuthService(session, producer=getattr(request.app.state, "producer", None))
     await auth.logout(refresh_token=refresh)
     _clear_refresh_cookie(response)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
