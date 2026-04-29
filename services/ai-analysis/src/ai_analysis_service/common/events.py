@@ -1,25 +1,16 @@
-"""CloudEvents-compatible envelope utilities."""
+"""CloudEvents envelope for ai-analysis.
+
+Uses the shared :class:`plaglens_common.events.CloudEvent` (no local
+re-definition); ``build_event`` is the single constructor and stamps the
+ai-analysis ``source``.
+"""
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from plaglens_common.events import CloudEvent
 
-
-class CloudEvent(BaseModel):
-    specversion: str = "1.0"
-    id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex}")
-    type: str
-    source: str = "/services/ai-analysis"
-    subject: str | None = None
-    time: datetime = Field(default_factory=lambda: datetime.now(UTC))
-    datacontenttype: str = "application/json"
-    tenant_id: str | None = None
-    actor: dict[str, Any] | None = None
-    trace_id: str | None = None
-    data: dict[str, Any] = Field(default_factory=dict)
+_SOURCE = "/services/ai-analysis"
 
 
 def build_event(
@@ -33,9 +24,13 @@ def build_event(
 ) -> CloudEvent:
     return CloudEvent(
         type=type_,
+        source=_SOURCE,
         tenant_id=tenant_id,
         subject=subject,
         data=data or {},
         actor=actor,
         trace_id=trace_id,
     )
+
+
+__all__ = ["CloudEvent", "build_event"]
