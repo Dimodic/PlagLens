@@ -5,21 +5,16 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
-import uuid
-from datetime import UTC, datetime
 from typing import Any
 
 import structlog
+from plaglens_common.events import CloudEvent
 
 logger = structlog.get_logger(__name__)
 
 # Hard cap on a single Kafka send. If the broker is slow we'd rather drop
 # the notification event than make the user's HTTP request hang.
 _PUBLISH_TIMEOUT_S = 3.0
-
-
-def utcnow() -> datetime:
-    return datetime.now(tz=UTC)
 
 
 def build_envelope(
@@ -32,19 +27,16 @@ def build_envelope(
     source: str = "/services/course",
     trace_id: str | None = None,
 ) -> dict[str, Any]:
-    return {
-        "specversion": "1.0",
-        "id": f"evt_{uuid.uuid4().hex[:24]}",
-        "type": event_type,
-        "source": source,
-        "subject": subject,
-        "time": utcnow().isoformat().replace("+00:00", "Z"),
-        "datacontenttype": "application/json",
-        "tenant_id": tenant_id,
-        "actor": actor,
-        "trace_id": trace_id,
-        "data": data,
-    }
+    """Build a CloudEvents envelope (as a dict) from the shared CloudEvent model."""
+    return CloudEvent(
+        type=event_type,
+        source=source,
+        subject=subject,
+        tenant_id=tenant_id,
+        actor=actor,
+        data=data,
+        trace_id=trace_id,
+    ).model_dump(mode="json")
 
 
 class KafkaProducer:
