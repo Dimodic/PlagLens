@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime
 from typing import Any
+
+from plaglens_common.events import CloudEvent
 
 
 def _evt_id() -> str:
@@ -20,19 +21,16 @@ def build_envelope(
     trace_id: str | None = None,
     source: str = "/services/reporting",
 ) -> dict[str, Any]:
-    return {
-        "specversion": "1.0",
-        "id": _evt_id(),
-        "type": type,
-        "source": source,
-        "subject": subject,
-        "time": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
-        "datacontenttype": "application/json",
-        "tenant_id": tenant_id,
-        "actor": actor or {"type": "system", "id": "reporting-service"},
-        "trace_id": trace_id,
-        "data": data,
-    }
+    """Build a CloudEvents envelope (as a dict) from the shared CloudEvent model."""
+    return CloudEvent(
+        type=type,
+        source=source,
+        subject=subject,
+        tenant_id=tenant_id,
+        actor=actor or {"type": "system", "id": "reporting-service"},
+        data=data,
+        trace_id=trace_id,
+    ).model_dump(mode="json")
 
 
 def parse_envelope(raw: dict[str, Any]) -> dict[str, Any]:

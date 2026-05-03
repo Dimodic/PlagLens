@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import json
-import uuid
-from datetime import UTC, datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 import structlog
+from plaglens_common.events import CloudEvent
 
 from integration_service.config import get_settings
 
@@ -106,18 +105,14 @@ class KafkaBus:
         actor: Optional[Dict[str, str]] = None,
         subject: Optional[str] = None,
     ) -> None:
-        envelope = {
-            "specversion": "1.0",
-            "id": f"evt_{uuid.uuid4().hex[:24]}",
-            "type": event_type,
-            "source": "/services/integration",
-            "subject": subject,
-            "time": datetime.now(UTC).isoformat(),
-            "datacontenttype": "application/json",
-            "tenant_id": tenant_id,
-            "actor": actor or {"type": "service", "id": "integration-service"},
-            "data": data,
-        }
+        envelope = CloudEvent(
+            type=event_type,
+            source="/services/integration",
+            subject=subject,
+            tenant_id=tenant_id,
+            actor=actor or {"type": "service", "id": "integration-service"},
+            data=data,
+        ).model_dump(mode="json")
         if self.producer is None:
             self._fallback.append({"topic": topic, "envelope": envelope})
             logger.debug("kafka.publish.local", topic=topic, type=event_type)
