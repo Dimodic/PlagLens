@@ -41,9 +41,9 @@ def _make_handler():
 
     def handler(request: httpx.Request) -> httpx.Response:
         path = request.url.path
-        # GET /v1/submissions/{id}
-        if path.startswith("/v1/submissions/") and "/files/" not in path:
-            sid = path.removeprefix("/v1/submissions/")
+        # GET /api/v1/submissions/{id}
+        if path.startswith("/api/v1/submissions/") and "/files/" not in path:
+            sid = path.removeprefix("/api/v1/submissions/")
             if sid in submissions:
                 return httpx.Response(200, json=submissions[sid])
             return httpx.Response(404, json={"error": "not_found"})
@@ -125,7 +125,7 @@ async def test_auth_header_attached(monkeypatch):
 
     def handler(request: httpx.Request) -> httpx.Response:
         captured_headers.append(dict(request.headers))
-        if request.url.path == "/v1/submissions/sub_1":
+        if request.url.path == "/api/v1/submissions/sub_1":
             return httpx.Response(
                 200,
                 json={

@@ -81,8 +81,9 @@ async def test_grades_distribution(client_factory, teacher_principal, session_ma
         r = await cli.get("/api/v1/courses/course-1/dashboard/grades-distribution")
         assert r.status_code == 200
         buckets = r.json()["buckets"]
-        # 0-49 had 10 from a1, 85-100 had 5 from a2
-        ranges = {b["range"]: b["count"] for b in buckets}
+        # 0-49 had 10 from a1, 85-100 had 5 from a2. The endpoint maps the
+        # read-model's `range` field to `bucket` (frontend chart dataKey).
+        ranges = {b["bucket"]: b["count"] for b in buckets}
         assert ranges["0-49"] == 10
         assert ranges["85-100"] == 5
 
