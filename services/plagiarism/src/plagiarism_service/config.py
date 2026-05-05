@@ -42,7 +42,6 @@ class Settings(BaseSettings):
     kafka_bootstrap: str = "localhost:9092"
     kafka_consumer_group: str = "plagiarism-service"
     kafka_topic_run: str = "plaglens.plagiarism.run.v1"
-    kafka_topic_report: str = "plaglens.plagiarism.report.v1"
     kafka_topic_submission: str = "plaglens.submission.submission.v1"
     kafka_topic_assignment: str = "plaglens.course.assignment.v1"
     kafka_topic_integration_import: str = "plaglens.integration.import.v1"

@@ -33,7 +33,6 @@ class Settings(BaseSettings):
         "plaglens.submission.grade.v1",
         "plaglens.integration.import.v1",
         "plaglens.plagiarism.run.v1",
-        "plaglens.plagiarism.report.v1",
         "plaglens.ai.analysis.v1",
         "plaglens.ai.budget.v1",
         "plaglens.reporting.export.v1",

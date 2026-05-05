@@ -22,7 +22,6 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from ..common.events import (
-    EVT_REPORT_PUBLISHED,
     EVT_RUN_COMPLETED,
     EVT_RUN_FAILED,
     EVT_RUN_PROGRESS,
@@ -397,7 +396,7 @@ class Orchestrator:
         pairs: list[ResultPair],
         clusters: list[Any],
     ) -> None:
-        # Save pairs / clusters, emit run.completed and report.published.
+        # Save pairs / clusters, emit run.completed (and suspicious_pair if any).
         threshold = threshold_from_options(run.options)
         # Rebuild submission_id → (author_id, display_name) map from the
         # snapshot we stashed in scope at start time. This is what makes
@@ -549,16 +548,6 @@ class Orchestrator:
             tenant_id=run.tenant_id,
             subject=f"plagiarism-runs/{run.id}",
             data=completed_data,
-        )
-        await self._emit(
-            EVT_REPORT_PUBLISHED,
-            tenant_id=run.tenant_id,
-            subject=f"plagiarism-runs/{run.id}",
-            data={
-                "run_id": run.id,
-                "provider": run.provider,
-                "archive_signed_url": signed_archive_url,
-            },
         )
         if suspect_pairs:
             await self._emit(

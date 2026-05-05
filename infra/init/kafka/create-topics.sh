@@ -39,7 +39,6 @@ DOMAIN_TOPICS=(
     "plaglens.integration.import.v1"
     "plaglens.integration.config.v1"
     "plaglens.plagiarism.run.v1"
-    "plaglens.plagiarism.report.v1"
     "plaglens.ai.analysis.v1"
     "plaglens.ai.budget.v1"
     "plaglens.notification.delivery.v1"
