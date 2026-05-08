@@ -36,7 +36,6 @@ class Settings(BaseSettings):
         "plaglens.ai.analysis.v1",
         "plaglens.ai.budget.v1",
         "plaglens.reporting.export.v1",
-        "plaglens.operation.v1",
     )
 
     JWT_PUBLIC_KEY_PATH: str | None = None

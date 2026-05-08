@@ -43,7 +43,6 @@ DOMAIN_TOPICS=(
     "plaglens.ai.budget.v1"
     "plaglens.notification.delivery.v1"
     "plaglens.reporting.export.v1"
-    "plaglens.operation.v1"
     "plaglens.audit.event.v1"
 )
 
