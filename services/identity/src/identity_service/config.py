@@ -34,7 +34,9 @@ class Settings(BaseSettings):
     kafka_brokers: str = "localhost:9092"
     kafka_topic_user: str = "plaglens.identity.user.v1"
     kafka_topic_tenant: str = "plaglens.identity.tenant.v1"
-    kafka_topic_session: str = "plaglens.identity.session.v1"
+    # Session lifecycle events (session.created/revoked) ride the user topic —
+    # there is no dedicated session topic. They are consumed by Audit (which
+    # subscribes by pattern), so a separate topic would add no value.
 
     # ---- JWT ----
     jwt_private_key_path: str = "keys/jwt-private.pem"

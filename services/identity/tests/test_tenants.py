@@ -52,7 +52,7 @@ async def test_tenant_settings_roundtrip(client, auth_super_admin, seed_tenant):
 
 
 @pytest.mark.asyncio
-async def test_tenant_suspend_activate(client, auth_super_admin, seed_tenant):
+async def test_tenant_suspend_activate(client, app, auth_super_admin, seed_tenant):
     r1 = await client.post(
         f"/api/v1/tenants/{seed_tenant.id}:suspend", headers=auth_super_admin
     )
@@ -63,3 +63,44 @@ async def test_tenant_suspend_activate(client, auth_super_admin, seed_tenant):
     )
     assert r2.status_code == 200
     assert r2.json()["status"] == "active"
+    emitted = {ev.type for _, ev in app.state.producer.events}
+    assert "identity.tenant.suspended.v1" in emitted
+    assert "identity.tenant.activated.v1" in emitted
+
+
+@pytest.mark.asyncio
+async def test_create_tenant_emits_event(client, app, auth_super_admin):
+    r = await client.post(
+        "/api/v1/tenants",
+        json={"name": "HSE"},
+        headers=auth_super_admin,
+    )
+    assert r.status_code == 201, r.text
+    created = [
+        (topic, ev)
+        for topic, ev in app.state.producer.events
+        if ev.type == "identity.tenant.created.v1"
+    ]
+    assert created, "expected an identity.tenant.created.v1 event"
+    topic, ev = created[0]
+    assert topic == "plaglens.identity.tenant.v1"
+    assert ev.data["tenant_id"] == r.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_delete_tenant_emits_event(client, app, auth_super_admin, seed_tenant):
+    # Downstream services (Course archives courses, Integration tears down its
+    # per-tenant config) act on this event, so the contract matters.
+    r = await client.delete(
+        f"/api/v1/tenants/{seed_tenant.id}", headers=auth_super_admin
+    )
+    assert r.status_code == 204, r.text
+    deleted = [
+        (topic, ev)
+        for topic, ev in app.state.producer.events
+        if ev.type == "identity.tenant.deleted.v1"
+    ]
+    assert deleted, "expected an identity.tenant.deleted.v1 event"
+    topic, ev = deleted[0]
+    assert topic == "plaglens.identity.tenant.v1"
+    assert ev.data["tenant_id"] == seed_tenant.id

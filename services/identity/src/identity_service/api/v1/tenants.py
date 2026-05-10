@@ -1,15 +1,18 @@
 """Section F — Tenants."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import make_event
 from ...common.ids import tenant_id as new_tenant_id
 from ...common.pagination import Page, Pagination
 from ...common.problem import ProblemException
 from ...common.slug import slugify, unique_slug
+from ...config import settings
 from ...deps import (
     CurrentUser,
     assert_same_tenant,
@@ -29,6 +32,30 @@ from ...schemas.tenants import (
 )
 
 router = APIRouter(prefix="/tenants", tags=["tenants"])
+
+logger = logging.getLogger(__name__)
+
+
+async def _emit_tenant_event(request: Request, event_type: str, t: Tenant) -> None:
+    """Publish a tenant-lifecycle CloudEvent (best-effort).
+
+    Downstream consumers act on these: e.g. the Course service archives all
+    courses on ``identity.tenant.deleted.v1`` and Integration tears down its
+    per-tenant config. Mirrors ``AuthService._emit_user_event``.
+    """
+    producer = getattr(request.app.state, "producer", None)
+    if producer is None:
+        return
+    event = make_event(
+        event_type,
+        data={"tenant_id": t.id, "slug": t.slug, "name": t.name, "status": t.status},
+        tenant_id=t.id,
+        subject=f"tenants/{t.id}",
+    )
+    try:
+        await producer.publish(settings.kafka_topic_tenant, event)
+    except Exception as exc:  # pragma: no cover - producer is best-effort
+        logger.warning("Failed to publish %s: %s", event_type, exc)
 
 
 def _tenant_to_out(t: Tenant) -> TenantOut:
@@ -66,6 +93,7 @@ async def list_tenants(
 )
 async def create_tenant(
     payload: TenantCreate,
+    request: Request,
     user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
@@ -87,7 +115,7 @@ async def create_tenant(
         settings=payload.settings,
     )
     await repo.add(t)
-    # TODO: emit identity.tenant.created.v1
+    await _emit_tenant_event(request, "identity.tenant.created.v1", t)
     return _tenant_to_out(t)
 
 
@@ -137,6 +165,7 @@ async def update_tenant(
 )
 async def delete_tenant(
     tenant_id: str,
+    request: Request,
     user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> Response:
@@ -145,6 +174,7 @@ async def delete_tenant(
     if t is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
     t.deleted_at = datetime.now(timezone.utc)
+    await _emit_tenant_event(request, "identity.tenant.deleted.v1", t)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -155,6 +185,7 @@ async def delete_tenant(
 )
 async def suspend_tenant(
     tenant_id: str,
+    request: Request,
     user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
@@ -163,6 +194,7 @@ async def suspend_tenant(
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
     t.status = "suspended"
+    await _emit_tenant_event(request, "identity.tenant.suspended.v1", t)
     return _tenant_to_out(t)
 
 
@@ -173,6 +205,7 @@ async def suspend_tenant(
 )
 async def activate_tenant(
     tenant_id: str,
+    request: Request,
     user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
@@ -181,6 +214,7 @@ async def activate_tenant(
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
     t.status = "active"
+    await _emit_tenant_event(request, "identity.tenant.activated.v1", t)
     return _tenant_to_out(t)
 
 

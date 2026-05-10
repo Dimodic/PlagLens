@@ -37,7 +37,9 @@ class SessionRepository:
         return session_obj
 
     async def revoke(self, session_id: str) -> None:
-        # TODO: emit identity.session.revoked.v1
+        # Note: the ``identity.session.revoked.v1`` event is emitted by the
+        # caller (AuthService.logout, /users/me session endpoints), not here —
+        # the repository has no producer and stays purely data-layer.
         stmt = (
             update(Session)
             .where(Session.id == session_id, Session.revoked_at.is_(None))
