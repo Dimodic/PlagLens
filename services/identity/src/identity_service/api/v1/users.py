@@ -353,19 +353,9 @@ async def list_user_sessions(
     )
 
 
-@router.get(
-    "/{target_user_id}/audit",
-    summary="Per-user activity log (Audit Service proxy, stubbed)",
-)
-async def get_user_audit(
-    target_user_id: str,  # noqa: ARG001
-    user: CurrentUser = Depends(current_user),  # noqa: ARG001
-) -> dict[str, str]:
-    raise ProblemException(
-        status=501,
-        code="NOT_IMPLEMENTED",
-        title="Audit Service is not yet online",
-    )
+# Per-user audit (``GET /api/v1/users/{id}/audit``) is served by the Audit
+# Service shortcut route; the gateway routes that suffix straight to audit, so
+# identity no longer carries a stub proxy here.
 
 
 @router.post(

@@ -277,17 +277,6 @@ async def get_tenant_usage(
     return TenantUsageOut(tenant_id=tenant_id)
 
 
-@router.get(
-    "/{tenant_id}/audit",
-    summary="Tenant-level audit log (proxy to Audit Service)",
-)
-async def get_tenant_audit(
-    tenant_id: str,  # noqa: ARG001
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),  # noqa: ARG001
-) -> dict[str, str]:
-    raise ProblemException(
-        status=501,
-        code="NOT_IMPLEMENTED",
-        title="Audit Service is not yet online",
-        detail="The UI should fall back to the Audit Service directly.",
-    )
+# Tenant-level audit is served by the Audit Service's tenant-scoped
+# ``GET /api/v1/audit/events`` (a tenant admin only ever sees their own
+# tenant's events), so identity no longer carries a stub proxy here.

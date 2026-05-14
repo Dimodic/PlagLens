@@ -112,6 +112,11 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/sheets", "reporting", "default"),
     # Audit
     Route("/api/v1/audit", "audit", "default"),
+    # Per-resource audit shortcuts live in the Audit service. These are more
+    # specific than the /api/v1/users → identity and /api/v1/courses → course
+    # prefixes, so longest-prefix matching routes just the `/audit` suffix here.
+    Route("/api/v1/users/{id}/audit", "audit", "default"),
+    Route("/api/v1/courses/{id}/audit", "audit", "default"),
     # Admin (delegated by sub-path) — fall-through to identity by default
     Route("/api/v1/admin/users", "identity", "default"),
     Route("/api/v1/admin/tenants", "identity", "default"),

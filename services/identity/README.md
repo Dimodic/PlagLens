@@ -116,8 +116,10 @@ service still starts; only the disabled provider rejects calls.
   Service in `services/email_service.py`.
 - **Vault**: 2FA secrets are encrypted with a Fernet key from env (`TOTP_FERNET_KEY`).
   Production target is Vault transit encryption.
-- **Audit Service proxy**: `/tenants/{id}/audit`, `/users/{id}/audit` return 501
-  with `Problem` until Audit Service is online; UI fallback hits Audit directly.
+- **Audit**: per-resource audit logs are owned by the Audit Service. The
+  gateway routes `/users/{id}/audit` and `/courses/{id}/audit` straight to it;
+  tenant-level audit is the tenant-scoped `GET /audit/events`. Identity no
+  longer carries proxy stubs for these.
 - **MinIO avatar upload**: `/users/me/avatar` accepts multipart but persists only
   metadata; binary upload to MinIO is a TODO.
 - **Course Service cross-call**: course-role lookups inside `GET /users/me`

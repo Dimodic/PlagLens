@@ -18,6 +18,20 @@ def test_routing_table_specificity():
     assert r.backend == "course"
 
 
+def test_per_resource_audit_shortcuts_go_to_audit():
+    # The Audit service owns /users/{id}/audit and /courses/{id}/audit; these
+    # are more specific than the /users → identity and /courses → course
+    # prefixes, so just the `/audit` suffix must resolve to audit.
+    r = match("/api/v1/users/usr_1/audit")
+    assert r is not None and r.backend == "audit"
+    r = match("/api/v1/courses/crs_1/audit")
+    assert r is not None and r.backend == "audit"
+    # ...without shadowing the generic user/course routes.
+    assert match("/api/v1/users/usr_1").backend == "identity"
+    assert match("/api/v1/users/usr_1/sessions").backend == "identity"
+    assert match("/api/v1/courses/crs_1").backend == "course"
+
+
 def test_submission_subresources_go_to_owning_services():
     # AI analyses for a submission must hit ai-analysis, not submission.
     r = match("/api/v1/submissions/sub_1/ai-analyses")
