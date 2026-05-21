@@ -684,7 +684,9 @@ services:
       - traefik-acme:/etc/traefik/acme
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
-      LETS_ENCRYPT_EMAIL: ${LETS_ENCRYPT_EMAIL:-admin@plaglens.local}
+      # LE rejects non-public TLDs (e.g. .local), so the default must be a
+      # syntactically valid public address even if no real mailbox lives there.
+      LETS_ENCRYPT_EMAIL: ${LETS_ENCRYPT_EMAIL:-admin@plaglens.ru}
 
   mailhog:
     image: mailhog/mailhog:latest

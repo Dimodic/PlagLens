@@ -24,48 +24,48 @@ http:
       rule: "Host(`grafana.localhost`)"
       entryPoints: [websecure]
       service: grafana
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
     jaeger:
       rule: "Host(`jaeger.localhost`)"
       entryPoints: [websecure]
       service: jaeger
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
     kafka-ui:
       rule: "Host(`kafka.localhost`)"
       entryPoints: [websecure]
       service: kafka-ui
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
     mailhog:
       rule: "Host(`mail.localhost`)"
       entryPoints: [websecure]
       service: mailhog
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
     minio:
       rule: "Host(`minio.localhost`)"
       entryPoints: [websecure]
       service: minio
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
     vault:
       rule: "Host(`vault.localhost`)"
       entryPoints: [websecure]
       service: vault
-      tls:
-        certResolver: letsencrypt
+      tls: {}
+
       middlewares: [secure-headers]
 
   services:

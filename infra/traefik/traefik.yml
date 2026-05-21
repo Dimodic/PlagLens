@@ -54,8 +54,10 @@ certificatesResolvers:
     acme:
       email: "${LETS_ENCRYPT_EMAIL}"
       storage: /etc/traefik/acme/acme.json
-      # Dev: use the LE staging CA so we don't burn rate limits with self-issued
-      # cert experiments. Switch to the production directory in prod overrides.
-      caServer: "https://acme-staging-v02.api.letsencrypt.org/directory"
+      # Let's Encrypt PRODUCTION. Browsers do not trust the staging CA, so for
+      # any public host (including nip.io) we need production certs. Switch to
+      # the staging URL via ``caServer`` if you are debugging issuance — the
+      # 50 certs/week rate limit makes prod unsuitable for quick iteration.
+      caServer: "https://acme-v02.api.letsencrypt.org/directory"
       httpChallenge:
         entryPoint: web
