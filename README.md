@@ -7,14 +7,12 @@ plagiarism engines (JPlag, MOSS, Dolos, Codequiry); runs LLM analysis
 against an OpenAI-compatible API; and surfaces the results to teachers
 and students through a single FastAPI gateway.
 
-> Status: KT-1 (architecture report). Service implementations are in
-> active development; this repository is the source-of-truth for the
-> target architecture and the dev tooling.
-
-Architecture is documented in detail in
-[`docs/architecture/README.md`](docs/architecture/README.md).
-Start there if you want the design rationale; start here if you want
-to run the stack.
+Architecture is documented in
+[`docs/architecture/PROJECT-MAP.md`](docs/architecture/PROJECT-MAP.md)
+(current 7-service topology — source of truth). The original KT-1 report
+lives under [`docs/architecture/legacy/`](docs/architecture/legacy/) and is
+kept as an academic artefact. Start in PROJECT-MAP if you want the design
+rationale; start here if you want to run the stack.
 
 ## Architecture at a glance
 
@@ -24,8 +22,7 @@ flowchart LR
     GW[API Gateway]
     subgraph Domain
         ID[Identity]
-        CS[Course]
-        SS[Submission]
+        CS[Course-Submission]
     end
     subgraph Processing
         PS[Plagiarism]
@@ -33,9 +30,7 @@ flowchart LR
     end
     subgraph Integration
         IS[Integration]
-        NS[Notification]
-        RS[Reporting]
-        AS[Audit]
+        RP[Reporting<br/>audit + notification]
     end
     subgraph Infra
         PG[(Postgres)]
@@ -44,16 +39,16 @@ flowchart LR
         S3[(MinIO)]
     end
     User --> GW
-    GW --> ID & CS & SS & PS & AI & IS & NS & RS & AS
-    ID & CS & SS & PS & AI & IS & NS & RS & AS --> PG
-    ID & GW & NS --> RD
-    SS & PS & RS --> S3
-    ID & CS & SS & IS & PS & AI & NS & RS & AS --> KF
+    GW --> ID & CS & PS & AI & IS & RP
+    ID & CS & PS & AI & IS & RP --> PG
+    ID & GW & RP --> RD
+    CS & PS & RP --> S3
+    ID & CS & IS & PS & AI & RP --> KF
 ```
 
-Ten services, schema-per-service Postgres, Kafka for events, Redis for
-cache + rate-limiting, MinIO for files. See
-[`docs/architecture/00-OVERVIEW.md`](docs/architecture/00-OVERVIEW.md)
+Seven application services, schema-per-service Postgres, Kafka for events,
+Redis for cache + rate-limiting, MinIO for files. See
+[`docs/architecture/PROJECT-MAP.md`](docs/architecture/PROJECT-MAP.md)
 for the full picture.
 
 ## Quickstart
@@ -115,12 +110,12 @@ or `http://localhost:3000` for the bundled Grafana dashboard.
 
 ```
 .
-├── docs/architecture/         design docs (KT-1 deliverable)
+├── docs/architecture/         PROJECT-MAP.md (current) + legacy/ (KT-1)
 ├── infra/                     docker-compose, prometheus, grafana, traefik
 ├── libs/plaglens-common/      shared Python lib (errors, observability, rbac)
-├── services/                  10 service projects (FastAPI + SQLAlchemy)
-│   ├── gateway/    identity/    course/    submission/   integration/
-│   ├── plagiarism/ ai-analysis/ notification/ reporting/  audit/
+├── services/                  7 application services (FastAPI + SQLAlchemy)
+│   ├── gateway/    identity/    course-submission/   integration/
+│   ├── plagiarism/ ai-analysis/ reporting/
 ├── tools/
 │   ├── e2e/                   pytest end-to-end suite
 │   └── scripts/               operator scripts (seed data, health probe)

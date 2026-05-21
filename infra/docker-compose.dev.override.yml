@@ -58,9 +58,9 @@ services:
     ports:
       - "8007:8000"
 
-  # reporting + audit + notification merged into one service; expose a host
-  # port for direct debugging.
-  reporting-audit-notification:
+  # reporting + audit + notification merged into one "reporting" service;
+  # expose a host port for direct debugging.
+  reporting:
     <<: *svc-dev-defaults
     ports:
       - "8008:8000"

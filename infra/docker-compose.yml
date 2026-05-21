@@ -1,7 +1,7 @@
 # PlagLens — main Docker Compose stack
 # 7 application services + supporting infrastructure
 # (course+submission merged into "course-submission";
-#  reporting+audit+notification merged into "reporting-audit-notification")
+#  reporting+audit+notification merged into "reporting")
 # Usage: cp .env.example .env && docker compose up -d
 
 name: plaglens
@@ -91,11 +91,11 @@ services:
       GATEWAY_BACKEND_INTEGRATION: http://integration:8000
       GATEWAY_BACKEND_PLAGIARISM: http://plagiarism:8000
       GATEWAY_BACKEND_AI_ANALYSIS: http://ai-analysis:8000
-      # reporting + audit + notification merged into one service. All three
-      # routing-table backends resolve to it (routing table unchanged).
-      GATEWAY_BACKEND_NOTIFICATION: http://reporting-audit-notification:8000
-      GATEWAY_BACKEND_REPORTING: http://reporting-audit-notification:8000
-      GATEWAY_BACKEND_AUDIT: http://reporting-audit-notification:8000
+      # reporting + audit + notification merged into one "reporting" service.
+      # All three routing-table backends resolve to it (routing table unchanged).
+      GATEWAY_BACKEND_NOTIFICATION: http://reporting:8000
+      GATEWAY_BACKEND_REPORTING: http://reporting:8000
+      GATEWAY_BACKEND_AUDIT: http://reporting:8000
       GATEWAY_JWKS_URL: http://identity:8000/api/v1/.well-known/jwks.json
       GATEWAY_REDIS_URL: redis://redis:6379/0
       GATEWAY_JWT_ISSUER: ${JWT_ISSUER:-https://plaglens.local}
@@ -326,23 +326,23 @@ services:
       retries: 5
       start_period: 60s
 
-  # reporting + audit + notification merged into ONE service (Phase 4 refactor).
-  # One Postgres DB, three schemas (reporting + audit + notification); the
-  # reporting_audit_notification_app role owns all three. Each sub-service keeps
-  # its own engine + Kafka consumer group; reporting<->audit talk via in-container
-  # loopback (their *_BASE_URL point at self). The src packages live on as libs.
-  reporting-audit-notification:
+  # reporting + audit + notification merged into ONE "reporting" service
+  # (Phase 4 refactor). One Postgres DB, three schemas (reporting + audit +
+  # notification); the reporting_app role owns all three. Each sub-service
+  # keeps its own engine + Kafka consumer group; reporting<->audit talk via
+  # in-container loopback (their *_BASE_URL point at self).
+  reporting:
     <<: *svc-defaults
     build:
       context: ..
-      dockerfile: services/reporting-audit-notification/Dockerfile
-    image: plaglens/reporting-audit-notification:${IMAGE_TAG:-dev}
-    container_name: plaglens-reporting-audit-notification
+      dockerfile: services/reporting/Dockerfile
+    image: plaglens/reporting:${IMAGE_TAG:-dev}
+    container_name: plaglens-reporting
     environment:
       <<: *common-env
-      SERVICE_NAME: reporting-audit-notification
+      SERVICE_NAME: reporting
       PORT: "8000"
-      DATABASE_URL: postgresql+asyncpg://reporting_audit_notification_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
+      DATABASE_URL: postgresql+asyncpg://reporting_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
       # reporting reads *_SERVICE_BASE_URL (NOT *_BASE_URL); point at the merged
       # course-submission service, identity + integration, and SELF for the two
       # internal reporting<->audit hops.
@@ -350,8 +350,8 @@ services:
       SUBMISSION_SERVICE_BASE_URL: http://course-submission:8000
       IDENTITY_SERVICE_BASE_URL: http://identity:8000
       INTEGRATION_SERVICE_BASE_URL: http://integration:8000
-      AUDIT_SERVICE_BASE_URL: http://reporting-audit-notification:8000
-      REPORTING_BASE_URL: http://reporting-audit-notification:8000
+      AUDIT_SERVICE_BASE_URL: http://reporting:8000
+      REPORTING_BASE_URL: http://reporting:8000
       GOOGLE_SERVICE_ACCOUNT_JSON_PATH: /run/secrets/google_sa.json
       # notification email transport (dev → Mailhog; these match the real
       # EMAIL_TRANSPORT/SMTP_* setting names the service reads).

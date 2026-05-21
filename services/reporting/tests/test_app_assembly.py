@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from collections import Counter
 
-from reporting_audit_notification_service.main import create_app
+from reporting_app.main import create_app
 
 
 def _routes(app):

@@ -21,17 +21,15 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # 7 application services (post-merge topology).
         service:
           - gateway
           - identity
-          - course
-          - submission
+          - course-submission
           - integration
           - plagiarism
           - ai-analysis
-          - notification
           - reporting
-          - audit
     steps:
       - uses: actions/checkout@v4
 

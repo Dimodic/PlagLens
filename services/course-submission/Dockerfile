@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.6
 # Merged course+submission service.
-# Build context MUST be the project root (so we can COPY libs/ + both services).
+# Build context MUST be the project root (so we can COPY libs/ + this service).
 # Example: docker build -f services/course-submission/Dockerfile -t plaglens/course-submission .
 
 # ---- Stage 1: builder ----
@@ -19,16 +19,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Build wheels for the shared lib + both source services + the merged service.
+# Shared lib wheel first, then the single merged service wheel that bundles
+# course_service + submission_service + course_submission_service together.
 COPY libs/plaglens-common /opt/plaglens-common
 RUN pip install --upgrade pip wheel build \
     && pip wheel --wheel-dir /wheels /opt/plaglens-common
-
-COPY services/course /opt/course
-RUN pip wheel --wheel-dir /wheels --find-links /wheels /opt/course
-
-COPY services/submission /opt/submission
-RUN pip wheel --wheel-dir /wheels --find-links /wheels /opt/submission
 
 COPY services/course-submission/pyproject.toml ./
 COPY services/course-submission/src ./src
@@ -56,8 +51,8 @@ RUN pip install --no-index --find-links=/wheels plaglens-course-submission-servi
     rm -rf /wheels
 
 # Alembic for both schemas (one DB, two schemas: course + submission).
-COPY services/course/alembic ./course_alembic
-COPY services/submission/alembic ./submission_alembic
+COPY services/course-submission/course_alembic ./course_alembic
+COPY services/course-submission/submission_alembic ./submission_alembic
 COPY services/course-submission/course_alembic.ini ./course_alembic.ini
 COPY services/course-submission/submission_alembic.ini ./submission_alembic.ini
 COPY services/course-submission/entrypoint.sh /app/entrypoint.sh

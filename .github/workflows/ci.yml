@@ -24,17 +24,17 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - {kind: service, name: gateway,      path: services/gateway}
-          - {kind: service, name: identity,     path: services/identity}
-          - {kind: service, name: course,       path: services/course}
-          - {kind: service, name: submission,   path: services/submission}
-          - {kind: service, name: integration,  path: services/integration}
-          - {kind: service, name: plagiarism,   path: services/plagiarism}
-          - {kind: service, name: ai-analysis,  path: services/ai-analysis}
-          - {kind: service, name: notification, path: services/notification}
-          - {kind: service, name: reporting,    path: services/reporting}
-          - {kind: service, name: audit,        path: services/audit}
-          - {kind: lib,     name: plaglens-common, path: libs/plaglens-common}
+          # 7 application services + 1 shared lib (post-merge topology).
+          # course + submission live inside course-submission as packaged subdirs.
+          # reporting + audit + notification live inside reporting as packaged subdirs.
+          - {kind: service, name: gateway,           path: services/gateway}
+          - {kind: service, name: identity,          path: services/identity}
+          - {kind: service, name: course-submission, path: services/course-submission}
+          - {kind: service, name: integration,       path: services/integration}
+          - {kind: service, name: plagiarism,        path: services/plagiarism}
+          - {kind: service, name: ai-analysis,       path: services/ai-analysis}
+          - {kind: service, name: reporting,         path: services/reporting}
+          - {kind: lib,     name: plaglens-common,   path: libs/plaglens-common}
     steps:
       - uses: actions/checkout@v4
 

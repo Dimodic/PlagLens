@@ -84,27 +84,27 @@ END
 -- schema-qualified, so search_path only matters for the public extensions.
 DO \$\$
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_audit_notification_app') THEN
-        EXECUTE format('CREATE ROLE reporting_audit_notification_app LOGIN PASSWORD %L', '${APP_PASSWORD}');
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'reporting_app') THEN
+        EXECUTE format('CREATE ROLE reporting_app LOGIN PASSWORD %L', '${APP_PASSWORD}');
     ELSE
-        EXECUTE format('ALTER ROLE reporting_audit_notification_app WITH PASSWORD %L', '${APP_PASSWORD}');
+        EXECUTE format('ALTER ROLE reporting_app WITH PASSWORD %L', '${APP_PASSWORD}');
     END IF;
-    EXECUTE format('GRANT CONNECT ON DATABASE %I TO reporting_audit_notification_app', current_database());
-    EXECUTE format('GRANT CREATE ON DATABASE %I TO reporting_audit_notification_app', current_database());
-    ALTER SCHEMA reporting OWNER TO reporting_audit_notification_app;
-    ALTER SCHEMA audit OWNER TO reporting_audit_notification_app;
-    ALTER SCHEMA notification OWNER TO reporting_audit_notification_app;
-    GRANT USAGE, CREATE ON SCHEMA reporting TO reporting_audit_notification_app;
-    GRANT USAGE, CREATE ON SCHEMA audit TO reporting_audit_notification_app;
-    GRANT USAGE, CREATE ON SCHEMA notification TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
-    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_audit_notification_app;
-    ALTER ROLE reporting_audit_notification_app SET search_path TO reporting, audit, notification, public;
-    RAISE NOTICE 'Provisioned role reporting_audit_notification_app for schemas reporting+audit+notification';
+    EXECUTE format('GRANT CONNECT ON DATABASE %I TO reporting_app', current_database());
+    EXECUTE format('GRANT CREATE ON DATABASE %I TO reporting_app', current_database());
+    ALTER SCHEMA reporting OWNER TO reporting_app;
+    ALTER SCHEMA audit OWNER TO reporting_app;
+    ALTER SCHEMA notification OWNER TO reporting_app;
+    GRANT USAGE, CREATE ON SCHEMA reporting TO reporting_app;
+    GRANT USAGE, CREATE ON SCHEMA audit TO reporting_app;
+    GRANT USAGE, CREATE ON SCHEMA notification TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE ON TABLES TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA reporting GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA audit GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_app;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA notification GRANT USAGE, SELECT, UPDATE ON SEQUENCES TO reporting_app;
+    ALTER ROLE reporting_app SET search_path TO reporting, audit, notification, public;
+    RAISE NOTICE 'Provisioned role reporting_app for schemas reporting+audit+notification';
 END
 \$\$;
 EOSQL

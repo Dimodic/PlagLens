@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     app = FastAPI(
-        title="PlagLens Reporting+Audit+Notification Service",
+        title="PlagLens Reporting Service",
         version="0.1.0",
         lifespan=lifespan,
     )
@@ -134,12 +134,10 @@ def create_app() -> FastAPI:
     app.include_router(_notification_v1_router)
 
     # --- Single shared health/metrics/version surface -----------------------
-    app.include_router(
-        health_router(service_name="reporting-audit-notification", version="0.1.0")
-    )
+    app.include_router(health_router(service_name="reporting", version="0.1.0"))
 
     # Real app metrics (Prometheus) + traces (OpenTelemetry -> Jaeger).
-    install_observability(app, service_name="reporting-audit-notification")
+    install_observability(app, service_name="reporting")
     return app
 
 
