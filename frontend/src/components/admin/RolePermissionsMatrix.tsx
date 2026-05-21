@@ -1,68 +1,94 @@
 /**
- * Read-only matrix of roles × permissions for admin reference.
+ * Editable matrix of roles × permissions.
+ *
+ * Rows = the permission catalogue (with a Russian description + an (i) tooltip
+ * showing the technical permission key). Columns = global roles. Each cell is a
+ * checkbox; toggling persists via the parent's onToggle (PATCH).
  */
-import { Check, X } from 'lucide-react';
-import { Card, CardContent } from '@/components/ui/card';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Info } from 'lucide-react';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import type { GlobalRole } from '@/api/types';
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+import { roleLabel } from '@/lib/roles';
+import type { PermissionMeta } from '@/api/endpoints/system';
 
 interface Props {
-  permissions: string[];
-  matrix: Record<GlobalRole, Record<string, boolean>>;
+  permissions: PermissionMeta[];
+  roles: string[];
+  granted: Record<string, Set<string>>;
+  onToggle: (role: string, permission: string, checked: boolean) => void;
+  disabled?: boolean;
 }
 
-const ROLES: GlobalRole[] = ['admin', 'teacher', 'assistant', 'student'];
-
-export function RolePermissionsMatrix({ permissions, matrix }: Props) {
+export function RolePermissionsMatrix({
+  permissions,
+  roles,
+  granted,
+  onToggle,
+  disabled,
+}: Props) {
   return (
-    <Card>
-      <CardContent className="p-4">
-        <div className="space-y-2">
-          <h5 className="text-base font-medium">Roles × Permissions</h5>
-          <p className="text-xs text-muted-foreground">
-            Read-only reference matrix. Источник правды — backend RBAC config.
-          </p>
-          <ScrollArea>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>permission</TableHead>
-                  {ROLES.map((r) => (
-                    <TableHead key={r}>{r}</TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {permissions.map((p) => (
-                  <TableRow key={p}>
-                    <TableCell>
-                      <span className="font-mono text-xs">{p}</span>
-                    </TableCell>
-                    {ROLES.map((r) => (
-                      <TableCell key={r}>
-                        {matrix[r]?.[p] ? (
-                          <Check className="h-4 w-4 text-sev-low" />
-                        ) : (
-                          <X className="h-4 w-4 text-muted-foreground" />
-                        )}
-                      </TableCell>
-                    ))}
-                  </TableRow>
+    <TooltipProvider delayDuration={200}>
+      <div className="overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b">
+              <th className="py-2.5 pr-4 text-left font-medium text-muted-foreground">
+                Разрешение
+              </th>
+              {roles.map((r) => (
+                <th
+                  key={r}
+                  className="px-3 py-2.5 text-center font-medium text-foreground"
+                >
+                  {roleLabel(r)}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {permissions.map((p) => (
+              <tr key={p.permission} data-testid={`perm-row-${p.permission}`}>
+                <td className="py-3 pr-4">
+                  <div className="flex items-center gap-1.5">
+                    <span>{p.description ?? p.permission}</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex"
+                          aria-label={p.permission}
+                        >
+                          <Info className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <span className="font-mono text-xs">{p.permission}</span>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </td>
+                {roles.map((r) => (
+                  <td key={r} className="px-3 py-3 text-center">
+                    <Checkbox
+                      checked={granted[r]?.has(p.permission) ?? false}
+                      disabled={disabled}
+                      onCheckedChange={(v) => onToggle(r, p.permission, v === true)}
+                      aria-label={`${roleLabel(r)} — ${p.permission}`}
+                      data-testid={`perm-${p.permission}-${r}`}
+                    />
+                  </td>
                 ))}
-              </TableBody>
-            </Table>
-          </ScrollArea>
-        </div>
-      </CardContent>
-    </Card>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </TooltipProvider>
   );
 }
 

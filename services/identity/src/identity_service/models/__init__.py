@@ -7,6 +7,7 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     ARRAY,
+    Boolean,
     DateTime,
     ForeignKey,
     LargeBinary,
@@ -311,6 +312,23 @@ class Invitation(Base):
     )
 
 
+# --------------------------------------------------------------------------- #
+# Role permission overrides (editable RBAC matrix)
+# --------------------------------------------------------------------------- #
+class RolePermission(Base):
+    """One row per (role, permission) once an admin customises the matrix.
+
+    Absence of any rows for a role means "use the static defaults"
+    (PERMISSIONS_BY_GLOBAL_ROLE); once edited, the stored rows are authoritative.
+    """
+
+    __tablename__ = "role_permissions"
+
+    role: Mapped[str] = mapped_column(String(32), primary_key=True)
+    permission: Mapped[str] = mapped_column(String(64), primary_key=True)
+    granted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
 __all__ = [
     "Base",
     "Tenant",
@@ -323,4 +341,5 @@ __all__ = [
     "EmailVerifyToken",
     "TwoFactorSecret",
     "Invitation",
+    "RolePermission",
 ]

@@ -30,6 +30,16 @@ export interface SystemVersion {
   environment?: string;
 }
 
+export interface RoleMeta {
+  role: string;
+  description?: string | null;
+}
+
+export interface PermissionMeta {
+  permission: string;
+  description?: string | null;
+}
+
 export interface RolePermissions {
   role: string;
   permissions: string[];
@@ -37,21 +47,27 @@ export interface RolePermissions {
 
 export const systemApi = {
   // Gateway-owned endpoints; BASE_URL already prepends `/api/v1`.
-  // Earlier this file used `'/v1/services-status'` which produced the buggy
-  // `/api/v1/v1/services-status` URL (double `/v1/`).
   servicesStatus: () =>
     api.get<ServicesStatus>('/services-status').then((r) => r.data),
 
   version: () =>
     api.get<SystemVersion>('/version').then((r) => r.data),
 
+  // GET /roles returns a bare array of { role, description }.
   listRoles: () =>
-    api
-      .get<{ data: Array<{ name: string; description?: string }> }>('/roles')
-      .then((r) => r.data.data),
+    api.get<RoleMeta[]>('/roles').then((r) => r.data),
+
+  // GET /permissions — the full permission catalogue (matrix rows).
+  permissionsCatalogue: () =>
+    api.get<PermissionMeta[]>('/permissions').then((r) => r.data),
 
   rolePermissions: (role: string) =>
     api
       .get<RolePermissions>(`/roles/${role}/permissions`)
+      .then((r) => r.data),
+
+  updateRolePermissions: (role: string, permissions: string[]) =>
+    api
+      .patch<RolePermissions>(`/roles/${role}/permissions`, { permissions })
       .then((r) => r.data),
 };

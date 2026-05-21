@@ -61,6 +61,7 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/tenants/{id}/ai", "ai-analysis", "default"),
     Route("/api/v1/tenants", "identity", "default"),
     Route("/api/v1/roles", "identity", "default"),
+    Route("/api/v1/permissions", "identity", "default"),
     Route("/api/v1/invitations", "identity", "default"),
     Route("/api/v1/.well-known", "identity", "default"),
     # Homework — Course → Homework → Assignment hierarchy.

@@ -9,8 +9,21 @@ class RoleOut(BaseModel):
     description: str | None = None
 
 
+class PermissionOut(BaseModel):
+    """One entry of the permission catalogue (matrix row)."""
+
+    permission: str
+    description: str | None = None
+
+
 class RolePermissionsOut(BaseModel):
     role: str
+    permissions: list[str] = Field(default_factory=list)
+
+
+class RolePermissionsUpdate(BaseModel):
+    """PATCH body: the full set of permissions granted to a role."""
+
     permissions: list[str] = Field(default_factory=list)
 
 
