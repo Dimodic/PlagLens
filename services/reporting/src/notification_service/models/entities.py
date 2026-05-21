@@ -33,10 +33,16 @@ JSON_T = JSONB().with_variant(JSON(), "sqlite")
 MutableJSON = MutableDict.as_mutable(JSON_T)
 
 
-# Process-wide counter used as a fallback "seq" generator on SQLite (tests),
-# where BigInteger non-PK auto-increment isn't supported.  In Postgres the
-# column uses Identity() and this default is a no-op (server side wins).
-_seq_counter = itertools.count(1)
+# Process-wide counter used as a fallback "seq" generator. On Postgres the
+# alembic migration installs a unique constraint on this column and the
+# client-side default lands in the INSERT — so the counter MUST start above
+# any seq value that ever existed in this database. We seed it from the wall
+# clock in milliseconds: any second-process / restart starts strictly higher
+# than the previous run's last issued seq, eliminating duplicate-key crashes
+# after make-reset cycles or container restarts.
+import time as _time
+
+_seq_counter = itertools.count(int(_time.time() * 1000))
 
 
 def _next_seq() -> int:
