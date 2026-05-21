@@ -214,7 +214,7 @@
   "nav.admin.system.corpus": "Корпус АП",
   "nav.admin.system.exports": "Экспорты",
   "nav.admin.roles": "Роли",
-  "nav.admin.tenants": "Тенанты",
+  "nav.admin.tenants": "Учреждения",
 
   "shell.search_placeholder": "Поиск заданий, студентов, посылок…",
   "shell.brand_tag.teacher": "консоль преподавателя",
@@ -304,7 +304,7 @@
   "title.submission": "Посылка",
   "title.user": "Пользователь",
   "title.integration": "Интеграция",
-  "title.tenant": "Тенант",
+  "title.tenant": "Учреждение",
   "title.submissions": "Посылки",
   "title.activity": "Журнал событий",
   "title.integrations": "Интеграции",
@@ -335,7 +335,7 @@
   "title.reports": "Экспорт",
   "title.admin": "Админ",
   "title.users": "Пользователи",
-  "title.tenants": "Тенанты",
+  "title.tenants": "Учреждения",
   "title.audit": "Аудит",
   "title.exports": "Мои экспорты"
 }

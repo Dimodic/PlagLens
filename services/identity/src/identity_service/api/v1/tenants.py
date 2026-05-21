@@ -79,6 +79,10 @@ async def list_tenants(
 ) -> Page[TenantOut]:
     tenants = TenantRepository(session)
     rows = await tenants.list(limit=limit, offset=0)
+    # Hide the bootstrap platform tenant ("system") — it only hosts the admin
+    # account and is not a real institution, so the institutions list starts
+    # empty until an admin creates one.
+    rows = [t for t in rows if t.slug != "system"]
     return Page[TenantOut](
         data=[_tenant_to_out(t) for t in rows],
         pagination=Pagination(limit=limit, has_more=False, next_cursor=None),

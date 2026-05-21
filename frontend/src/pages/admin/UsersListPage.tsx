@@ -11,7 +11,6 @@ import dayjs from 'dayjs';
 import { Plus, Search } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -205,12 +204,11 @@ export function UsersListPage() {
         ) : data && data.data.length === 0 ? (
           <EmptyState title="Не найдено" />
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Пользователь</TableHead>
+          <div className="border-y">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Пользователь</TableHead>
                     <TableHead>Роль</TableHead>
                     <TableHead>Статус</TableHead>
                     <TableHead>Активность</TableHead>
@@ -283,8 +281,7 @@ export function UsersListPage() {
                   })}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
         )}
       </Page>
 

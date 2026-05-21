@@ -1,20 +1,13 @@
 /**
- * /admin/tenants — list of tenants (super_admin only).
+ * /admin/tenants — institutions managed by the admin. Flat list (no card
+ * chrome). The bootstrap "system" platform tenant is hidden server-side, so
+ * this list starts empty until the admin creates an institution.
  */
 import dayjs from 'dayjs';
 import { Link } from 'react-router-dom';
 import { Loader2, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { StatusPill } from '@/components/common/StatusPill';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
@@ -23,18 +16,18 @@ import { useTenants } from '@/hooks/api/useTenants';
 import type { Problem } from '@/api/types';
 
 export function TenantsListPage() {
-  useDocumentTitle('Тенанты');
+  useDocumentTitle('Учреждения');
   const { data, isLoading, error } = useTenants({ limit: 100 });
 
   return (
     <Page width="wide">
       <PageHeader
-        title={<span data-testid="tenants-title">Тенанты</span>}
+        title={<span data-testid="tenants-title">Учреждения</span>}
         action={
           <Button asChild data-testid="tenants-new-button">
             <Link to="/admin/tenants/new">
               <Plus className="mr-2 h-4 w-4" />
-              Новый тенант
+              Новое учреждение
             </Link>
           </Button>
         }
@@ -49,57 +42,35 @@ export function TenantsListPage() {
           </div>
         ) : data && data.data.length === 0 ? (
           <EmptyState
-            title="Тенантов нет"
+            title="Учреждений пока нет"
             action={
               <Button asChild>
-                <Link to="/admin/tenants/new">Создать тенант</Link>
+                <Link to="/admin/tenants/new">Создать учреждение</Link>
               </Button>
             }
           />
         ) : (
-          <Card>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Имя</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Пользователей</TableHead>
-                    <TableHead>Создан</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.data.map((t) => (
-                    <TableRow key={t.id} data-testid={`tenant-row-${t.id}`}>
-                      <TableCell>{t.name}</TableCell>
-                      <TableCell>
-                        <StatusPill tone={t.status === 'active' ? 'success' : 'neutral'}>
-                          {t.status}
-                        </StatusPill>
-                      </TableCell>
-                      <TableCell>{t.users_count ?? '—'}</TableCell>
-                      <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {dayjs(t.created_at).format('DD.MM.YYYY')}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          asChild
-                          size="sm"
-                          variant="outline"
-                          data-testid={`tenant-open-${t.id}`}
-                        >
-                          <Link to={`/admin/tenants/${t.id}`}>Открыть</Link>
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+          <div className="divide-y border-y">
+            {data?.data.map((t) => (
+              <Link
+                key={t.id}
+                to={`/admin/tenants/${t.id}`}
+                data-testid={`tenant-row-${t.id}`}
+                className="flex items-center gap-5 px-3 py-4 hover:bg-muted/40"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium tracking-tight">{t.name}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {t.users_count ?? 0} польз. · создано{' '}
+                    {dayjs(t.created_at).format('DD.MM.YYYY')}
+                  </div>
+                </div>
+                <StatusPill tone={t.status === 'active' ? 'success' : 'neutral'}>
+                  {t.status === 'active' ? 'активно' : t.status}
+                </StatusPill>
+              </Link>
+            ))}
+          </div>
         )}
       </div>
     </Page>

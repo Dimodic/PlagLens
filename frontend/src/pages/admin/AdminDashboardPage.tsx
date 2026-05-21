@@ -1,26 +1,22 @@
 /**
- * /admin — top-level admin dashboard.
+ * /admin — top-level admin overview.
  *
- * Tenant headline + KPI grid + integration health rows + recent-audit timeline.
- * Live data from existing hooks (tenants, users, integrations health, audit).
+ * KPI strip + integration health + recent-audit timeline. Flat layout
+ * (no card chrome) per the minimalism principle.
  */
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { ArrowRight, ChevronRight } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { StatsPanel } from '@/components/common/StatsPanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { useTenants } from '@/hooks/api/useTenants';
 import { useUsers } from '@/hooks/api/useUsers';
 import {
   useIntegrations,
   useIntegrationsHealth,
 } from '@/hooks/api/useIntegrations';
 import { useAuditEvents } from '@/hooks/api/useAudit';
-import { useAuth } from '@/auth/useAuth';
 import type { IntegrationStatus } from '@/api/endpoints/integrations';
 
 function statusDot(s: IntegrationStatus | string): string {
@@ -31,9 +27,9 @@ function statusDot(s: IntegrationStatus | string): string {
 
 function statusLabel(s: IntegrationStatus | string): string {
   if (s === 'active') return 'OK';
-  if (s === 'pending_auth') return 'pending';
-  if (s === 'disabled') return 'off';
-  return 'error';
+  if (s === 'pending_auth') return 'ожидает';
+  if (s === 'disabled') return 'выкл';
+  return 'ошибка';
 }
 
 interface KPI {
@@ -43,23 +39,16 @@ interface KPI {
 }
 
 export function AdminDashboardPage() {
-  useDocumentTitle('Админ-панель');
-  const { user } = useAuth();
+  useDocumentTitle('Обзор');
 
-  const tenantsQ = useTenants({ limit: 5 });
   const usersQ = useUsers({ limit: 1 });
   const integrationsQ = useIntegrations({ limit: 8 });
   const healthQ = useIntegrationsHealth();
   const auditQ = useAuditEvents({ limit: 5 });
 
-  const tenant = tenantsQ.data?.data[0];
-  const tenantName = tenant?.name ?? user?.tenant?.name ?? 'Tenant';
-
   const usersTotal = usersQ.data?.pagination.has_more
     ? `${usersQ.data?.data.length}+`
     : usersQ.data?.data.length ?? 0;
-  // Tolerate either { data: [...] } or a bare array — older deployments
-  // returned the latter and the page was crashing on .filter of undefined.
   const healthRows = Array.isArray(healthQ.data)
     ? healthQ.data
     : (healthQ.data?.data ?? []);
@@ -70,23 +59,14 @@ export function AdminDashboardPage() {
   ).length;
 
   const kpis: KPI[] = [
-    {
-      label: 'Активных пользователей',
-      v: usersTotal,
-    },
+    { label: 'Активных пользователей', v: usersTotal },
     {
       label: 'Интеграций',
       v: integrationsTotal === 0 ? '—' : integrationsActive,
       sub: integrationsTotal === 0 ? undefined : `/${integrationsTotal}`,
     },
-    {
-      label: 'Проверок за день',
-      v: '—',
-    },
-    {
-      label: 'Инцидентов',
-      v: openIncidents,
-    },
+    { label: 'Проверок за день', v: '—' },
+    { label: 'Инцидентов', v: openIncidents },
   ];
 
   const integrations = (integrationsQ.data?.data ?? []).slice(0, 6);
@@ -94,19 +74,8 @@ export function AdminDashboardPage() {
 
   return (
     <Page width="regular">
-      <PageHeader
-        title={tenantName}
-        action={
-          <Badge
-            variant="outline"
-            className="border-primary/40 bg-primary/10 text-primary font-normal rounded-full"
-          >
-            Institutional
-          </Badge>
-        }
-      />
+      <PageHeader title="Обзор" />
 
-      {/* KPIs — Kaggle horizontal strip */}
       <StatsPanel
         data-testid="admin-home-kpis"
         items={kpis.map((k) => ({
@@ -140,42 +109,28 @@ export function AdminDashboardPage() {
           </Button>
         </div>
         {integrations.length === 0 ? (
-          <Card className="border-dashed border-border/70">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              Нет настроенных интеграций.
-            </CardContent>
-          </Card>
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Нет настроенных интеграций.
+          </p>
         ) : (
-          <Card
-            className="border-border/70"
-            data-testid="admin-home-integrations"
-          >
-            <CardContent className="p-0">
-              {integrations.map((it, idx) => (
-                <div
-                  key={it.id}
-                  className={`flex items-center gap-4 px-5 py-4 ${
-                    idx > 0 ? 'border-t border-border/70' : ''
-                  }`}
-                >
-                  <span
-                    className={`h-2 w-2 flex-none rounded-full ${statusDot(it.status)}`}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-foreground">
-                      {it.display_name}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground">
-                      {it.kind} · {statusLabel(it.status)}
-                    </div>
+          <div className="divide-y border-y" data-testid="admin-home-integrations">
+            {integrations.map((it) => (
+              <div key={it.id} className="flex items-center gap-4 px-3 py-4">
+                <span className={`h-2 w-2 flex-none rounded-full ${statusDot(it.status)}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground">
+                    {it.display_name}
                   </div>
-                  <span className="text-xs text-muted-foreground tabular-nums">
-                    {it.last_sync_at ? dayjs(it.last_sync_at).fromNow() : '—'}
-                  </span>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {it.kind} · {statusLabel(it.status)}
+                  </div>
                 </div>
-              ))}
-            </CardContent>
-          </Card>
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {it.last_sync_at ? dayjs(it.last_sync_at).fromNow() : '—'}
+                </span>
+              </div>
+            ))}
+          </div>
         )}
       </section>
 
@@ -197,56 +152,43 @@ export function AdminDashboardPage() {
           </Button>
         </div>
         {auditEvents.length === 0 ? (
-          <Card className="border-dashed border-border/70">
-            <CardContent className="p-8 text-center text-sm text-muted-foreground">
-              Событий пока нет.
-            </CardContent>
-          </Card>
+          <p className="py-6 text-center text-sm text-muted-foreground">
+            Событий пока нет.
+          </p>
         ) : (
-          <Card className="border-border/70" data-testid="admin-home-audit">
-            <CardContent className="p-0">
-              {auditEvents.map((e, idx) => {
-                const tone =
-                  e.result === 'failure'
-                    ? 'text-sev-high'
-                    : e.action.startsWith('llm.') || e.action.startsWith('ai.')
-                      ? 'text-primary'
-                      : 'text-muted-foreground';
-                return (
-                  <div
-                    key={e.id}
-                    className={`grid items-center gap-4 px-5 py-3 text-sm ${
-                      idx > 0 ? 'border-t border-border/70' : ''
-                    }`}
-                    style={{
-                      gridTemplateColumns: '110px 1fr 200px 80px 16px',
-                    }}
-                  >
-                    <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                      {dayjs(e.occurred_at).fromNow()}
-                    </span>
-                    <div className="min-w-0">
-                      <div className="font-medium text-foreground">
-                        {e.action}
-                      </div>
-                      <div className="mt-0.5 text-xs text-muted-foreground">
-                        {e.resource.type} {e.resource.id ?? ''}
-                      </div>
+          <div className="divide-y border-y" data-testid="admin-home-audit">
+            {auditEvents.map((e) => {
+              const tone =
+                e.result === 'failure'
+                  ? 'text-sev-high'
+                  : e.action.startsWith('llm.') || e.action.startsWith('ai.')
+                    ? 'text-primary'
+                    : 'text-muted-foreground';
+              return (
+                <div
+                  key={e.id}
+                  className="grid items-center gap-4 px-3 py-3 text-sm"
+                  style={{ gridTemplateColumns: '110px 1fr 200px 80px' }}
+                >
+                  <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                    {dayjs(e.occurred_at).fromNow()}
+                  </span>
+                  <div className="min-w-0">
+                    <div className="font-medium text-foreground">{e.action}</div>
+                    <div className="mt-0.5 text-xs text-muted-foreground">
+                      {e.resource.type} {e.resource.id ?? ''}
                     </div>
-                    <span className="truncate text-xs text-muted-foreground">
-                      {e.actor.display_name ?? e.actor.id ?? e.actor.type}
-                    </span>
-                    <span
-                      className={`text-right text-xs font-medium ${tone}`}
-                    >
-                      {e.result}
-                    </span>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
-                );
-              })}
-            </CardContent>
-          </Card>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {e.actor.display_name ?? e.actor.id ?? e.actor.type}
+                  </span>
+                  <span className={`text-right text-xs font-medium ${tone}`}>
+                    {e.result}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </section>
     </Page>
