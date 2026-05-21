@@ -19,7 +19,7 @@ interface Props {
   matrix: Record<GlobalRole, Record<string, boolean>>;
 }
 
-const ROLES: GlobalRole[] = ['super_admin', 'admin', 'teacher', 'student'];
+const ROLES: GlobalRole[] = ['admin', 'teacher', 'assistant', 'student'];
 
 export function RolePermissionsMatrix({ permissions, matrix }: Props) {
   return (

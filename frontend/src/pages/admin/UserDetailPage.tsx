@@ -220,7 +220,7 @@ export function UserDetailPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="user-detail-role">Role</Label>
+                <Label htmlFor="user-detail-role">Роль</Label>
                 <Select
                   value={role}
                   onValueChange={(v) => setRole((v as GlobalRole) ?? 'student')}
@@ -229,10 +229,10 @@ export function UserDetailPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="student">student</SelectItem>
-                    <SelectItem value="teacher">teacher</SelectItem>
-                    <SelectItem value="admin">admin</SelectItem>
-                    <SelectItem value="super_admin">super_admin</SelectItem>
+                    <SelectItem value="student">Студент</SelectItem>
+                    <SelectItem value="assistant">Ассистент</SelectItem>
+                    <SelectItem value="teacher">Преподаватель</SelectItem>
+                    <SelectItem value="admin">Админ</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

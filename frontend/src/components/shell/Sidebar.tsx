@@ -54,7 +54,7 @@ const ic = (Icon: typeof LayoutGrid) => <Icon className="h-[22px] w-[22px]" />;
 
 function deriveRole(role: GlobalRole | undefined): 'student' | 'teacher' | 'admin' {
   if (role === 'student') return 'student';
-  if (role === 'admin' || role === 'super_admin') return 'admin';
+  if (role === 'admin') return 'admin';
   return 'teacher';
 }
 
@@ -225,7 +225,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
   if (!user) return null;
 
   const role = deriveRole(user.global_role);
-  const isSuperAdmin = user.global_role === 'super_admin';
+  const isSuperAdmin = user.global_role === 'admin';
   const sections = buildSections(role, isSuperAdmin, t);
   const activeScreen = resolveScreen(location.pathname, user.global_role);
 

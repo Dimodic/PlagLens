@@ -63,7 +63,7 @@ export interface Operation {
 }
 
 // ---------- Roles ----------
-export type GlobalRole = 'super_admin' | 'admin' | 'teacher' | 'student';
+export type GlobalRole = 'admin' | 'teacher' | 'assistant' | 'student';
 export type CourseRole = 'owner' | 'co_owner' | 'assistant' | 'student';
 
 // ---------- User / tenant ----------

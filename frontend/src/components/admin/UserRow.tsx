@@ -8,11 +8,12 @@ import { Badge } from '@/components/ui/badge';
 import { TableCell, TableRow } from '@/components/ui/table';
 import type { UserDetail } from '@/api/endpoints/users';
 import type { GlobalRole } from '@/api/types';
+import { roleLabel } from '@/lib/roles';
 
 const ROLE_CLASS: Record<GlobalRole, string> = {
-  super_admin: 'bg-sev-high-bg text-sev-high hover:bg-sev-high-bg',
   admin: 'bg-accent text-accent-foreground hover:bg-accent',
   teacher: 'bg-sev-low-bg text-sev-low hover:bg-sev-low-bg',
+  assistant: 'bg-sev-low-bg text-sev-low hover:bg-sev-low-bg',
   student: '',
 };
 
@@ -39,7 +40,7 @@ export function UserRow({ user, actions }: UserRowProps) {
       </TableCell>
       <TableCell>
         <Badge variant="outline" className={`font-normal ${ROLE_CLASS[user.global_role] ?? ''}`}>
-          {user.global_role}
+          {roleLabel(user.global_role)}
         </Badge>
       </TableCell>
       <TableCell>

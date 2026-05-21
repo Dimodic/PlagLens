@@ -41,12 +41,14 @@ import {
 } from '@/hooks/api/useUsers';
 import type { GlobalRole, Problem } from '@/api/types';
 import type { UserDetail } from '@/api/endpoints/users';
+import { roleLabel } from '@/lib/roles';
 
 type RoleFilter = 'all' | GlobalRole;
 
 const FILTERS: { id: RoleFilter; label: string }[] = [
   { id: 'all', label: 'Все' },
   { id: 'teacher', label: 'Преподаватели' },
+  { id: 'assistant', label: 'Ассистенты' },
   { id: 'student', label: 'Студенты' },
   { id: 'admin', label: 'Админы' },
 ];
@@ -62,13 +64,8 @@ function initials(name?: string | null): string {
 }
 
 function roleBadge(role: GlobalRole) {
-  if (role === 'super_admin' || role === 'admin') {
-    return <StatusPill tone="info">{role}</StatusPill>;
-  }
-  if (role === 'teacher') {
-    return <StatusPill tone="neutral">{role}</StatusPill>;
-  }
-  return <StatusPill tone="neutral">{role}</StatusPill>;
+  const tone: 'info' | 'neutral' = role === 'admin' ? 'info' : 'neutral';
+  return <StatusPill tone={tone}>{roleLabel(role)}</StatusPill>;
 }
 
 export function UsersListPage() {
@@ -102,9 +99,9 @@ export function UsersListPage() {
   const list = data?.data ?? [];
   const counts: Record<RoleFilter, number> = {
     all: list.length,
-    super_admin: 0,
     admin: list.filter((u) => u.global_role === 'admin').length,
     teacher: list.filter((u) => u.global_role === 'teacher').length,
+    assistant: list.filter((u) => u.global_role === 'assistant').length,
     student: list.filter((u) => u.global_role === 'student').length,
   };
 

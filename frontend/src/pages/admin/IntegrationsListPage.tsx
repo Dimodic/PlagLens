@@ -411,8 +411,7 @@ export function IntegrationsListPage() {
   const navigate = useNavigate();
   const notify = useNotifications();
   const { user } = useAuth();
-  const isAdmin =
-    user?.global_role === 'admin' || user?.global_role === 'super_admin';
+  const isAdmin = user?.global_role === 'admin';
   const { data, isPending, error, refetch } = useIntegrations({ limit: 100 });
   const items = data?.data ?? [];
 

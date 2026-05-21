@@ -239,7 +239,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'courses/:slug/homeworks/new',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <HomeworkCreatePage />
@@ -257,7 +257,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'courses/:slug/homeworks/:hwSlug/assignments/new',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <HomeworkAssignmentCreatePage />
@@ -296,7 +296,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'activity',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<Navigate to="/" replace />}
           >
             <ActivityLogPage />
@@ -307,7 +307,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationsListPage />
@@ -318,7 +318,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/yandex-contest/setup',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <YandexContestSetupPage />
@@ -329,7 +329,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/yandex-contest/:configId/contests',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <YandexContestImportPage />
@@ -340,7 +340,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/stepik/setup',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <StepikSetupPage />
@@ -351,7 +351,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/ejudge/setup',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <EjudgeSetupPage />
@@ -365,7 +365,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/google-sheets/setup',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <GoogleSheetsSetupPage mode="admin" />
@@ -379,7 +379,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/google-sheets/personal-setup',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <GoogleSheetsSetupPage mode="personal" />
@@ -396,7 +396,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/wizard',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <ImportWizardPage />
@@ -410,7 +410,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/new',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationCreatePage />
@@ -427,7 +427,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/:id',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationDetailPage />
@@ -441,7 +441,7 @@ const protectedRoutes: RouteObject[] = [
         // stale sidebar link doesn't dead-end at a 404 page.
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<Navigate to="/" replace />}
           >
             <LLMProvidersPage />
@@ -460,7 +460,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <TenantDashboardPage />
@@ -471,7 +471,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/exports',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <ExportsListPage mode="admin" />
@@ -482,7 +482,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/dashboard/tenant/:id',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <TenantDashboardPage />
@@ -492,7 +492,7 @@ const protectedRoutes: RouteObject[] = [
       {
         path: 'admin/dashboard/global',
         element: (
-          <RoleGuard global={['super_admin']} fallback={<NotFoundPage />}>
+          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
             <GlobalDashboardPage />
           </RoleGuard>
         ),
@@ -502,7 +502,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/overview',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AdminDashboardPage />
@@ -514,7 +514,7 @@ const protectedRoutes: RouteObject[] = [
       {
         path: 'admin/tenants',
         element: (
-          <RoleGuard global={['super_admin']} fallback={<NotFoundPage />}>
+          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
             <TenantsListPage />
           </RoleGuard>
         ),
@@ -522,7 +522,7 @@ const protectedRoutes: RouteObject[] = [
       {
         path: 'admin/tenants/new',
         element: (
-          <RoleGuard global={['super_admin']} fallback={<NotFoundPage />}>
+          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
             <TenantCreatePage />
           </RoleGuard>
         ),
@@ -530,7 +530,7 @@ const protectedRoutes: RouteObject[] = [
       {
         path: 'admin/tenants/:id',
         element: (
-          <RoleGuard global={['super_admin']} fallback={<NotFoundPage />}>
+          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
             <TenantDetailPage />
           </RoleGuard>
         ),
@@ -541,7 +541,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/users',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <UsersListPage />
@@ -552,7 +552,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/users/new',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <UserCreatePage />
@@ -563,7 +563,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/users/:id',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <UserDetailPage />
@@ -576,7 +576,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/integrations',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationsListPage />
@@ -587,7 +587,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/integrations/new',
         element: (
           <RoleGuard
-            global={['teacher', 'admin', 'super_admin']}
+            global={['teacher', 'admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationCreatePage />
@@ -598,7 +598,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/integrations/oauth-providers',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <OAuthProvidersPage />
@@ -609,7 +609,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/integrations/webhooks',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <WebhooksAdminPage />
@@ -620,7 +620,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/integrations/:id',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <IntegrationDetailPage />
@@ -633,7 +633,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/notifications/email',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <EmailConfigPage />
@@ -644,7 +644,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/notifications/templates',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <NotificationTemplatesPage />
@@ -655,7 +655,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/notifications/deliveries',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <NotificationDeliveriesPage />
@@ -666,7 +666,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/notifications/dlq',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <NotificationDLQPage />
@@ -679,7 +679,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditEventsPage />
@@ -690,7 +690,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/search',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditSearchPage />
@@ -701,7 +701,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/actors/:userId',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditByActorPage />
@@ -712,7 +712,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/resources/:type/:id',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditByResourcePage />
@@ -723,7 +723,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/access-denied',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditAccessDeniedPage />
@@ -734,7 +734,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/retention',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditRetentionPolicyPage />
@@ -745,7 +745,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/audit/legal-holds',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <AuditLegalHoldPage />
@@ -758,7 +758,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/roles',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <RolesPermissionsPage />
@@ -769,7 +769,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/system/health',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <SystemHealthPage />
@@ -780,7 +780,7 @@ const protectedRoutes: RouteObject[] = [
         path: 'admin/system/settings',
         element: (
           <RoleGuard
-            global={['admin', 'super_admin']}
+            global={['admin']}
             fallback={<NotFoundPage />}
           >
             <SystemSettingsPage />

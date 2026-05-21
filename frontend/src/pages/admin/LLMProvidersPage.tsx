@@ -244,8 +244,7 @@ export function LLMProvidersPage() {
   const notify = useNotifications();
   const { user } = useAuth();
   const tenantId = user?.tenant?.id;
-  const isAdmin =
-    user?.global_role === 'admin' || user?.global_role === 'super_admin';
+  const isAdmin = user?.global_role === 'admin';
   const { data, isLoading, error } = useProviders();
   const usage = useTenantUsage(isAdmin ? tenantId : undefined);
   const update = useUpdateProvider();

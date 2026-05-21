@@ -175,7 +175,7 @@ export default function AssignmentDetailPage() {
     ) {
       return true;
     }
-    if (hasGlobalRole(user, ['admin', 'super_admin', 'teacher'])) return true;
+    if (hasGlobalRole(user, ['admin', 'teacher'])) return true;
     return false;
   }, [user, assignment]);
 

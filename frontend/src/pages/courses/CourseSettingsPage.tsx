@@ -49,7 +49,7 @@ export default function CourseSettingsPage() {
   const canEdit =
     course && user
       ? hasCourseRole(user, course.id, ['owner', 'co_owner']) ||
-        hasGlobalRole(user, ['admin', 'super_admin'])
+        hasGlobalRole(user, ['admin'])
       : false;
 
   const [vals, setVals] = useState<FormVals>({

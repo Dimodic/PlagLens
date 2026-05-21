@@ -182,7 +182,7 @@ export default function CourseDetailPage() {
   const isOwner = useMemo(() => {
     if (!course || !user) return false;
     if (hasCourseRole(user, course.id, ['owner', 'co_owner'])) return true;
-    if (hasGlobalRole(user, ['admin', 'super_admin'])) return true;
+    if (hasGlobalRole(user, ['admin'])) return true;
     if (
       (course as { owner_id?: string }).owner_id != null &&
       (course as { owner_id?: string }).owner_id === user.id

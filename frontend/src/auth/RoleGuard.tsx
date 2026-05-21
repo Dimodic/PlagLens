@@ -38,7 +38,7 @@ export function RoleGuard({ global, course, fallback = null, children }: RoleGua
   const { user } = useAuth();
   if (!user) return <>{fallback}</>;
   // super_admin can do anything
-  if (user.global_role === 'super_admin') return <>{children}</>;
+  if (user.global_role === 'admin') return <>{children}</>;
   if (global && !hasGlobalRole(user, global)) return <>{fallback}</>;
   if (course && !hasCourseRole(user, course.id, course.roles)) return <>{fallback}</>;
   return <>{children}</>;

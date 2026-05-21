@@ -666,7 +666,7 @@ export default function SubmissionDetailPage() {
 
   const isTeacher = useMemo(() => {
     if (!user || !submission) return false;
-    if (hasGlobalRole(user, ['admin', 'super_admin'])) return true;
+    if (hasGlobalRole(user, ['admin'])) return true;
     if (
       submission.course_id &&
       hasCourseRole(user, submission.course_id, [

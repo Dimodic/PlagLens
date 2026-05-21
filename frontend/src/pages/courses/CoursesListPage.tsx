@@ -50,8 +50,7 @@ export default function CoursesListPage() {
 
   const canCreate =
     user?.global_role === 'teacher' ||
-    user?.global_role === 'admin' ||
-    user?.global_role === 'super_admin';
+    user?.global_role === 'admin';
 
   const status = showArchived ? 'archived' : 'active';
   const myList = useMyCourses();
