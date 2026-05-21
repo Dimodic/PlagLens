@@ -73,6 +73,9 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
         role,
         email: email.trim() || undefined,
         course_id: courseId.trim() || undefined,
+        // The panel always issues codes scoped to the tenant we are viewing —
+        // admin (in tenant=system) can administer HSE / other tenants this way.
+        tenant_id: tenantId,
       });
       notify.success('Приглашение создано');
       setShowForm(false);

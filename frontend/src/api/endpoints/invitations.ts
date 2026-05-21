@@ -32,6 +32,9 @@ export interface CreateInvitationInput {
   email?: string;
   role: InviteRole;
   course_id?: string;
+  // Admin-only: target a different tenant than the caller's own. Server
+  // rejects with 403 if the caller is a teacher.
+  tenant_id?: string;
   expires_in_seconds?: number;
 }
 

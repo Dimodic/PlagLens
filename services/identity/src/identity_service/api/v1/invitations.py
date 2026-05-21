@@ -111,12 +111,31 @@ async def create_invitation(
             title="course_id is required when teacher invites",
         )
 
+    # Cross-tenant: only admin may pin the invite to another tenant. Teachers
+    # are always scoped to their own tenant. Default = the caller's tenant.
+    if payload.tenant_id and user.global_role != "admin":
+        raise ProblemException(
+            status=403,
+            code="FORBIDDEN",
+            title="Only admin can target a different tenant",
+        )
+    target_tenant_id = payload.tenant_id or user.tenant_id
+    if payload.tenant_id and payload.tenant_id != user.tenant_id:
+        # Sanity-check the target exists (otherwise we'd produce an orphaned
+        # invitation that nobody can redeem).
+        tenants_repo = TenantRepository(session)
+        tenant_check = await tenants_repo.get(payload.tenant_id)
+        if tenant_check is None:
+            raise ProblemException(
+                status=404, code="NOT_FOUND", title="Target tenant not found"
+            )
+
     repo = InvitationRepository(session)
     plain = new_opaque_token(prefix="inv_")
     email_normalised = payload.email.strip().lower() if payload.email else ""
     inv = Invitation(
         id=invitation_id(),
-        tenant_id=user.tenant_id,
+        tenant_id=target_tenant_id,
         email=email_normalised,
         role=payload.role,
         course_id=payload.course_id,
@@ -132,8 +151,8 @@ async def create_invitation(
     # the row is unexpectedly missing, so we never block creating the invite.
     if email_normalised:
         tenants_repo = TenantRepository(session)
-        tenant_row = await tenants_repo.get(user.tenant_id)
-        tenant_label = (tenant_row.name if tenant_row else None) or user.tenant_id
+        tenant_row = await tenants_repo.get(target_tenant_id)
+        tenant_label = (tenant_row.name if tenant_row else None) or target_tenant_id
         await EmailService().send_invitation_with_code(
             to=email_normalised,
             invite_url=build_frontend_url("/invite", plain),

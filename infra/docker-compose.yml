@@ -151,6 +151,11 @@ services:
       OAUTH_YANDEX_CLIENT_SECRET: ${OAUTH_YANDEX_CLIENT_SECRET:-}
       OAUTH_GITHUB_CLIENT_ID: ${OAUTH_GITHUB_CLIENT_ID:-}
       OAUTH_GITHUB_CLIENT_SECRET: ${OAUTH_GITHUB_CLIENT_SECRET:-}
+      # Public origin used to build the ``redirect_uri`` that Yandex / Google
+      # / Stepik / GitHub call back into. Defaults to localhost (dev) — must
+      # be set to the public HTTPS hostname in any non-dev deployment so the
+      # external provider can reach our /api/v1/auth/oauth/{provider}/callback.
+      OAUTH_CALLBACK_BASE_URL: ${OAUTH_CALLBACK_BASE_URL:-http://localhost:8000}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@plaglens.local}
       # Identity forwards transactional emails (verify / reset / invite /
       # email-change) to the reporting service's internal endpoint

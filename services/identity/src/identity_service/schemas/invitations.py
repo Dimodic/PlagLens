@@ -26,6 +26,10 @@ class InvitationCreate(BaseModel):
     email: str | None = None
     role: str = "student"
     course_id: str | None = None
+    # Cross-tenant invitations: admin (the super-admin equivalent) can target
+    # any tenant — the field is ignored for teacher callers (they're pinned to
+    # their own tenant). When unset the caller's own tenant is used.
+    tenant_id: str | None = None
     expires_in_seconds: int = Field(default=7 * 24 * 3600, ge=60, le=90 * 24 * 3600)
 
 
