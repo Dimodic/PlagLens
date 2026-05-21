@@ -1,5 +1,5 @@
 /**
- * Assignment endpoints (Course Service, see docs/architecture/05-COURSE.md §F-J).
+ * Assignment endpoints (Course Service, see docs/architecture/legacy/05-COURSE.md §F-J).
  */
 import api from '../client';
 import type { Operation, Paginated } from '../types';

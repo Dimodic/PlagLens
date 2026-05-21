@@ -3,7 +3,7 @@
 Orchestrates plagiarism providers (JPlag, MOSS, Codequiry, Dolos), stores normalized pair/cluster
 results, manages the cross-course fingerprint corpus and suspicious-flag lifecycle.
 
-See `docs/architecture/08-PLAGIARISM.md` for the full spec (~30 endpoints).
+See `docs/architecture/legacy/08-PLAGIARISM.md` for the full spec (~30 endpoints).
 
 ## Quick start
 

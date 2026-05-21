@@ -1,5 +1,5 @@
 /**
- * Audit Service — see docs/architecture/12-AUDIT.md.
+ * Audit Service — see docs/architecture/legacy/12-AUDIT.md.
  */
 import api from '../client';
 import type { Paginated } from '../types';

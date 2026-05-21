@@ -13,8 +13,9 @@ Behaviour
   password is hashed with the project's argon2 settings.
 * Creates the system tenant if missing.
 * Creates the super-admin user if no super-admin exists for that tenant. The
-  user has ``global_role='super_admin'``, ``email_verified_at=now()``, and the
-  configured password.
+  user has ``global_role='admin'`` (super_admin as a global role was dropped
+  in migration 0002 — the "system" tenant + admin role is the new top), the
+  ``email_verified_at=now()``, and the configured password.
 * Idempotent — if a super-admin already exists for the tenant the script logs
   a message and exits 0 without raising.
 """

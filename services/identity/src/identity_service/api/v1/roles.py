@@ -1,10 +1,11 @@
 """Section J — Roles & permissions."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import publish_user_event
 from ...common.problem import ProblemException
 from ...common.rbac import (
     GLOBAL_ROLES,
@@ -119,6 +120,7 @@ async def update_role_permissions(
 async def assign_role(
     target_user_id: str,
     payload: RoleAssignRequest,
+    request: Request,
     user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
@@ -132,8 +134,21 @@ async def assign_role(
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
     if user.global_role != "admin":
         await assert_same_tenant(user, target.tenant_id)
+    previous_role = target.global_role
     target.global_role = payload.role
-    # TODO: emit identity.user.role_assigned.v1
+    await publish_user_event(
+        request,
+        "identity.user.role_assigned.v1",
+        data={
+            "user_id": target.id,
+            "previous_role": previous_role,
+            "new_role": target.global_role,
+            "actor_user_id": user.id,
+        },
+        tenant_id=target.tenant_id,
+        subject=f"users/{target.id}",
+        actor={"user_id": user.id, "global_role": user.global_role},
+    )
     return {"user_id": target.id, "global_role": target.global_role}
 
 

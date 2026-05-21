@@ -1,6 +1,6 @@
 /**
  * Submission Service endpoints.
- * Maps to docs/architecture/06-SUBMISSION.md.
+ * Maps to docs/architecture/legacy/06-SUBMISSION.md.
  */
 import api from '../client';
 import type { Operation, Paginated, UserSummary } from '../types';

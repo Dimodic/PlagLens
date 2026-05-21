@@ -86,14 +86,26 @@ async def login(
     auth = AuthService(session, producer=getattr(request.app.state, "producer", None))
     ip = request.client.host if request.client else None
     ua = request.headers.get("user-agent")
-    user, access, refresh, ttl = await auth.login(
+    redis = getattr(request.app.state, "redis", None)
+    user, access, refresh, ttl, mfa_token = await auth.login(
         email=payload.email,
         password=payload.password,
         tenant_slug=payload.tenant_slug,
         totp_code=payload.totp_code,
         ip=ip,
         user_agent=ua,
+        redis=redis,
     )
+    if mfa_token is not None:
+        # 2FA challenge — no refresh cookie; client exchanges mfa_token at
+        # /auth/2fa/verify.
+        return LoginResponse(two_factor_required=True, mfa_token=mfa_token, expires_in=ttl)
+    if access is None or refresh is None:
+        # Defensive — should never happen since login returns access on the
+        # non-2FA path.
+        raise ProblemException(
+            status=500, code="INTERNAL", title="Login produced no token"
+        )
     _set_refresh_cookie(response, refresh)
     return LoginResponse(
         access_token=access,

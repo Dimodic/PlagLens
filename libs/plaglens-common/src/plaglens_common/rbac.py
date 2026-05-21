@@ -1,6 +1,6 @@
 """Role-based authorization helpers.
 
-See `docs/architecture/02-RBAC.md`.
+See `docs/architecture/legacy/02-RBAC.md`.
 """
 
 from __future__ import annotations

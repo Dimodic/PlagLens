@@ -26,7 +26,7 @@ from ...schemas.invitations import (
     InvitationCreated,
     InvitationOut,
 )
-from ...services.email_service import EmailService
+from ...services.email_service import EmailService, build_frontend_url
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
@@ -70,10 +70,15 @@ async def create_invitation(
         created_by=user.id,
     )
     await repo.add(inv)
+    # Resolve a human tenant name for the email — fall back to the slug/id if
+    # the row is unexpectedly missing, so we never block creating the invite.
+    tenants_repo = TenantRepository(session)
+    tenant_row = await tenants_repo.get(user.tenant_id)
+    tenant_label = (tenant_row.name if tenant_row else None) or user.tenant_id
     await EmailService().send_invitation(
         to=inv.email,
-        invite_url=f"https://app.plaglens.local/invite?t={plain}",
-        tenant_name=user.tenant_id,
+        invite_url=build_frontend_url("/invite", plain),
+        tenant_name=tenant_label,
     )
     return InvitationCreated(**_to_out(inv).model_dump(), token=plain)
 

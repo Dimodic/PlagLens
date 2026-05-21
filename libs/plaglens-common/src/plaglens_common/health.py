@@ -1,6 +1,6 @@
 """Standard health, readiness, version and metrics endpoints.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §11.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §11.
 """
 
 from __future__ import annotations

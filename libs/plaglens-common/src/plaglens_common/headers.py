@@ -1,7 +1,7 @@
 """Standard HTTP header names used across PlagLens services.
 
 Centralised so that header strings are not duplicated/typoed across the codebase.
-See `docs/architecture/01-CROSS-CUTTING.md` §3.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §3.
 """
 
 from __future__ import annotations

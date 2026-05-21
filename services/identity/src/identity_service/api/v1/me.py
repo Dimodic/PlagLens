@@ -19,6 +19,7 @@ from ...repositories.users import UserRepository
 from ...schemas.auth import MeResponse, TenantBrief
 from ...schemas.sessions import SessionOut
 from ...schemas.users import UserUpdate
+from ...services.avatar_service import AvatarService, AvatarStorageError
 
 router = APIRouter(prefix="/users/me", tags=["me"])
 
@@ -118,14 +119,55 @@ async def patch_me(
 
 @router.post(
     "/avatar",
-    summary="Upload avatar (multipart). Stores metadata only — TODO: MinIO upload",
+    summary="Upload avatar (multipart). Stores in MinIO, records presigned URL.",
 )
 async def upload_avatar(
     file: UploadFile = File(...),  # noqa: B008
-    user: CurrentUser = Depends(current_user),  # noqa: ARG001
+    user: CurrentUser = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
-    # TODO: stream file to MinIO and record avatar_url
-    return {"filename": file.filename or "avatar", "status": "accepted"}
+    import asyncio
+
+    content_type = (file.content_type or "").lower()
+    if not AvatarService.is_supported(content_type):
+        raise ProblemException(
+            status=415,
+            code="UNSUPPORTED_MEDIA_TYPE",
+            title="Avatar must be PNG, JPEG, WebP, or GIF",
+        )
+    raw = await file.read()
+    if len(raw) > settings.avatar_max_size_bytes:
+        raise ProblemException(
+            status=413,
+            code="PAYLOAD_TOO_LARGE",
+            title="Avatar exceeds the 2 MiB limit",
+            detail=f"received {len(raw)} bytes",
+        )
+    if not raw:
+        raise ProblemException(
+            status=400,
+            code="BAD_REQUEST",
+            title="Empty file",
+        )
+    avatars = AvatarService()
+    try:
+        key, url = await asyncio.to_thread(
+            avatars.put, user_id=user.id, data=raw, content_type=content_type
+        )
+    except AvatarStorageError as exc:
+        logger.warning("avatar upload failed for user=%s: %s", user.id, exc)
+        raise ProblemException(
+            status=502,
+            code="UPSTREAM_UNAVAILABLE",
+            title="Avatar storage unavailable",
+        ) from exc
+
+    users = UserRepository(session)
+    db_user = await users.get(user.id)
+    if db_user is None:
+        raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
+    db_user.avatar_url = url
+    return {"avatar_url": url, "key": key}
 
 
 @router.delete(
@@ -137,9 +179,19 @@ async def delete_avatar(
     user: CurrentUser = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
+    import asyncio
+
     users = UserRepository(session)
     db_user = await users.get(user.id)
-    if db_user is not None:
+    if db_user is not None and db_user.avatar_url:
+        # Best-effort wipe from MinIO; never fail the API call if storage is down.
+        try:
+            avatars = AvatarService()
+            await asyncio.to_thread(
+                avatars.delete, key=f"users/{user.id}/avatar.png"
+            )
+        except Exception as exc:  # pragma: no cover - best-effort
+            logger.info("avatar delete from storage skipped: %s", exc)
         db_user.avatar_url = None
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

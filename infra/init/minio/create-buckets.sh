@@ -56,6 +56,9 @@ JSON
 
 ensure_bucket "plaglens-default"
 ensure_bucket "plaglens-tnt-hse-cs"
+ensure_bucket "plaglens-avatars"
+# Avatars: identity uploads here and stores a presigned URL on users.avatar_url.
+# Keep it private (signed URLs only) so we can rotate by re-signing.
 
 echo "MinIO buckets provisioned."
 mc ls local | sed 's/^/  /'

@@ -3,7 +3,7 @@
 # Idempotent: re-running on an existing cluster is a no-op for already-created
 # topics; new ones are added.
 #
-# Topic naming follows docs/architecture/03-EVENTS.md:
+# Topic naming follows docs/architecture/legacy/03-EVENTS.md:
 #   plaglens.{service}.{domain}.{version}
 # DLQ variants:
 #   plaglens.{service}.{domain}.{version}.dlq.v1

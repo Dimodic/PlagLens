@@ -1,8 +1,8 @@
 """JWT bearer auth using RS256 + JWKS, with Redis-cached JWKS and revocation list.
 
 See:
-- `docs/architecture/01-CROSS-CUTTING.md` §8 (auth)
-- `docs/architecture/02-RBAC.md` §6 (JWT payload)
+- `docs/architecture/legacy/01-CROSS-CUTTING.md` §8 (auth)
+- `docs/architecture/legacy/02-RBAC.md` §6 (JWT payload)
 """
 
 from __future__ import annotations

@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import logging
+import secrets as pysecrets
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import pyotp
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common.events import KafkaProducer, StubProducer, make_event
 from ..common.ids import session_id, user_id
 from ..common.problem import ProblemException
 from ..common.security import (
+    decrypt_secret,
     hash_password,
     hash_token,
     issue_access_token,
@@ -24,6 +27,50 @@ from ..repositories.sessions import SessionRepository
 from ..repositories.tenants import TenantRepository
 from ..repositories.two_factor import TwoFactorRepository
 from ..repositories.users import UserRepository
+
+
+# ----- 2FA helpers ---------------------------------------------------------- #
+
+MFA_TOKEN_TTL_SECONDS = 90
+MFA_REDIS_KEY_PREFIX = "mfa:challenge:"
+TOTP_VALID_WINDOW = 1  # accept the previous + next 30s step (clock skew)
+
+
+def mfa_redis_key(token: str) -> str:
+    return f"{MFA_REDIS_KEY_PREFIX}{token}"
+
+
+def verify_totp(secret_encrypted: bytes, totp_code: str) -> bool:
+    """Decrypt the stored TOTP secret and check the user-supplied code."""
+    if not totp_code:
+        return False
+    try:
+        secret = decrypt_secret(secret_encrypted)
+    except Exception:
+        return False
+    try:
+        return pyotp.TOTP(secret).verify(totp_code.strip(), valid_window=TOTP_VALID_WINDOW)
+    except Exception:
+        return False
+
+
+def consume_backup_code(stored: list[str], submitted: str) -> tuple[bool, list[str]]:
+    """Look up ``submitted`` in ``stored`` case-insensitively and remove it.
+
+    Returns ``(matched, remaining)`` where ``remaining`` is the new list to
+    persist when matched (with the used code dropped).
+    """
+    if not submitted:
+        return False, stored
+    needle = submitted.strip().upper()
+    remaining = []
+    matched = False
+    for code in stored or []:
+        if not matched and code.strip().upper() == needle:
+            matched = True
+            continue
+        remaining.append(code)
+    return matched, remaining
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +148,8 @@ class AuthService:
         totp_code: str | None = None,
         ip: str | None = None,
         user_agent: str | None = None,
-    ) -> tuple[User, str, str, int]:
+        redis: Any = None,
+    ) -> tuple[User, str | None, str | None, int, str | None]:
         """Return ``(user, access_token, refresh_token, access_ttl_seconds)``.
 
         ``tenant_slug`` is optional. When omitted the service auto-resolves the
@@ -139,17 +187,46 @@ class AuthService:
                 title="Invalid credentials",
             )
 
-        # 2FA
+        # 2FA: either issue a one-shot mfa_token (when no code) or validate the
+        # supplied TOTP. The mfa_token path returns early with a placeholder
+        # 4-tuple (caller renders a 2FA-challenge response); the TOTP path
+        # falls through to the normal access+refresh issuance below.
         two_fa = await self.two_factor.get(user.id)
         if two_fa is not None and two_fa.enabled_at is not None:
             if not totp_code:
+                if redis is None:
+                    # Redis is down; without it we cannot maintain the mfa_token
+                    # state, so we fall back to the legacy "send a code with the
+                    # creds" contract that the integration tests still cover.
+                    raise ProblemException(
+                        status=401,
+                        code="TWO_FACTOR_REQUIRED",
+                        title="2FA required",
+                        detail="Provide TOTP code to complete login.",
+                    )
+                mfa_token = pysecrets.token_urlsafe(24)
+                try:
+                    await redis.set(
+                        mfa_redis_key(mfa_token),
+                        f"{user.id}|{user.tenant_id}",
+                        ex=MFA_TOKEN_TTL_SECONDS,
+                    )
+                except Exception as exc:  # pragma: no cover - redis hiccup
+                    logger.warning("Failed to persist mfa_token: %s", exc)
+                    raise ProblemException(
+                        status=503,
+                        code="UPSTREAM_UNAVAILABLE",
+                        title="2FA challenge unavailable",
+                    ) from exc
+                # Return the challenge — the caller renders a 2FA-required
+                # response and does NOT set the refresh cookie.
+                return user, None, None, MFA_TOKEN_TTL_SECONDS, mfa_token
+            if not verify_totp(two_fa.secret_encrypted, totp_code):
                 raise ProblemException(
                     status=401,
-                    code="TWO_FACTOR_REQUIRED",
-                    title="2FA required",
-                    detail="Provide TOTP code to complete login.",
+                    code="UNAUTHENTICATED",
+                    title="Invalid TOTP code",
                 )
-            # TODO: validate totp_code via pyotp; raise UNAUTHENTICATED on failure.
 
         # Issue tokens & session
         refresh = new_refresh_token()
@@ -173,6 +250,124 @@ class AuthService:
             "identity.session.created.v1",
             user=user,
             data={"user_id": user.id, "session_id": sess.id, "ip": ip},
+        )
+        return user, access, refresh, settings.jwt_access_ttl_seconds, None
+
+    # -- 2FA challenge exchange ----------------------------------------- #
+    async def complete_mfa_login(
+        self,
+        *,
+        mfa_token: str,
+        totp_code: str | None,
+        backup_code: str | None,
+        redis: Any,
+        ip: str | None = None,
+        user_agent: str | None = None,
+    ) -> tuple[User, str, str, int]:
+        """Exchange a one-shot ``mfa_token`` for an access + refresh pair.
+
+        Either ``totp_code`` (preferred) or ``backup_code`` must be supplied.
+        On success the mfa_token is single-use — we delete it from Redis before
+        returning. Backup codes are also single-use and are removed from the
+        user's stored list.
+        """
+        if redis is None:
+            raise ProblemException(
+                status=503,
+                code="UPSTREAM_UNAVAILABLE",
+                title="2FA challenge state unavailable",
+            )
+        if not mfa_token or (not totp_code and not backup_code):
+            raise ProblemException(
+                status=400,
+                code="BAD_REQUEST",
+                title="mfa_token and one of totp_code/backup_code required",
+            )
+        key = mfa_redis_key(mfa_token)
+        try:
+            raw = await redis.get(key)
+        except Exception as exc:  # pragma: no cover - redis hiccup
+            logger.warning("Failed to read mfa_token: %s", exc)
+            raise ProblemException(
+                status=503, code="UPSTREAM_UNAVAILABLE", title="2FA state unavailable"
+            ) from exc
+        if not raw:
+            raise ProblemException(
+                status=401,
+                code="UNAUTHENTICATED",
+                title="Invalid or expired mfa_token",
+            )
+        # Stored as "<user_id>|<tenant_id>" — split lazily.
+        value = raw.decode("utf-8") if isinstance(raw, bytes) else str(raw)
+        try:
+            user_id_, _tenant_id = value.split("|", 1)
+        except ValueError:
+            user_id_, _tenant_id = value, ""
+
+        user = await self.users.get(user_id_)
+        if user is None or user.status != "active":
+            await redis.delete(key)
+            raise ProblemException(
+                status=401, code="UNAUTHENTICATED", title="User unavailable"
+            )
+
+        two_fa = await self.two_factor.get(user.id)
+        if two_fa is None or two_fa.enabled_at is None:
+            await redis.delete(key)
+            raise ProblemException(
+                status=400, code="BAD_REQUEST", title="2FA is not enabled"
+            )
+
+        if totp_code:
+            if not verify_totp(two_fa.secret_encrypted, totp_code):
+                # Don't delete the mfa_token: client gets one more attempt
+                # within the TTL window.
+                raise ProblemException(
+                    status=401, code="UNAUTHENTICATED", title="Invalid TOTP code"
+                )
+        else:
+            matched, remaining = consume_backup_code(
+                two_fa.backup_codes or [], backup_code or ""
+            )
+            if not matched:
+                raise ProblemException(
+                    status=401, code="UNAUTHENTICATED", title="Invalid backup code"
+                )
+            two_fa.backup_codes = remaining
+            await self.two_factor.upsert(two_fa)
+
+        # Single-use: delete the challenge before issuing tokens.
+        try:
+            await redis.delete(key)
+        except Exception:  # pragma: no cover - best-effort
+            pass
+
+        refresh = new_refresh_token()
+        sess = DBSession(
+            id=session_id(),
+            user_id=user.id,
+            refresh_token_hash=hash_token(refresh),
+            ip=ip,
+            user_agent=user_agent,
+            expires_at=datetime.now(timezone.utc)
+            + timedelta(seconds=settings.refresh_ttl_seconds),
+        )
+        await self.sessions.add(sess)
+        access = issue_access_token(
+            user_id=user.id,
+            tenant_id=user.tenant_id,
+            global_role=user.global_role,
+        )
+        user.last_login_at = datetime.now(timezone.utc)
+        await self._emit_user_event(
+            "identity.session.created.v1",
+            user=user,
+            data={
+                "user_id": user.id,
+                "session_id": sess.id,
+                "ip": ip,
+                "mfa": "totp" if totp_code else "backup_code",
+            },
         )
         return user, access, refresh, settings.jwt_access_ttl_seconds
 

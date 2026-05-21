@@ -1,6 +1,6 @@
 /**
  * Async operation polling helpers.
- * See docs/architecture/01-CROSS-CUTTING.md §7.
+ * See docs/architecture/legacy/01-CROSS-CUTTING.md §7.
  */
 import { useEffect, useState } from 'react';
 import api from './client';

@@ -1,6 +1,6 @@
 # PlagLens AI Analysis Service
 
-LLM-powered code review for student submissions. Spec: `docs/architecture/09-AI-ANALYSIS.md`.
+LLM-powered code review for student submissions. Spec: `docs/architecture/legacy/09-AI-ANALYSIS.md`.
 
 ## Stack
 - Python 3.12+, FastAPI, Pydantic v2
@@ -34,7 +34,7 @@ Key settings (see `src/ai_analysis_service/config.py`):
 - Curate-as-feedback: HTTP call to Submission Service `/api/v1/submissions/{id}/feedback:from-llm`.
 
 ## Endpoints (≥30)
-See `docs/architecture/09-AI-ANALYSIS.md` (sections A through I).
+See `docs/architecture/legacy/09-AI-ANALYSIS.md` (sections A through I).
 
 ## Tests
 Mocked OpenAI responses through `respx`, fakeredis, in-memory aiosqlite, no Kafka in tests.

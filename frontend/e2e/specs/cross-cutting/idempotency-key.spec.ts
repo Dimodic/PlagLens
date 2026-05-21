@@ -1,7 +1,7 @@
 /**
  * Idempotency-Key behaviour for resource-creating POSTs.
  *
- * Per docs/architecture/01-CROSS-CUTTING.md §6:
+ * Per docs/architecture/legacy/01-CROSS-CUTTING.md §6:
  *   - Same key + same body → identical response (no duplicate).
  *   - Same key + different body → 409 IDEMPOTENCY_KEY_CONFLICT.
  *   - Server stores (idempotency_key, hash_of_body) → response in Redis 24h.

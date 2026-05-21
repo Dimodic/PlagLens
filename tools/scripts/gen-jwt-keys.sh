@@ -40,9 +40,13 @@ openssl genpkey \
 # Extract public key.
 openssl rsa -pubout -in "$PRIV" -out "$PUB" 2>/dev/null
 
-# Tighten permissions on the private key (best-effort; chmod is a no-op on
-# Windows file systems but the operation must not fail there).
-chmod 600 "$PRIV" 2>/dev/null || true
+# Permissions on the private key (best-effort; chmod is a no-op on Windows
+# file systems but must not fail there). NB: 644 (world-readable), not 600,
+# because the file is mounted into containers that run as a non-root user
+# (uid 10001 `plaglens`) and would otherwise hit "Permission denied" when
+# reading the PEM. The directory itself is gitignored, so the key never
+# leaves the host.
+chmod 644 "$PRIV" 2>/dev/null || true
 chmod 644 "$PUB"  2>/dev/null || true
 
 echo "JWT keys generated at $SECRETS_DIR/"

@@ -18,6 +18,7 @@ from .auth import (
     TwoFactorEnableRequest,
     TwoFactorEnrollResponse,
     TwoFactorVerifyRequest,
+    TwoFactorVerifyResponse,
 )
 from .external_bindings import ExternalBindingCreate, ExternalBindingOut
 from .invitations import InvitationAccept, InvitationCreate, InvitationOut
@@ -72,6 +73,7 @@ __all__ = [
     "TwoFactorEnableRequest",
     "TwoFactorEnrollResponse",
     "TwoFactorVerifyRequest",
+    "TwoFactorVerifyResponse",
     "UserBatchCreate",
     "UserCreate",
     "UserOut",

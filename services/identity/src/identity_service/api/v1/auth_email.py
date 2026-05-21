@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import publish_user_event
 from ...common.ids import token_id
 from ...common.problem import ProblemException
 from ...common.security import hash_token, new_opaque_token
@@ -14,7 +15,7 @@ from ...models import EmailVerifyToken
 from ...repositories.tokens import EmailVerifyTokenRepository
 from ...repositories.users import UserRepository
 from ...schemas.auth import EmailChangeConfirm, EmailChangeRequest, EmailVerifyConfirm
-from ...services.email_service import EmailService
+from ...services.email_service import EmailService, build_frontend_url
 
 router = APIRouter(prefix="/auth/email", tags=["auth"])
 
@@ -45,7 +46,7 @@ async def email_verify_request(
         )
     )
     await email.send_email_verification(
-        to=user.email, verify_url=f"https://app.plaglens.local/verify?t={plain}"
+        to=user.email, verify_url=build_frontend_url("/auth/verify", plain)
     )
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
@@ -57,6 +58,7 @@ async def email_verify_request(
 )
 async def email_verify_confirm(
     payload: EmailVerifyConfirm,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     tokens = EmailVerifyTokenRepository(session)
@@ -73,7 +75,13 @@ async def email_verify_confirm(
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
     user.email_verified_at = datetime.now(timezone.utc)
     await tokens.mark_used(record.id)
-    # TODO: emit identity.user.email_verified.v1
+    await publish_user_event(
+        request,
+        "identity.user.email_verified.v1",
+        data={"user_id": user.id, "email": user.email},
+        tenant_id=user.tenant_id,
+        subject=f"users/{user.id}",
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -101,7 +109,7 @@ async def email_change_request(
     )
     await email.send_email_change_confirmation(
         to=payload.new_email,
-        confirm_url=f"https://app.plaglens.local/email-change?t={plain}",
+        confirm_url=build_frontend_url("/me/email-change", plain),
     )
     return Response(status_code=status.HTTP_202_ACCEPTED)
 

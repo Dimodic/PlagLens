@@ -1,6 +1,6 @@
 """OpenTelemetry tracing setup.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §12.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §12.
 """
 
 from __future__ import annotations

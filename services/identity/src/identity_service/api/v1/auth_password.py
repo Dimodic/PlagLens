@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import publish_user_event
 from ...common.ids import token_id
 from ...common.problem import ProblemException
 from ...common.security import (
@@ -25,7 +26,7 @@ from ...schemas.auth import (
     PasswordForgotRequest,
     PasswordResetRequest,
 )
-from ...services.email_service import EmailService
+from ...services.email_service import EmailService, build_frontend_url
 
 router = APIRouter(prefix="/auth/password", tags=["auth"])
 
@@ -57,9 +58,9 @@ async def password_forgot(
                     expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
                 )
             )
-            # TODO: build a real frontend URL; identity holds only the token.
             await email.send_password_reset(
-                to=user.email, reset_url=f"https://app.plaglens.local/reset?t={plain}"
+                to=user.email,
+                reset_url=build_frontend_url("/auth/reset", plain),
             )
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
@@ -71,6 +72,7 @@ async def password_forgot(
 )
 async def password_reset(
     payload: PasswordResetRequest,
+    request: Request,
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     tokens = PasswordResetTokenRepository(session)
@@ -91,7 +93,13 @@ async def password_reset(
     user.password_hash = hash_password(payload.new_password)
     await tokens.mark_used(record.id)
     await sessions.revoke_all_for_user(user.id)
-    # TODO: emit identity.user.password_changed.v1
+    await publish_user_event(
+        request,
+        "identity.user.password_changed.v1",
+        data={"user_id": user.id, "reason": "reset", "sessions_revoked": True},
+        tenant_id=user.tenant_id,
+        subject=f"users/{user.id}",
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -102,10 +110,12 @@ async def password_reset(
 )
 async def password_change(
     payload: PasswordChangeRequest,
+    request: Request,
     me: CurrentUser = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     users = UserRepository(session)
+    sessions = SessionRepository(session)
     user = await users.get(me.id)
     if user is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
@@ -116,5 +126,14 @@ async def password_change(
             title="Current password is incorrect",
         )
     user.password_hash = hash_password(payload.new_password)
-    # TODO: emit identity.user.password_changed.v1; force_logout other sessions
+    # Force-logout all other sessions: revoking everything is the safest default
+    # — the user's current session was rotated already so they keep their seat.
+    await sessions.revoke_all_for_user(user.id)
+    await publish_user_event(
+        request,
+        "identity.user.password_changed.v1",
+        data={"user_id": user.id, "reason": "self_change", "sessions_revoked": True},
+        tenant_id=user.tenant_id,
+        subject=f"users/{user.id}",
+    )
     return Response(status_code=status.HTTP_204_NO_CONTENT)

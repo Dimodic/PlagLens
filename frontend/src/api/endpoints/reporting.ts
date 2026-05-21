@@ -1,6 +1,6 @@
 /**
  * Reporting API client.
- * Mirrors docs/architecture/11-REPORTING.md.
+ * Mirrors docs/architecture/legacy/11-REPORTING.md.
  *
  * Covers: exports (start/list/detail/download/retry/cancel/delete),
  * scheduled exports (CRUD + run-now), Google Sheets link + sync,

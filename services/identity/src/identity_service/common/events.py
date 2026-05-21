@@ -97,4 +97,47 @@ def event_to_json(event: CloudEvent) -> str:
     return json.dumps(event.model_dump(), default=str)
 
 
-__all__ = ["CloudEvent", "KafkaProducer", "StubProducer", "event_to_json", "make_event"]
+async def publish_user_event(
+    request: Any,
+    event_type: str,
+    *,
+    data: dict[str, Any],
+    tenant_id: Optional[str] = None,
+    subject: Optional[str] = None,
+    actor: Optional[dict[str, Any]] = None,
+) -> None:
+    """Publish an identity-domain user event from any route handler.
+
+    Pulls the Kafka producer from ``request.app.state.producer`` (initialised
+    in :func:`identity_service.main.lifespan`). Best-effort: any error is
+    logged and swallowed so the user-facing request never fails because the
+    event bus is down.
+    """
+    producer = getattr(getattr(request.app, "state", None), "producer", None)
+    if producer is None:
+        logger.info("[event] no producer wired; dropping %s", event_type)
+        return
+    # Lazy import to avoid an import cycle with config at module-load time.
+    from ..config import get_settings
+
+    try:
+        event = make_event(
+            event_type,
+            data=data,
+            tenant_id=tenant_id,
+            subject=subject,
+            actor=actor,
+        )
+        await producer.publish(get_settings().kafka_topic_user, event)
+    except Exception as exc:  # pragma: no cover - best-effort
+        logger.warning("Failed to publish %s: %s", event_type, exc)
+
+
+__all__ = [
+    "CloudEvent",
+    "KafkaProducer",
+    "StubProducer",
+    "event_to_json",
+    "make_event",
+    "publish_user_event",
+]

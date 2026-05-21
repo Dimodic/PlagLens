@@ -1,7 +1,7 @@
 # plaglens-common
 
 Shared abstractions for PlagLens microservices: errors, auth, RBAC, idempotency,
-events, observability. Sourced from `docs/architecture/01-CROSS-CUTTING.md`,
+events, observability. Sourced from `docs/architecture/legacy/01-CROSS-CUTTING.md`,
 `02-RBAC.md`, `03-EVENTS.md`.
 
 ## Install

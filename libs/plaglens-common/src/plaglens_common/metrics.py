@@ -1,6 +1,6 @@
 """Prometheus metrics middleware + helpers.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §11.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §11.
 
 The default registry is used so `/metrics` from `health.health_router` exposes
 everything that this module records.

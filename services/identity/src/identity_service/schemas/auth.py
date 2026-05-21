@@ -42,6 +42,27 @@ class UserSummary(BaseModel):
 
 
 class LoginResponse(BaseModel):
+    """Response of POST /auth/login.
+
+    Two shapes share this schema:
+
+    * **Single-factor success** — ``access_token``, ``expires_in`` and ``user``
+      are populated; ``two_factor_required`` is ``False``.
+    * **2FA challenge** — the user has 2FA enabled and did not supply a TOTP
+      code yet. The server has issued an ``mfa_token`` (short-lived, stored in
+      Redis) which the client exchanges at ``POST /auth/2fa/verify`` together
+      with a TOTP or backup code. ``access_token`` / ``user`` are ``None`` and
+      ``two_factor_required`` is ``True``.
+    """
+    access_token: str | None = None
+    expires_in: int | None = None
+    user: UserSummary | None = None
+    two_factor_required: bool = False
+    mfa_token: str | None = None
+
+
+class TwoFactorVerifyResponse(BaseModel):
+    """Response of POST /auth/2fa/verify — mirrors the happy-path login."""
     access_token: str
     expires_in: int
     user: UserSummary

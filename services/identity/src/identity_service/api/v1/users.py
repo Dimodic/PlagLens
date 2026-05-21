@@ -3,9 +3,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import publish_user_event
 from ...common.ids import gen_id, user_id
 from ...common.pagination import Page, Pagination
 from ...common.problem import ProblemException
@@ -251,10 +252,12 @@ async def enable_user(
 )
 async def anonymize_user(
     target_user_id: str,
+    request: Request,
     user: CurrentUser = Depends(current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
     repo = UserRepository(session)
+    sessions_repo = SessionRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
@@ -271,7 +274,23 @@ async def anonymize_user(
     u.avatar_url = None
     u.anonymized_at = datetime.now(timezone.utc)
     u.status = "disabled"
-    # TODO: emit identity.user.anonymized.v1 (cascade)
+    # Revoke all sessions before downstream services react to the event.
+    await sessions_repo.revoke_all_for_user(u.id)
+    # Fan-out: course, submission, ai-analysis, reporting all subscribe to
+    # `plaglens.identity.user.v1` and act on `.anonymized.v1` by scrubbing
+    # foreign-key references they hold for this user_id.
+    await publish_user_event(
+        request,
+        "identity.user.anonymized.v1",
+        data={
+            "user_id": u.id,
+            "actor_user_id": user.id,
+            "self_initiated": user.id == u.id,
+        },
+        tenant_id=u.tenant_id,
+        subject=f"users/{u.id}",
+        actor={"user_id": user.id, "global_role": user.global_role},
+    )
     return _user_to_out(u)
 
 

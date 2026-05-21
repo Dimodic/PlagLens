@@ -1,6 +1,6 @@
 """Cursor-based pagination primitives.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §4.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §4.
 
 Cursor format
 -------------

@@ -99,10 +99,34 @@ class Settings(BaseSettings):
             return [item.strip() for item in v.split(",") if item.strip()]
         return v
 
-    # ---- Email transport (Mailgun, stubbed) ----
-    mailgun_api_key: str = ""
-    mailgun_domain: str = ""
+    # ---- Email transport ----
+    # Identity does NOT own the delivery layer — it forwards transactional
+    # emails (verify / password-reset / invitation / email-change) to the
+    # notification service via its internal HTTP endpoint
+    # (``POST /api/v1/internal/notifications/email-direct``). Authentication
+    # is a shared bearer token; when empty, AUTH_DISABLED on the notification
+    # side lets us skip it in local/test runs.
+    notification_base_url: str = "http://reporting:8000"
+    notification_internal_token: str = ""
+
+    # Public-facing base URL of the frontend SPA. Used to build absolute
+    # callback links inside transactional emails (verify, password-reset,
+    # invitation, email-change). When empty, email-service falls back to a
+    # relative path so the user can prepend the host themselves.
+    frontend_base_url: str = ""
+
+    # From-name shown in the From header of every transactional email.
     mailgun_from: str = "no-reply@plaglens.local"
+
+    # ---- Avatars (MinIO / S3) ----
+    minio_endpoint: str = "minio:9000"
+    minio_access_key: str = ""
+    minio_secret_key: str = ""
+    minio_secure: bool = False
+    minio_region: str = "us-east-1"
+    avatars_bucket: str = "plaglens-avatars"
+    avatars_url_ttl_seconds: int = 7 * 24 * 3600
+    avatar_max_size_bytes: int = 2 * 1024 * 1024  # 2 MiB
 
     # ---- Idempotency ----
     idempotency_ttl_seconds: int = 24 * 3600

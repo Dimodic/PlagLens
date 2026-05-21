@@ -1,6 +1,6 @@
 """ASGI middleware implementing the Idempotency-Key contract.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §6.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §6.
 
 Behavior
 --------

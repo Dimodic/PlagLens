@@ -1,6 +1,6 @@
 """CloudEvents envelope + thin async Kafka producer/consumer.
 
-See `docs/architecture/03-EVENTS.md`.
+See `docs/architecture/legacy/03-EVENTS.md`.
 """
 
 from __future__ import annotations

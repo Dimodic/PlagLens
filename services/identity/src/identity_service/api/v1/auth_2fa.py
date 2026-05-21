@@ -21,7 +21,10 @@ from ...schemas.auth import (
     TwoFactorEnableRequest,
     TwoFactorEnrollResponse,
     TwoFactorVerifyRequest,
+    TwoFactorVerifyResponse,
+    UserSummary,
 )
+from ...services.auth_service import AuthService, verify_totp
 
 router = APIRouter(prefix="/auth/2fa", tags=["auth"])
 
@@ -75,7 +78,14 @@ async def two_factor_enable(
         raise ProblemException(
             status=400, code="BAD_REQUEST", title="2FA not enrolled"
         )
-    # TODO: decrypt secret + verify payload.totp_code via pyotp
+    # Confirm the user actually possesses the TOTP device by validating the
+    # supplied code against the secret stored at /enroll. Until this check
+    # passes the row exists but ``enabled_at`` stays NULL — login still
+    # ignores it (and ``/disable`` would 404 because of that).
+    if not verify_totp(record.secret_encrypted, payload.totp_code):
+        raise ProblemException(
+            status=401, code="UNAUTHENTICATED", title="Invalid TOTP code"
+        )
     codes = _new_backup_codes()
     record.backup_codes = codes
     record.enabled_at = datetime.now(timezone.utc)
@@ -129,18 +139,52 @@ async def two_factor_backup_codes(
 
 @router.post(
     "/verify",
+    response_model=TwoFactorVerifyResponse,
     summary="Submit second-factor code during login",
 )
 async def two_factor_verify(
     payload: TwoFactorVerifyRequest,
     request: Request,
-) -> dict[str, str]:
-    # TODO: validate mfa_token from Redis, verify TOTP/backup, then reissue access+refresh
-    # The first phase of /auth/login emits TWO_FACTOR_REQUIRED + a one-shot mfa_token
-    # which gets exchanged here. For now we return a not-implemented hint.
-    raise ProblemException(
-        status=501,
-        code="NOT_IMPLEMENTED",
-        title="2FA verify is not yet wired",
-        detail="The mfa_token exchange will be completed alongside the Redis state.",
+    response: Response,
+    session: AsyncSession = Depends(get_session),
+) -> TwoFactorVerifyResponse:
+    """Exchange the one-shot ``mfa_token`` issued by ``/auth/login`` for an
+    access + refresh pair, after verifying the TOTP code or a backup code.
+
+    Sets the refresh cookie on success; the request body never carries the
+    refresh token. Single-use: mfa_token is deleted on success and backup
+    codes are consumed in-place.
+    """
+    auth = AuthService(session, producer=getattr(request.app.state, "producer", None))
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent")
+    redis = getattr(request.app.state, "redis", None)
+    user, access, refresh, ttl = await auth.complete_mfa_login(
+        mfa_token=payload.mfa_token,
+        totp_code=payload.totp_code,
+        backup_code=payload.backup_code,
+        redis=redis,
+        ip=ip,
+        user_agent=ua,
+    )
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
+        value=refresh,
+        max_age=settings.refresh_ttl_seconds,
+        httponly=True,
+        secure=settings.cookie_secure,
+        samesite="strict",
+        path="/",
+    )
+    return TwoFactorVerifyResponse(
+        access_token=access,
+        expires_in=ttl,
+        user=UserSummary(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            avatar_url=user.avatar_url,
+            global_role=user.global_role,
+            tenant_id=user.tenant_id,
+        ),
     )

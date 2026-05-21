@@ -1,6 +1,6 @@
 /**
  * Course Service endpoints.
- * Maps to docs/architecture/05-COURSE.md.
+ * Maps to docs/architecture/legacy/05-COURSE.md.
  */
 import api from '../client';
 import type { CourseRole, Operation, Paginated, UserSummary } from '../types';

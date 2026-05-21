@@ -4,7 +4,7 @@ Services raise ``ProblemException(status=..., code=..., title=...)`` from
 anywhere and register the handlers returned by :func:`make_handlers` on their
 FastAPI app. The wire content-type is ``application/problem+json``.
 
-See ``docs/architecture/01-CROSS-CUTTING.md`` §5.
+See ``docs/architecture/legacy/01-CROSS-CUTTING.md`` §5.
 """
 
 from __future__ import annotations

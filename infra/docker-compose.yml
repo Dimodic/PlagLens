@@ -152,6 +152,14 @@ services:
       OAUTH_GITHUB_CLIENT_ID: ${OAUTH_GITHUB_CLIENT_ID:-}
       OAUTH_GITHUB_CLIENT_SECRET: ${OAUTH_GITHUB_CLIENT_SECRET:-}
       EMAIL_FROM: ${EMAIL_FROM:-no-reply@plaglens.local}
+      # Identity forwards transactional emails (verify / reset / invite /
+      # email-change) to the reporting service's internal endpoint
+      # (reporting hosts the notification sub-module after the 10→7 merge).
+      NOTIFICATION_BASE_URL: http://reporting:8000
+      NOTIFICATION_INTERNAL_TOKEN: ${NOTIFICATION_INTERNAL_TOKEN:-}
+      # Used to build the absolute callback URL inside the email body. Falls
+      # back to a relative path when unset.
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://${PUBLIC_HOSTNAME:-localhost}}
       # Bootstrap super-admin (entrypoint runs `python -m
       # identity_service.bootstrap_super_admin` on startup if EMAIL is set).
       BOOTSTRAP_SUPER_ADMIN_EMAIL: ${BOOTSTRAP_SUPER_ADMIN_EMAIL:-}
@@ -362,6 +370,10 @@ services:
       MAILGUN_API_KEY: ${MAILGUN_API_KEY:-}
       MAILGUN_DOMAIN: ${MAILGUN_DOMAIN:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      # Shared bearer secret for the internal email-direct endpoint
+      # called by identity (transactional verify / reset / invite mails).
+      # Empty in dev — notification only checks the token when AUTH_DISABLED=false.
+      NOTIFICATION_INTERNAL_TOKEN: ${NOTIFICATION_INTERNAL_TOKEN:-}
       # NB: deliberately NOT setting KAFKA_CONSUMER_GROUP — reporting AND
       # notification both read it; each must keep its own default group so they
       # don't share one consumer group (audit uses KAFKA_GROUP_ID separately).

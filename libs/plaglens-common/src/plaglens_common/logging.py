@@ -1,6 +1,6 @@
 """structlog JSON logging configuration.
 
-See `docs/architecture/01-CROSS-CUTTING.md` §13.
+See `docs/architecture/legacy/01-CROSS-CUTTING.md` §13.
 """
 
 from __future__ import annotations
