@@ -14,7 +14,7 @@ router = APIRouter(prefix="/tenants/{tenant_id}/dashboard", tags=["dashboards-te
 
 
 def _ensure_admin(p: Principal, tenant_id: str) -> None:
-    if p.has_global("super_admin"):
+    if p.has_global("admin"):
         return
     if not p.has_global("admin"):
         raise forbidden("Need admin")

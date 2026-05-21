@@ -30,7 +30,7 @@ class CrossTenantMigrate(BaseModel):
 )
 async def admin_list_tenants(
     limit: int = Query(50, ge=1, le=200),
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> Page[TenantOut]:
     repo = TenantRepository(session)
@@ -49,7 +49,7 @@ async def admin_list_tenants(
 async def admin_list_users(
     q: str | None = None,
     limit: int = Query(50, ge=1, le=200),
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> Page[UserOut]:
     repo = UserRepository(session)
@@ -66,7 +66,7 @@ async def admin_list_users(
 )
 async def cross_tenant_migrate_user(
     payload: CrossTenantMigrate,  # noqa: ARG001 — TODO use payload to perform migration
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
 ) -> dict[str, str]:
     raise ProblemException(
         status=501,

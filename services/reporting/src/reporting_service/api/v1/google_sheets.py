@@ -15,7 +15,7 @@ router = APIRouter(tags=["google-sheets"])
 
 
 def _ensure_course_role(p: Principal, course_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.has_course_role(course_id, "owner", "co_owner", "assistant"):
         return

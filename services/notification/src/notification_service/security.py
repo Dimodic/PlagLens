@@ -25,10 +25,10 @@ class Principal:
         return self.sub
 
     def is_admin(self) -> bool:
-        return self.global_role in ("admin", "super_admin")
+        return self.global_role in ("admin",)
 
     def is_super_admin(self) -> bool:
-        return self.global_role == "super_admin"
+        return self.global_role == "admin"
 
 
 def _decode_jwt(token: str) -> dict[str, Any]:

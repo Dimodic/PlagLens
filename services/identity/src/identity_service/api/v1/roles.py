@@ -23,9 +23,9 @@ from ...schemas.roles import RoleAssignRequest, RoleOut, RolePermissionsOut
 router = APIRouter(tags=["roles"])
 
 _ROLE_DESCRIPTIONS = {
-    "super_admin": "Cross-tenant platform operator",
-    "admin": "Tenant-scoped administrator",
+    "admin": "Cross-tenant platform administrator",
     "teacher": "Can create courses, owner of own courses",
+    "assistant": "Course assistant (teaching helper)",
     "student": "Default role for course participants",
 }
 
@@ -61,22 +61,22 @@ async def get_role_permissions(
 async def assign_role(
     target_user_id: str,
     payload: RoleAssignRequest,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str]:
     if payload.role not in GLOBAL_ROLES:
         raise ProblemException(
             status=422, code="VALIDATION_FAILED", title="Unknown role"
         )
-    if payload.role == "super_admin" and user.global_role != "super_admin":
+    if payload.role == "admin" and user.global_role != "admin":
         raise ProblemException(
-            status=403, code="FORBIDDEN", title="Only super_admin can assign super_admin"
+            status=403, code="FORBIDDEN", title="Only an admin can assign the admin role"
         )
     repo = UserRepository(session)
     target = await repo.get(target_user_id)
     if target is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, target.tenant_id)
     target.global_role = payload.role
     # TODO: emit identity.user.role_assigned.v1

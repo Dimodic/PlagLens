@@ -232,7 +232,7 @@ async def issue_service_token(
     # are unaffected.
     as_tenant = (payload.get("tenant_id") or "system").strip()
     as_user = (payload.get("as_user_id") or f"svc:{service_name}").strip()
-    as_role = (payload.get("global_role") or "super_admin").strip()
+    as_role = (payload.get("global_role") or "admin").strip()
 
     now = datetime.now(timezone.utc)
     exp = now + timedelta(seconds=settings.service_token_ttl_seconds)

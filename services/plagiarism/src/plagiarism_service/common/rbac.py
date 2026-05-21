@@ -31,10 +31,10 @@ class Principal:
     raw: dict = field(default_factory=dict)
 
     def is_super_admin(self) -> bool:
-        return self.global_role == "super_admin"
+        return self.global_role == "admin"
 
     def is_admin(self) -> bool:
-        return self.global_role in ("admin", "super_admin")
+        return self.global_role in ("admin",)
 
     def course_role(self, course_id: str | None) -> str | None:
         if course_id is None:

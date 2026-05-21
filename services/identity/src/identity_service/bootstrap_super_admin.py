@@ -75,7 +75,7 @@ async def _bootstrap() -> int:
         # 2. Skip if a super_admin already exists for this tenant.
         existing_stmt = select(User).where(
             User.tenant_id == tenant.id,
-            User.global_role == "super_admin",
+            User.global_role == "admin",
             User.deleted_at.is_(None),
         )
         existing = (await session.execute(existing_stmt)).scalar_one_or_none()
@@ -116,11 +116,11 @@ async def _bootstrap() -> int:
             email=email,
             email_verified_at=datetime.now(timezone.utc),
             password_hash=hash_password(password),
-            display_name="System Super Admin",
+            display_name="Admin",
             locale="ru",
             timezone="UTC",
             status="active",
-            global_role="super_admin",
+            global_role="admin",
         )
         session.add(user)
         await session.commit()

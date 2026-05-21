@@ -118,7 +118,7 @@ async def list_group_members(
     session: SessionDep,
 ) -> list[GroupMemberRead]:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     grp = await fetch_group(course, group_id, session)
     repo = GroupRepository(session)

@@ -25,7 +25,7 @@ def _service(request: Request, session: AsyncSession) -> DashboardService:
 @router.get("/global")
 async def global_overview(
     request: Request,
-    p: Principal = Depends(require_global("super_admin")),
+    p: Principal = Depends(require_global("admin")),
     session: AsyncSession = Depends(get_session),
 ):
     return await _service(request, session).global_overview()
@@ -34,7 +34,7 @@ async def global_overview(
 @router.get("/system-health")
 async def system_health(
     request: Request,
-    p: Principal = Depends(require_global("super_admin")),
+    p: Principal = Depends(require_global("admin")),
     session: AsyncSession = Depends(get_session),
 ):
     return await _service(request, session).system_health()
@@ -43,7 +43,7 @@ async def system_health(
 @router.get("/operations")
 async def operations_overview(
     request: Request,
-    p: Principal = Depends(require_global("super_admin")),
+    p: Principal = Depends(require_global("admin")),
     session: AsyncSession = Depends(get_session),
 ):
     return await _service(request, session).operations_overview()
@@ -52,7 +52,7 @@ async def operations_overview(
 @router.get("/errors")
 async def errors_overview(
     request: Request,
-    p: Principal = Depends(require_global("super_admin")),
+    p: Principal = Depends(require_global("admin")),
     session: AsyncSession = Depends(get_session),
 ):
     return await _service(request, session).errors_overview()

@@ -19,7 +19,7 @@ router = APIRouter(tags=["scheduled-exports"])
 
 
 def _ensure_owner(p: Principal, course_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.has_course_role(course_id, "owner", "co_owner"):
         return

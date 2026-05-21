@@ -105,14 +105,14 @@ async def optional_current_user(
 
 
 # ---- RBAC dependencies --------------------------------------------------- #
-GLOBAL_ROLE_ORDER = {"student": 0, "teacher": 1, "admin": 2, "super_admin": 3}
+GLOBAL_ROLE_ORDER = {"student": 0, "assistant": 1, "teacher": 2, "admin": 3}
 
 
 def require_global_role(*allowed: str):
-    """Dependency factory: 403 if user.global_role not in allowed (unless super_admin)."""
+    """Dependency factory: 403 if user.global_role not in allowed (unless admin)."""
 
     async def _dep(user: CurrentUser = Depends(current_user)) -> CurrentUser:
-        if user.global_role == "super_admin":
+        if user.global_role == "admin":
             return user
         if user.global_role not in allowed:
             raise ProblemException(
@@ -127,14 +127,14 @@ def require_global_role(*allowed: str):
 
 
 def require_self_or_admin(target_user_id_param: str = "user_id"):
-    """Allow if the authenticated user is the target, or has admin/super_admin."""
+    """Allow if the authenticated user is the target, or has admin."""
 
     async def _dep(
         request: Request,
         user: CurrentUser = Depends(current_user),
     ) -> CurrentUser:
         target = request.path_params.get(target_user_id_param)
-        if user.global_role in ("admin", "super_admin"):
+        if user.global_role in ("admin",):
             return user
         if target and target == user.id:
             return user
@@ -149,7 +149,7 @@ def require_self_or_admin(target_user_id_param: str = "user_id"):
 
 # ---- Tenant isolation helper -------------------------------------------- #
 async def assert_same_tenant(user: CurrentUser, resource_tenant_id: str) -> None:
-    if user.global_role == "super_admin":
+    if user.global_role == "admin":
         return
     if user.tenant_id != resource_tenant_id:
         raise ProblemException(

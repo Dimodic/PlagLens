@@ -19,7 +19,7 @@ router = APIRouter(tags=["exports"])
 def _ensure_course_access(p: Principal, course_id: str | None) -> None:
     if course_id is None:
         return
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.has_course_role(course_id, "owner", "co_owner", "assistant"):
         return
@@ -108,9 +108,9 @@ async def create_generic_export(
 ):
     course_id = payload.scope.get("course_id")
     _ensure_course_access(p, str(course_id) if course_id else None)
-    if payload.kind == "tenant_usage" and not p.has_global("admin", "super_admin"):
+    if payload.kind == "tenant_usage" and not p.has_global("admin",):
         raise forbidden("Tenant usage requires admin")
-    if payload.kind == "audit_log" and not p.has_global("admin", "super_admin"):
+    if payload.kind == "audit_log" and not p.has_global("admin",):
         raise forbidden("Audit export requires admin")
     return await _create_export(
         request,
@@ -302,7 +302,7 @@ async def list_my_exports(
     limit: int = Query(default=50, ge=1, le=200),
 ):
     repo = ExportJobRepo(session)
-    triggered_by = None if p.has_global("admin", "super_admin") else p.user_id
+    triggered_by = None if p.has_global("admin",) else p.user_id
     page = await repo.list(
         p.tenant_id,
         triggered_by=triggered_by,
@@ -349,7 +349,7 @@ async def get_export(
     job = await repo.get(p.tenant_id, export_id)
     if job is None:
         raise not_found(f"Export {export_id} not found")
-    if not p.has_global("admin", "super_admin") and job.triggered_by != p.user_id:
+    if not p.has_global("admin",) and job.triggered_by != p.user_id:
         cid = job.scope.get("course_id") if job.scope else None
         if not cid or not p.has_course_role(cid, "owner", "co_owner", "assistant"):
             raise forbidden("Not allowed")
@@ -367,7 +367,7 @@ async def delete_export(
     job = await repo.get(p.tenant_id, export_id)
     if job is None:
         raise not_found(f"Export {export_id} not found")
-    if not p.has_global("admin", "super_admin") and job.triggered_by != p.user_id:
+    if not p.has_global("admin",) and job.triggered_by != p.user_id:
         raise forbidden("Only initiator/admin can delete")
     await repo.soft_delete(job)
     await session.commit()
@@ -383,7 +383,7 @@ async def retry_export(
 ):
     svc = request.app.state.export_service
     job = await svc.retry(session, p.tenant_id, export_id)
-    if not p.has_global("admin", "super_admin") and job.triggered_by != p.user_id:
+    if not p.has_global("admin",) and job.triggered_by != p.user_id:
         raise forbidden("Only initiator/admin can retry")
     await session.commit()
     bearer = request.headers.get("authorization")
@@ -400,7 +400,7 @@ async def cancel_export(
 ):
     svc = request.app.state.export_service
     job = await svc.cancel(session, p.tenant_id, export_id)
-    if not p.has_global("admin", "super_admin") and job.triggered_by != p.user_id:
+    if not p.has_global("admin",) and job.triggered_by != p.user_id:
         raise forbidden("Only initiator/admin can cancel")
     await session.commit()
     return {"operation_id": job.operation_id, "status": "cancelled"}
@@ -418,7 +418,7 @@ async def download_export(
     job = await repo.get(p.tenant_id, export_id)
     if job is None:
         raise not_found(f"Export {export_id} not found")
-    if not p.has_global("admin", "super_admin") and job.triggered_by != p.user_id:
+    if not p.has_global("admin",) and job.triggered_by != p.user_id:
         cid = job.scope.get("course_id") if job.scope else None
         if not cid or not p.has_course_role(cid, "owner", "co_owner", "assistant"):
             raise forbidden("Not allowed")

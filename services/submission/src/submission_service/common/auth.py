@@ -22,11 +22,11 @@ class AuthContext:
 
     @property
     def is_super_admin(self) -> bool:
-        return self.global_role == "super_admin"
+        return self.global_role == "admin"
 
     @property
     def is_admin(self) -> bool:
-        return self.global_role in {"admin", "super_admin"}
+        return self.global_role in {"admin"}
 
     def can_view_course(self, course_id: str) -> bool:
         if self.is_admin:

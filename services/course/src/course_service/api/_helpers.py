@@ -118,7 +118,7 @@ async def fetch_course(
     include_deleted: bool = Query(default=False, alias="include_deleted"),
 ) -> Course:
     repo = CourseRepository(session)
-    if user.global_role == "super_admin":
+    if user.global_role == "admin":
         course = await repo.get(course_id, include_deleted=include_deleted)
     else:
         course = await repo.get_in_tenant(
@@ -143,7 +143,7 @@ async def fetch_assignment(
     crepo = CourseRepository(session)
     course = await crepo.get(assignment.course_id, include_deleted=True)
     if course is None or (
-        user.global_role != "super_admin" and course.tenant_id != user.tenant_id
+        user.global_role != "admin" and course.tenant_id != user.tenant_id
     ):
         raise ProblemException(
             status_code=404, detail="Assignment not found", code="NOT_FOUND"
@@ -205,7 +205,7 @@ async def fetch_homework(
     crepo = CourseRepository(session)
     course = await crepo.get(homework.course_id, include_deleted=True)
     if course is None or (
-        user.global_role != "super_admin" and course.tenant_id != user.tenant_id
+        user.global_role != "admin" and course.tenant_id != user.tenant_id
     ):
         raise ProblemException(
             status_code=404, detail="Homework not found", code="NOT_FOUND"

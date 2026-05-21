@@ -14,7 +14,7 @@ from fastapi import Depends, Header, Request
 
 from .problem import forbidden, unauthenticated
 
-GLOBAL_ROLES = {"super_admin", "admin", "teacher", "student"}
+GLOBAL_ROLES = {"admin", "teacher", "assistant", "student"}
 COURSE_ROLES = {"owner", "co_owner", "assistant", "student"}
 
 
@@ -27,7 +27,7 @@ class Principal:
     raw: dict = field(default_factory=dict)
 
     def has_global(self, *roles: str) -> bool:
-        return self.global_role in roles or self.global_role == "super_admin"
+        return self.global_role in roles or self.global_role == "admin"
 
     def course_role(self, course_id: str | int | None) -> str | None:
         if course_id is None:
@@ -108,20 +108,20 @@ def require_global(*roles: str):
 
 
 def assert_course_access(p: Principal, course_id: str | int, allowed: Iterable[str]) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if not p.has_course_role(course_id, *allowed):
         raise forbidden("No course role for this resource")
 
 
 def assert_self_or_admin(p: Principal, owner_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.user_id != owner_id:
         raise forbidden("Only owner or admin")
 
 
 def is_course_member(p: Principal, course_id: str | int) -> bool:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return True
     return p.course_role(course_id) is not None

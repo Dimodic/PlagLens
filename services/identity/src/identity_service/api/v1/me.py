@@ -109,7 +109,7 @@ async def patch_me(
     if payload.avatar_url is not None:
         db_user.avatar_url = payload.avatar_url
     # global_role on PATCH /me is rejected for non-admins below
-    if payload.global_role is not None and user.global_role not in ("admin", "super_admin"):
+    if payload.global_role is not None and user.global_role not in ("admin",):
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Cannot self-promote role"
         )

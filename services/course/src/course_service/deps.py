@@ -108,7 +108,7 @@ def require_global_role(*allowed: str):
     allowed_set = set(allowed)
 
     async def _check(user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
-        if user.global_role == "super_admin" or user.global_role in allowed_set:
+        if user.global_role == "admin" or user.global_role in allowed_set:
             return user
         raise ProblemException(
             status_code=403,
@@ -154,7 +154,7 @@ def require_course_role(*allowed: str, allow_admin: bool = True):
         user: CurrentUser = Depends(get_current_user),
         session: AsyncSession = Depends(get_session),
     ) -> CurrentUser:
-        if user.global_role == "super_admin":
+        if user.global_role == "admin":
             return user
         if allow_admin and user.global_role == "admin":
             return user
@@ -181,7 +181,7 @@ def require_course_role_for_assignment(*allowed: str, allow_admin: bool = True):
         user: CurrentUser = Depends(get_current_user),
         session: AsyncSession = Depends(get_session),
     ) -> CurrentUser:
-        if user.global_role == "super_admin":
+        if user.global_role == "admin":
             return user
         if allow_admin and user.global_role == "admin":
             return user
@@ -207,7 +207,7 @@ async def assert_course_membership(
     session: AsyncSession,
 ) -> str:
     """Returns role (owner|co_owner|assistant|student) or raises 404/403."""
-    if user.global_role in {"super_admin", "admin"}:
+    if user.global_role in {"admin"}:
         return user.global_role
     role = await _resolve_course_role(course_id, user, session)
     if role is None:
@@ -218,7 +218,7 @@ async def assert_course_membership(
 
 
 def is_course_manager(role: str) -> bool:
-    return role in _OWNER_ROLES or role in {"super_admin", "admin"}
+    return role in _OWNER_ROLES or role in {"admin"}
 
 
 def any_of(values: Iterable[str]) -> set[str]:

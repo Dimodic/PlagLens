@@ -32,7 +32,7 @@ from ._helpers import (
 
 router = APIRouter(prefix="/api/v1/courses", tags=["courses"])
 
-_OWNER_LIKE = {"owner", "co_owner", "admin", "super_admin"}
+_OWNER_LIKE = {"owner", "co_owner", "admin"}
 _MANAGER_LIKE = _OWNER_LIKE | {"assistant"}
 
 
@@ -51,14 +51,14 @@ async def list_courses(
     limit: int = Depends(parse_limit),
     include_deleted: bool = Query(default=False),
 ) -> Page[CourseRead]:
-    if include_deleted and user.global_role not in {"super_admin", "admin"}:
+    if include_deleted and user.global_role not in {"admin"}:
         raise ProblemException(
             status_code=403,
             detail="include_deleted requires admin",
             code="FORBIDDEN",
         )
     repo = CourseRepository(session)
-    if user.global_role in {"super_admin", "admin"}:
+    if user.global_role in {"admin"}:
         rows, next_id = await repo.list_for_tenant(
             user.tenant_id,
             status=status_filter,
@@ -89,7 +89,7 @@ async def create_course(
     user: UserDep,
     course_svc: CourseSvcDep,
 ) -> CourseRead:
-    if user.global_role not in {"super_admin", "admin", "teacher"}:
+    if user.global_role not in {"admin", "teacher"}:
         raise ProblemException(
             status_code=403,
             detail="Only teacher/admin can create courses",
@@ -135,7 +135,7 @@ async def delete_course(
     session: SessionDep,
 ) -> Response:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "admin", "super_admin"}:
+    if role not in {"owner", "admin"}:
         raise ProblemException(
             status_code=403, detail="Only primary owner / admin can delete", code="FORBIDDEN"
         )
@@ -229,7 +229,7 @@ async def add_owner(
     session: SessionDep,
 ) -> OwnerRead:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "admin", "super_admin"}:
+    if role not in {"owner", "admin"}:
         raise ProblemException(
             status_code=403, detail="Only primary owner can assign co-owner", code="FORBIDDEN"
         )
@@ -249,7 +249,7 @@ async def remove_owner(
     # Spec: only ``owner`` may remove a co_owner; we additionally allow a
     # co_owner to step down themselves (self-leave).
     is_self_leave = user_id == user.user_id and role == "co_owner"
-    if role not in {"owner", "admin", "super_admin"} and not is_self_leave:
+    if role not in {"owner", "admin"} and not is_self_leave:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     repo = MemberRepository(session)
     target = await repo.get_owner(course.id, user_id)
@@ -268,7 +268,7 @@ async def promote_owner(
     session: SessionDep,
 ) -> CourseRead:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "admin", "super_admin"}:
+    if role not in {"owner", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     res = await course_svc.promote_owner(course, user_id, user)
     return CourseRead.model_validate(res)

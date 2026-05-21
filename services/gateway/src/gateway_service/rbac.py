@@ -19,7 +19,7 @@ from gateway_service.auth import Principal
 def required_global_role(path: str) -> str | None:
     """Return required minimum global role for a given path, or None."""
     if path.startswith("/v1/services-status") or path.startswith("/api/v1/services-status"):
-        return "super_admin"
+        return "admin"
     if path.startswith("/api/v1/admin/tenants") or path.startswith("/api/v1/tenants"):
         return "admin"
     if path.startswith("/api/v1/admin/"):
@@ -27,7 +27,7 @@ def required_global_role(path: str) -> str | None:
     return None
 
 
-_ROLE_ORDER = {"student": 1, "teacher": 2, "admin": 3, "super_admin": 4}
+_ROLE_ORDER = {"student": 1, "assistant": 2, "teacher": 3, "admin": 4}
 
 
 def role_at_least(actual: str | None, required: str) -> bool:

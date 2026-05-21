@@ -74,7 +74,7 @@ def _tenant_to_out(t: Tenant) -> TenantOut:
 async def list_tenants(
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = None,  # noqa: ARG001 — TODO: cursor decode
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> Page[TenantOut]:
     tenants = TenantRepository(session)
@@ -94,7 +94,7 @@ async def list_tenants(
 async def create_tenant(
     payload: TenantCreate,
     request: Request,
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
     repo = TenantRepository(session)
@@ -129,7 +129,7 @@ async def get_tenant(
     t = await repo.get(tenant_id)
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, t.id)
     return _tenant_to_out(t)
 
@@ -142,14 +142,14 @@ async def get_tenant(
 async def update_tenant(
     tenant_id: str,
     payload: TenantUpdate,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
     repo = TenantRepository(session)
     t = await repo.get(tenant_id)
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, t.id)
     if payload.name is not None:
         t.name = payload.name
@@ -166,7 +166,7 @@ async def update_tenant(
 async def delete_tenant(
     tenant_id: str,
     request: Request,
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     repo = TenantRepository(session)
@@ -186,7 +186,7 @@ async def delete_tenant(
 async def suspend_tenant(
     tenant_id: str,
     request: Request,
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
     repo = TenantRepository(session)
@@ -206,7 +206,7 @@ async def suspend_tenant(
 async def activate_tenant(
     tenant_id: str,
     request: Request,
-    user: CurrentUser = Depends(require_global_role("super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),
 ) -> TenantOut:
     repo = TenantRepository(session)
@@ -225,14 +225,14 @@ async def activate_tenant(
 )
 async def get_tenant_settings(
     tenant_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> TenantSettingsOut:
     repo = TenantRepository(session)
     t = await repo.get(tenant_id)
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, t.id)
     return TenantSettingsOut(cors_origins=list(t.cors_origins or []), settings=dict(t.settings or {}))
 
@@ -245,14 +245,14 @@ async def get_tenant_settings(
 async def update_tenant_settings(
     tenant_id: str,
     payload: TenantSettingsUpdate,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> TenantSettingsOut:
     repo = TenantRepository(session)
     t = await repo.get(tenant_id)
     if t is None or t.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, t.id)
     if payload.cors_origins is not None:
         t.cors_origins = payload.cors_origins
@@ -270,7 +270,7 @@ async def update_tenant_settings(
 )
 async def get_tenant_usage(
     tenant_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),  # noqa: ARG001
 ) -> TenantUsageOut:
     # TODO: aggregate from Reporting Service / SQL counts.

@@ -52,7 +52,7 @@ async def get_tenant_budget(
     tenant_id: str, principal: PrincipalDep, session: SessionDep
 ) -> BudgetOut:
     require_admin(principal)
-    if tenant_id != principal.tenant_id and principal.global_role != "super_admin":
+    if tenant_id != principal.tenant_id and principal.global_role != "admin":
         raise not_found("tenant scope")
     svc = BudgetService(session)
     cfg = await svc.get_config("tenant", tenant_id)
@@ -81,7 +81,7 @@ async def patch_tenant_budget(
     session: SessionDep,
 ) -> BudgetOut:
     require_admin(principal)
-    if tenant_id != principal.tenant_id and principal.global_role != "super_admin":
+    if tenant_id != principal.tenant_id and principal.global_role != "admin":
         raise not_found("tenant scope")
     svc = BudgetService(session)
     cfg = await svc.upsert_config(
@@ -101,7 +101,7 @@ async def tenant_usage(
     tenant_id: str, principal: PrincipalDep, session: SessionDep
 ) -> UsageOut:
     require_admin(principal)
-    if tenant_id != principal.tenant_id and principal.global_role != "super_admin":
+    if tenant_id != principal.tenant_id and principal.global_role != "admin":
         raise not_found("tenant scope")
     svc = BudgetService(session)
     cfg, usage = await svc.usage_for("tenant", tenant_id)

@@ -19,7 +19,7 @@ async def recent_activity(
     session: AsyncSession = Depends(get_session),
     limit: int = Query(default=50, ge=1, le=200),
 ):
-    if not p.has_global("super_admin", "admin") and not p.has_course_role(
+    if not p.has_global("admin",) and not p.has_course_role(
         course_id, "owner", "co_owner", "assistant"
     ):
         raise forbidden("Not a teacher/assistant for this course")

@@ -105,7 +105,7 @@ async def events_by_actor(
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
-    if user.global_role not in ("admin", "super_admin") and user.id != user_id:
+    if user.global_role not in ("admin",) and user.id != user_id:
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Self or admin required"
         )
@@ -293,7 +293,7 @@ async def course_audit(
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
-    if user.global_role not in ("admin", "super_admin"):
+    if user.global_role not in ("admin",):
         course_role = user.course_roles.get(course_id)
         if course_role not in ("owner", "co_owner"):
             raise ProblemException(
@@ -324,7 +324,7 @@ async def user_audit(
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
 ):
-    if user.global_role not in ("admin", "super_admin") and user.id != user_id:
+    if user.global_role not in ("admin",) and user.id != user_id:
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Self or admin required"
         )

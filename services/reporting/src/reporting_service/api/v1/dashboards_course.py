@@ -166,7 +166,7 @@ async def _gather(*coros):
 
 
 def _check_member(p: Principal, course_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.course_role(course_id) is not None:
         return
@@ -182,7 +182,7 @@ def _check_member(p: Principal, course_id: str) -> None:
 
 
 def _check_teacher(p: Principal, course_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.has_course_role(course_id, "owner", "co_owner", "assistant"):
         return
@@ -192,7 +192,7 @@ def _check_teacher(p: Principal, course_id: str) -> None:
 
 
 def _check_owner(p: Principal, course_id: str) -> None:
-    if p.has_global("super_admin", "admin"):
+    if p.has_global("admin",):
         return
     if p.has_course_role(course_id, "owner", "co_owner"):
         return

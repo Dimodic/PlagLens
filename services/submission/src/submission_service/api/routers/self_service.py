@@ -40,7 +40,7 @@ async def my_submissions_for_assignment(
 
 _STAFF_ROLES = {
     "teacher", "owner", "co_owner", "assistant",
-    "admin", "super_admin",
+    "admin",
 }
 
 

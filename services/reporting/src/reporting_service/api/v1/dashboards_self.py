@@ -39,7 +39,7 @@ async def my_course_grades(
     p: Principal = Depends(get_principal),
     session: AsyncSession = Depends(get_session),
 ):
-    if not (p.has_global("super_admin", "admin") or p.course_role(course_id) is not None):
+    if not (p.has_global("admin",) or p.course_role(course_id) is not None):
         raise forbidden("Not a course member")
     return await _service(request, session).student_grades_summary(p.tenant_id, p.user_id, course_id)
 

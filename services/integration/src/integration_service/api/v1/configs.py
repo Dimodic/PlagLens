@@ -107,7 +107,7 @@ async def create_config(
     if not is_personal_google:
         _ensure_owner_or_admin(p, payload.course_id)
     elif not (
-        getattr(p, "global_role", None) in ("teacher", "admin", "super_admin")
+        getattr(p, "global_role", None) in ("teacher", "admin")
         or p.is_admin
         or p.is_super_admin
     ):

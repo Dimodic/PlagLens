@@ -56,7 +56,7 @@ async def list_members(
     limit: int = Depends(parse_limit),
 ) -> Page[MemberRead]:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     repo = MemberRepository(session)
     rows, next_id = await repo.list_members(
@@ -134,7 +134,7 @@ async def get_member(
     session: SessionDep,
 ) -> MemberRead:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "co_owner", "admin", "super_admin"} and user.user_id != user_id:
+    if role not in {"owner", "co_owner", "admin"} and user.user_id != user_id:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     member = await fetch_member(course, user_id, session)
     return MemberRead.model_validate(member)
@@ -189,7 +189,7 @@ async def transfer_member_group(
     session: SessionDep,
 ) -> Response:
     role = await assert_course_membership(course.id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     member = await fetch_member(course, user_id, session)
     await course_svc.transfer_member_group(course, member, payload.target_group_id, user)

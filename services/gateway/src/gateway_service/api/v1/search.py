@@ -145,7 +145,7 @@ async def _search_users(
 ) -> list[dict[str, Any]]:
     # Students/teachers cannot enumerate other users — the identity backend
     # already enforces RBAC, but we short-circuit here to avoid noise.
-    if principal.global_role not in ("admin", "super_admin"):
+    if principal.global_role not in ("admin",):
         return []
     base = settings.backends_map().get("identity")
     if not base:

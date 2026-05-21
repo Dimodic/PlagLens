@@ -41,8 +41,8 @@ def _resolve_target(user: CurrentUser, target_user_id: str) -> str:
 async def _ensure_self_or_admin(
     user: CurrentUser, target_user_id: str, session: AsyncSession
 ) -> None:
-    if user.global_role in ("admin", "super_admin"):
-        if user.global_role != "super_admin":
+    if user.global_role in ("admin",):
+        if user.global_role != "admin":
             users = UserRepository(session)
             target = await users.get(target_user_id)
             if target is None:

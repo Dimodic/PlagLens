@@ -53,7 +53,7 @@ def _to_out(inv: Invitation) -> InvitationOut:
 )
 async def create_invitation(
     payload: InvitationCreate,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationCreated:
     repo = InvitationRepository(session)
@@ -80,13 +80,13 @@ async def create_invitation(
 
 @router.get("", response_model=list[InvitationOut], summary="My invitations")
 async def list_invitations(
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> list[InvitationOut]:
     repo = InvitationRepository(session)
     rows = await repo.list_for_creator(
         creator_user_id=user.id if user.global_role == "teacher" else None,
-        tenant_id=user.tenant_id if user.global_role != "super_admin" else None,
+        tenant_id=user.tenant_id if user.global_role != "admin" else None,
     )
     return [_to_out(i) for i in rows]
 
@@ -110,14 +110,14 @@ async def invitation_by_token(
 @router.get("/{invitation_id_param}", response_model=InvitationOut, summary="Get invitation")
 async def get_invitation(
     invitation_id_param: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationOut:
     repo = InvitationRepository(session)
     inv = await repo.get(invitation_id_param)
     if inv is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Invitation not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, inv.tenant_id)
     return _to_out(inv)
 
@@ -129,14 +129,14 @@ async def get_invitation(
 )
 async def revoke_invitation(
     invitation_id_param: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     repo = InvitationRepository(session)
     inv = await repo.get(invitation_id_param)
     if inv is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Invitation not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, inv.tenant_id)
     await repo.revoke(invitation_id_param)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

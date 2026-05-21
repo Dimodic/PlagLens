@@ -61,11 +61,11 @@ async def list_users(
     q: str | None = None,
     tenant_id: str | None = None,
     limit: int = Query(50, ge=1, le=200),
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> Page[UserOut]:
     repo = UserRepository(session)
-    target_tenant = tenant_id if user.global_role == "super_admin" else user.tenant_id
+    target_tenant = tenant_id if user.global_role == "admin" else user.tenant_id
     rows = await repo.list(
         tenant_id=target_tenant, role=role, status=status_q, q=q, limit=limit, offset=0
     )
@@ -83,12 +83,12 @@ async def list_users(
 )
 async def create_user(
     payload: UserCreate,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
     repo = UserRepository(session)
     target_tenant = (
-        payload.tenant_id if user.global_role == "super_admin" else user.tenant_id
+        payload.tenant_id if user.global_role == "admin" else user.tenant_id
     )
     if not target_tenant:
         raise ProblemException(
@@ -120,7 +120,7 @@ async def create_user(
 )
 async def batch_create_users(
     payload: UserBatchCreate,  # noqa: ARG001 — workers consume the payload
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin", "teacher")),  # noqa: ARG001
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),  # noqa: ARG001
     session: AsyncSession = Depends(get_session),  # noqa: ARG001
 ) -> OperationAcceptedOut:
     op_id = gen_id("op")
@@ -142,11 +142,11 @@ async def get_user(
     u = await repo.get(target_user_id)
     if u is None or u.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role not in ("admin", "super_admin") and user.id != u.id:
+    if user.global_role not in ("admin",) and user.id != u.id:
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Insufficient permissions"
         )
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     return _user_to_out(u)
 
@@ -162,10 +162,10 @@ async def update_user(
     u = await repo.get(target_user_id)
     if u is None or u.deleted_at is not None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    is_admin = user.global_role in ("admin", "super_admin")
+    is_admin = user.global_role in ("admin",)
     if not is_admin and user.id != u.id:
         raise ProblemException(status=403, code="FORBIDDEN", title="Cannot modify other user")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     if payload.display_name is not None:
         u.display_name = payload.display_name
@@ -191,14 +191,14 @@ async def update_user(
 )
 async def delete_user(
     target_user_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     repo = UserRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     u.deleted_at = datetime.now(timezone.utc)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
@@ -211,14 +211,14 @@ async def delete_user(
 )
 async def disable_user(
     target_user_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
     repo = UserRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     u.status = "disabled"
     return _user_to_out(u)
@@ -231,14 +231,14 @@ async def disable_user(
 )
 async def enable_user(
     target_user_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
     repo = UserRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     u.status = "active"
     return _user_to_out(u)
@@ -258,11 +258,11 @@ async def anonymize_user(
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role not in ("admin", "super_admin") and user.id != u.id:
+    if user.global_role not in ("admin",) and user.id != u.id:
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Self or admin only"
         )
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     h = u.id[-8:]
     u.email = f"anon-{h}@deleted.local"
@@ -282,14 +282,14 @@ async def anonymize_user(
 )
 async def admin_reset_password(
     target_user_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     repo = UserRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     # TODO: create PasswordResetToken + send email via EmailService
     return Response(status_code=status.HTTP_202_ACCEPTED)
@@ -302,14 +302,14 @@ async def admin_reset_password(
 )
 async def force_logout_user(
     target_user_id: str,
-    user: CurrentUser = Depends(require_global_role("admin", "super_admin")),
+    user: CurrentUser = Depends(require_global_role("admin")),
     session: AsyncSession = Depends(get_session),
 ) -> Response:
     repo = UserRepository(session)
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role != "super_admin":
+    if user.global_role != "admin":
         await assert_same_tenant(user, u.tenant_id)
     sessions = SessionRepository(session)
     await sessions.revoke_all_for_user(u.id)
@@ -330,7 +330,7 @@ async def list_user_sessions(
     u = await repo.get(target_user_id)
     if u is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    if user.global_role not in ("admin", "super_admin") and user.id != u.id:
+    if user.global_role not in ("admin",) and user.id != u.id:
         raise ProblemException(status=403, code="FORBIDDEN", title="Self or admin only")
     sessions = SessionRepository(session)
     rows = await sessions.list_for_user(u.id)
@@ -378,11 +378,11 @@ async def bulk_import(
     # Teachers can bulk-import students into their own tenant (the integration
     # service calls this on their behalf when pulling participants from
     # Yandex.Contest). Admins/super_admins keep full power.
-    if me.global_role not in ("admin", "super_admin", "teacher"):
+    if me.global_role not in ("admin", "teacher"):
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Teacher / admin role required"
         )
-    if me.global_role != "super_admin" and target_tenant_id != me.tenant_id:
+    if me.global_role != "admin" and target_tenant_id != me.tenant_id:
         raise ProblemException(
             status=403,
             code="FORBIDDEN",

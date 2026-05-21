@@ -70,7 +70,7 @@ def _service_token(tenant_id: str) -> str | None:
         "iat": iat,
         "exp": exp,
         "tenant_id": tenant_id,
-        "global_role": "super_admin",  # service principal — bypasses RBAC
+        "global_role": "admin",  # service principal — bypasses RBAC
         "course_roles": {},
     }
     try:

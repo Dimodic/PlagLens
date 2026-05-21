@@ -117,7 +117,7 @@ async def list_assignments_flat(
     repo = AssignmentRepository(session)
     course_ids: list[int] | None = None
     published_only = False
-    if user.global_role not in {"super_admin", "admin"}:
+    if user.global_role not in {"admin"}:
         # Build the set of course_ids visible to the actor (member or owner).
         from sqlalchemy import select  # local import to avoid top-level churn
 
@@ -291,7 +291,6 @@ async def effective_deadline(
         "co_owner",
         "assistant",
         "admin",
-        "super_admin",
     }:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     return await a_svc.effective_deadline(assignment, user_id)
@@ -326,7 +325,7 @@ async def list_deadline_extensions(
     session: SessionDep,
 ) -> list[DeadlineExtensionRead]:
     role = await assert_course_membership(assignment.course_id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     repo = AssignmentRepository(session)
     rows = await repo.list_extensions(assignment.id)
@@ -438,7 +437,7 @@ async def assignment_stats(
     gracefully instead of 500-ing.
     """
     role = await assert_course_membership(assignment.course_id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     return await a_svc.stats(assignment, bearer_token=bearer)
 
@@ -454,7 +453,7 @@ async def assignment_stats_timeline(
     session: SessionDep,
 ) -> list[StatsTimelinePoint]:
     role = await assert_course_membership(assignment.course_id, user, session)
-    if role not in {"owner", "co_owner", "assistant", "admin", "super_admin"}:
+    if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
     rows = await a_svc.stats_timeline(assignment)
     return [StatsTimelinePoint.model_validate(r) for r in rows]

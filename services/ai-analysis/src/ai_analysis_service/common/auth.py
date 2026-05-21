@@ -33,7 +33,7 @@ class Principal:
         return cr is not None and cr in roles
 
 
-_SUPER = "super_admin"
+_SUPER = "admin"
 _TEACHER_ROLES = ("owner", "co_owner", "assistant")
 
 

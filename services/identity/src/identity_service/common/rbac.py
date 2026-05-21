@@ -3,17 +3,20 @@ from __future__ import annotations
 
 from typing import Iterable, Literal
 
-GlobalRole = Literal["super_admin", "admin", "teacher", "student"]
+GlobalRole = Literal["admin", "teacher", "assistant", "student"]
 CourseRole = Literal["owner", "co_owner", "assistant", "student"]
 
-GLOBAL_ROLES: tuple[GlobalRole, ...] = ("super_admin", "admin", "teacher", "student")
+GLOBAL_ROLES: tuple[GlobalRole, ...] = ("admin", "teacher", "assistant", "student")
 COURSE_ROLES: tuple[CourseRole, ...] = ("owner", "co_owner", "assistant", "student")
 
 
 # A non-exhaustive catalogue of permissions used by Identity Service routes.
 # Course-level permissions are out of scope for Identity (handled by Course Service).
 PERMISSIONS_BY_GLOBAL_ROLE: dict[GlobalRole, set[str]] = {
-    "super_admin": {
+    # ``admin`` is the single cross-tenant top role (it absorbs the former
+    # ``super_admin``): it manages every institution (tenant), can create new
+    # ones, and migrate users across them.
+    "admin": {
         "tenant.create",
         "tenant.list",
         "tenant.read",
@@ -46,32 +49,6 @@ PERMISSIONS_BY_GLOBAL_ROLE: dict[GlobalRole, set[str]] = {
         "cross_tenant.migrate_user",
         "cross_tenant.list_users",
     },
-    "admin": {
-        "tenant.read",
-        "tenant.update",
-        "tenant.settings.read",
-        "tenant.settings.update",
-        "tenant.usage.read",
-        "tenant.audit.read",
-        "user.list",
-        "user.create",
-        "user.read",
-        "user.update",
-        "user.delete",
-        "user.disable",
-        "user.enable",
-        "user.anonymize",
-        "user.reset_password",
-        "user.force_logout",
-        "user.role.assign",
-        "user.sessions.read",
-        "user.audit.read",
-        "user.batch_create",
-        "invitation.create",
-        "invitation.list",
-        "invitation.read",
-        "invitation.delete",
-    },
     "teacher": {
         "user.list",
         "user.batch_create",
@@ -79,6 +56,13 @@ PERMISSIONS_BY_GLOBAL_ROLE: dict[GlobalRole, set[str]] = {
         "invitation.list",
         "invitation.read",
         "invitation.delete",
+    },
+    # Teaching assistant: a course helper. Minimal institution-level rights;
+    # most of their power lives at the course level (Course Service).
+    "assistant": {
+        "user.list",
+        "invitation.list",
+        "invitation.read",
     },
     "student": set(),
 }
@@ -93,7 +77,7 @@ def any_role_has(roles: Iterable[GlobalRole | str], permission: str) -> bool:
 
 
 def is_admin_or_above(role: GlobalRole | str) -> bool:
-    return role in ("super_admin", "admin")
+    return role == "admin"
 
 
 def list_role_permissions(role: GlobalRole | str) -> list[str]:
