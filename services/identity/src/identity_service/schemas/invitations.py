@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class InvitationOut(BaseModel):
@@ -31,6 +32,19 @@ class InvitationCreate(BaseModel):
     # their own tenant). When unset the caller's own tenant is used.
     tenant_id: str | None = None
     expires_in_seconds: int = Field(default=7 * 24 * 3600, ge=60, le=90 * 24 * 3600)
+
+    @field_validator("course_id", mode="before")
+    @classmethod
+    def _coerce_course_id(cls, v: Any) -> Any:
+        """Course-service exposes course IDs as integers — frontend, e2e tests
+        and external callers naturally pass them as numbers. Identity stores
+        them as String(40); coerce here so we don't reject perfectly valid
+        callers with a 422."""
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, (int, float)):
+            return str(int(v))
+        return v
 
 
 class InvitationCreated(InvitationOut):
