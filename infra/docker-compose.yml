@@ -674,6 +674,11 @@ services:
     container_name: plaglens-traefik
     restart: unless-stopped
     networks: [plaglens-net]
+    # Override the ACME email via CLI flag — traefik v3 expands env vars in
+    # command-line flags but NOT inside the static YAML. Falling back to the
+    # YAML's hard-coded admin@plaglens.ru if unset.
+    command:
+      - --certificatesresolvers.letsencrypt.acme.email=${LETS_ENCRYPT_EMAIL:-admin@plaglens.ru}
     ports:
       - "80:80"
       - "443:443"

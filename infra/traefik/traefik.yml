@@ -52,7 +52,12 @@ providers:
 certificatesResolvers:
   letsencrypt:
     acme:
-      email: "${LETS_ENCRYPT_EMAIL}"
+      # NB: traefik v3 does NOT expand ``${VAR}`` inside this static config —
+      # it treats the string literally. The value must be a real address.
+      # Override via the env-aware CLI flag in compose
+      # (``--certificatesresolvers.letsencrypt.acme.email=...``) if you need
+      # to change it per-environment.
+      email: admin@plaglens.ru
       storage: /etc/traefik/acme/acme.json
       # Let's Encrypt PRODUCTION. Browsers do not trust the staging CA, so for
       # any public host (including nip.io) we need production certs. Switch to
