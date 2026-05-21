@@ -16,7 +16,7 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, Header, Request
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from notification_service.channels import DeliveryRequest
@@ -32,7 +32,11 @@ router = APIRouter(tags=["internal-notifications"])
 class EmailDirectBody(BaseModel):
     user_id: str
     tenant_id: str
-    recipient: EmailStr
+    # Plain str — not EmailStr — so internal callers can pass dev/system
+    # addresses like ``admin@plaglens.local`` (``.local`` is not a real TLD and
+    # is rejected by email-validator). Identity already validates user-supplied
+    # emails at registration; this endpoint trusts its internal callers.
+    recipient: str
     subject: str
     body_html: str
     body_text: str | None = None
