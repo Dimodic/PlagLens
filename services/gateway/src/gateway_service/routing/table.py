@@ -144,7 +144,14 @@ def _prefix_matches(path: str, prefix: str) -> bool:
     that does not contain `/`.
     """
     if "{" not in prefix:
-        return path == prefix or path.startswith(prefix + "/") or path.startswith(prefix + "?")
+        return (
+            path == prefix
+            or path.startswith(prefix + "/")
+            or path.startswith(prefix + "?")
+            # Google-style action suffix (e.g. ``/invitations:redeem``,
+            # ``/invitations:accept``). Matches the prefix's last segment.
+            or path.startswith(prefix + ":")
+        )
     p_parts = prefix.strip("/").split("/")
     a_parts = path.strip("/").split("/")
     if len(a_parts) < len(p_parts):
