@@ -20,6 +20,12 @@ class InvitationRepository:
         stmt = select(Invitation).where(Invitation.token_hash == token_hash)
         return (await self.s.execute(stmt)).scalar_one_or_none()
 
+    async def get_by_code(self, tenant_id: str, code: str) -> Invitation | None:
+        stmt = select(Invitation).where(
+            Invitation.tenant_id == tenant_id, Invitation.code == code
+        )
+        return (await self.s.execute(stmt)).scalar_one_or_none()
+
     async def list_for_creator(
         self, creator_user_id: str | None, tenant_id: str | None = None, limit: int = 50
     ) -> list[Invitation]:

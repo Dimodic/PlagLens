@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusPill } from '@/components/common/StatusPill';
 import { Page } from '@/components/layout/Page';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
+import { TenantInvitationsPanel } from '@/components/admin/TenantInvitationsPanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
@@ -245,15 +246,20 @@ export function TenantDetailPage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-3 pt-6">
-          <p className="text-sm text-muted-foreground">
-            Пользователи этого учреждения.
-          </p>
-          <Button asChild variant="outline">
-            <Link to={`/admin/users?tenant_id=${tenant.id}`}>
-              Открыть пользователей
-            </Link>
-          </Button>
+        <TabsContent value="users" className="space-y-6 pt-6">
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Пользователи этого учреждения.
+            </p>
+            <Button asChild variant="outline">
+              <Link to={`/admin/users?tenant_id=${tenant.id}`}>
+                Открыть пользователей
+              </Link>
+            </Button>
+          </div>
+          <div className="border-t pt-6">
+            <TenantInvitationsPanel tenantId={tenant.id} />
+          </div>
         </TabsContent>
 
         <TabsContent value="usage" className="pt-6">

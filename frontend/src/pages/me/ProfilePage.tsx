@@ -5,6 +5,7 @@ import { Image as ImageIcon, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Page, PageHeader, Section } from '@/components/layout/Page';
+import { RedeemInvitePanel } from '@/components/common/RedeemInvitePanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
@@ -280,6 +281,10 @@ export function ProfilePage() {
             </Button>
           </div>
         </div>
+      </Section>
+
+      <Section title="Код приглашения">
+        <RedeemInvitePanel />
       </Section>
     </Page>
   );

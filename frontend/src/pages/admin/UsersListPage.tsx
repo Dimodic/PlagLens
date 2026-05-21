@@ -6,7 +6,7 @@
  * `UserActionMenu`. Test ids unchanged.
  */
 import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { Plus, Search } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -71,6 +71,12 @@ export function UsersListPage() {
   useDocumentTitle('Пользователи');
   const navigate = useNavigate();
   const notify = useNotifications();
+  // tenant_id from the URL — set by ?tenant_id=... when the admin clicks
+  // "Open users" from a specific tenant detail page. Backend already
+  // enforces tenant scoping for non-admins; for admins we forward the
+  // hint explicitly so they only see this tenant.
+  const [searchParams] = useSearchParams();
+  const tenantIdFilter = searchParams.get('tenant_id') || undefined;
 
   const [filter, setFilter] = useState<RoleFilter>('all');
   const [q, setQ] = useState('');
@@ -83,9 +89,10 @@ export function UsersListPage() {
     () => ({
       q: q || undefined,
       role: filter === 'all' ? undefined : (filter as GlobalRole),
+      tenant_id: tenantIdFilter,
       limit: 100,
     }),
-    [q, filter],
+    [q, filter, tenantIdFilter],
   );
 
   const { data, isPending, error, refetch } = useUsers(filters);

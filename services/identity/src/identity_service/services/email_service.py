@@ -192,3 +192,35 @@ class EmailService:
             action_url=invite_url,
             event_type="identity.email.invitation.v1",
         )
+
+    async def send_invitation_with_code(
+        self,
+        *,
+        to: str,
+        invite_url: str,
+        tenant_name: str,
+        code: str,
+        role: str,
+    ) -> None:
+        """Invitation email with both the short code (for in-app redeem after
+        registration) and a fallback magic link to the accept page."""
+        role_label = {
+            "teacher": "преподавателя",
+            "assistant": "ассистента",
+            "student": "студента",
+        }.get(role, role)
+        body_text = (
+            f"Вас пригласили в учреждение «{tenant_name}» в PlagLens с ролью {role_label}. "
+            f"Зарегистрируйтесь обычным способом, затем зайдите в «Профиль» и введите код "
+            f"<b>{code}</b>. Код активирует роль автоматически. "
+            f"Если уже есть аккаунт в «{tenant_name}» — просто введите код в профиле."
+        )
+        await self._post(
+            recipient=to,
+            subject=f"Приглашение в {tenant_name} (PlagLens) — код {code}",
+            heading=f"Вас пригласили в {tenant_name}",
+            body_text=body_text,
+            action_label="Открыть PlagLens",
+            action_url=invite_url,
+            event_type="identity.email.invitation.v1",
+        )

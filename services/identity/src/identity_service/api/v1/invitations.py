@@ -3,15 +3,20 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.events import publish_user_event
 from ...common.ids import invitation_id, user_id
+from ...common.invite_code import new_code, normalize_code
 from ...common.problem import ProblemException
 from ...common.security import hash_password, hash_token, new_opaque_token
+from ...config import settings
 from ...deps import (
     CurrentUser,
     assert_same_tenant,
+    current_user,
     get_session,
     optional_current_user,
     require_global_role,
@@ -25,10 +30,22 @@ from ...schemas.invitations import (
     InvitationCreate,
     InvitationCreated,
     InvitationOut,
+    InvitationRedeem,
+    InvitationRedeemResult,
+)
+from ...services.course_client import (
+    CourseClientError,
+    CourseMembershipClient,
 )
 from ...services.email_service import EmailService, build_frontend_url
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
+
+
+# Roles an admin can hand out to anyone; teacher can only invite "below" them
+# and only into a course they own.
+_ADMIN_GRANTABLE_ROLES = frozenset({"teacher", "assistant", "student"})
+_TEACHER_GRANTABLE_ROLES = frozenset({"assistant", "student"})
 
 
 def _to_out(inv: Invitation) -> InvitationOut:
@@ -38,11 +55,33 @@ def _to_out(inv: Invitation) -> InvitationOut:
         email=inv.email,
         role=inv.role,
         course_id=inv.course_id,
+        code=inv.code,
         expires_at=inv.expires_at,
         accepted_at=inv.accepted_at,
         accepted_by=inv.accepted_by,
         created_at=inv.created_at,
     )
+
+
+async def _persist_with_unique_code(
+    session: AsyncSession, repo: InvitationRepository, inv: Invitation
+) -> None:
+    """Insert ``inv`` retrying on a code-collision (≤3 attempts).
+
+    The (tenant_id, code) unique index is the only thing that can clash for
+    a freshly minted code — bumping into one is astronomically rare with our
+    30-char alphabet over 9 positions, but the loop keeps the worst case
+    deterministic.
+    """
+    for _ in range(3):
+        try:
+            await repo.add(inv)
+            return
+        except IntegrityError:
+            await session.rollback()
+            inv.code = new_code()
+    # 4th attempt — let the exception propagate if it still collides.
+    await repo.add(inv)
 
 
 @router.post(
@@ -56,30 +95,52 @@ async def create_invitation(
     user: CurrentUser = Depends(require_global_role("admin", "teacher")),
     session: AsyncSession = Depends(get_session),
 ) -> InvitationCreated:
+    # RBAC: which roles can each caller hand out?
+    grantable = _ADMIN_GRANTABLE_ROLES if user.global_role == "admin" else _TEACHER_GRANTABLE_ROLES
+    if payload.role not in grantable:
+        raise ProblemException(
+            status=403,
+            code="FORBIDDEN",
+            title=f"Role '{payload.role}' is not grantable by {user.global_role}",
+        )
+    # Teacher must target a course (and not a tenant-wide upgrade).
+    if user.global_role == "teacher" and not payload.course_id:
+        raise ProblemException(
+            status=422,
+            code="VALIDATION_FAILED",
+            title="course_id is required when teacher invites",
+        )
+
     repo = InvitationRepository(session)
     plain = new_opaque_token(prefix="inv_")
+    email_normalised = payload.email.strip().lower() if payload.email else ""
     inv = Invitation(
         id=invitation_id(),
         tenant_id=user.tenant_id,
-        email=payload.email.lower(),
+        email=email_normalised,
         role=payload.role,
         course_id=payload.course_id,
         token_hash=hash_token(plain),
+        code=new_code(),
         expires_at=datetime.now(timezone.utc)
         + timedelta(seconds=payload.expires_in_seconds),
         created_by=user.id,
     )
-    await repo.add(inv)
+    await _persist_with_unique_code(session, repo, inv)
+
     # Resolve a human tenant name for the email — fall back to the slug/id if
     # the row is unexpectedly missing, so we never block creating the invite.
-    tenants_repo = TenantRepository(session)
-    tenant_row = await tenants_repo.get(user.tenant_id)
-    tenant_label = (tenant_row.name if tenant_row else None) or user.tenant_id
-    await EmailService().send_invitation(
-        to=inv.email,
-        invite_url=build_frontend_url("/invite", plain),
-        tenant_name=tenant_label,
-    )
+    if email_normalised:
+        tenants_repo = TenantRepository(session)
+        tenant_row = await tenants_repo.get(user.tenant_id)
+        tenant_label = (tenant_row.name if tenant_row else None) or user.tenant_id
+        await EmailService().send_invitation_with_code(
+            to=email_normalised,
+            invite_url=build_frontend_url("/invite", plain),
+            tenant_name=tenant_label,
+            code=inv.code or "",
+            role=inv.role,
+        )
     return InvitationCreated(**_to_out(inv).model_dump(), token=plain)
 
 
@@ -205,3 +266,112 @@ async def accept_invitation(
     await users.add(new_user)
     await repo.mark_accepted(inv.id, new_user.id)
     return _to_out(inv)
+
+
+@router.post(
+    ":redeem",
+    response_model=InvitationRedeemResult,
+    summary="Redeem a short invitation code (authenticated user)",
+)
+async def redeem_invitation(
+    payload: InvitationRedeem,
+    request: Request,
+    me: CurrentUser = Depends(current_user),
+    session: AsyncSession = Depends(get_session),
+) -> InvitationRedeemResult:
+    """Self-service path: an existing user types a code in ``/me`` and the
+    server applies the encoded grant.
+
+    * For ``role in {teacher}`` and no ``course_id`` — bumps the user's
+      ``global_role`` (cross-tenant promotion is rejected: the invitation
+      must belong to the user's own tenant).
+    * For any role with a ``course_id`` — calls course-submission to add the
+      user as a course member with the matching course-role.
+    """
+    repo = InvitationRepository(session)
+    users = UserRepository(session)
+    code = normalize_code(payload.code)
+    inv = await repo.get_by_code(me.tenant_id, code)
+    if inv is None:
+        raise ProblemException(status=404, code="NOT_FOUND", title="Code not found")
+    if inv.revoked_at is not None:
+        raise ProblemException(status=410, code="GONE", title="Invitation revoked")
+    if inv.accepted_at is not None:
+        raise ProblemException(status=409, code="CONFLICT", title="Code already used")
+    if inv.expires_at <= datetime.now(timezone.utc).replace(tzinfo=inv.expires_at.tzinfo):
+        raise ProblemException(status=410, code="GONE", title="Invitation expired")
+
+    # Cross-tenant attempt — we already filter by tenant in the lookup, but be
+    # explicit for events / audit clarity.
+    if inv.tenant_id != me.tenant_id:
+        raise ProblemException(status=403, code="FORBIDDEN", title="Wrong tenant")
+
+    target_user = await users.get(me.id)
+    if target_user is None:
+        raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
+
+    role_applied: str | None = None
+    course_id: str | None = inv.course_id
+    course_role: str | None = None
+    requires_relogin = False
+
+    if inv.course_id:
+        # Course membership grant. course_id-bearing invitations always carry
+        # an assistant/student role; we forward both to course-submission and
+        # let it decide the canonical course-role.
+        course_role = inv.role if inv.role in {"assistant", "student", "co_owner", "owner"} else "student"
+        try:
+            await CourseMembershipClient().add_member(
+                course_id=inv.course_id,
+                user_id=target_user.id,
+                role=course_role,
+                tenant_id=target_user.tenant_id,
+            )
+        except CourseClientError as exc:
+            raise ProblemException(
+                status=502,
+                code="UPSTREAM_UNAVAILABLE",
+                title="Course service rejected the join",
+                detail=str(exc),
+            ) from exc
+    elif inv.role == "teacher":
+        # Tenant-wide role bump. Only allowed up to teacher; never to admin
+        # (those go through the admin role-assign UI, not codes).
+        if target_user.global_role in ("admin",):
+            # Already at or above — nothing to do but mark used.
+            pass
+        else:
+            target_user.global_role = "teacher"
+            role_applied = "teacher"
+            requires_relogin = True
+    else:
+        # role=assistant/student without course_id — not actionable on its own.
+        raise ProblemException(
+            status=409,
+            code="CONFLICT",
+            title="This code grants a course role but has no course attached",
+        )
+
+    await repo.mark_accepted(inv.id, target_user.id)
+
+    await publish_user_event(
+        request,
+        "identity.user.invitation_redeemed.v1",
+        data={
+            "user_id": target_user.id,
+            "invitation_id": inv.id,
+            "role_applied": role_applied,
+            "course_id": course_id,
+            "course_role": course_role,
+        },
+        tenant_id=target_user.tenant_id,
+        subject=f"users/{target_user.id}",
+    )
+
+    return InvitationRedeemResult(
+        invitation_id=inv.id,
+        role_applied=role_applied,
+        course_id=course_id,
+        course_role=course_role,
+        requires_relogin=requires_relogin,
+    )

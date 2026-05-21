@@ -298,6 +298,10 @@ class Invitation(Base):
     role: Mapped[str] = mapped_column(String(32), nullable=False)
     course_id: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     token_hash: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
+    # Short human-readable code (XXX-XXX-XXX, 9 chars + 2 dashes); unique
+    # within a tenant. Nullable so legacy invitations (pre-migration 0004)
+    # don't carry one — those still work via the long token URL.
+    code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     accepted_by: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     accepted_at: Mapped[Optional[datetime]] = mapped_column(
