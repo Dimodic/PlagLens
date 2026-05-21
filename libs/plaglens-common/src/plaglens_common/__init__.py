@@ -52,6 +52,12 @@ from .rbac import (
     require_course_role,
     require_global_role,
 )
+from .secrets import (
+    VaultClient,
+    get_vault,
+    resolve_secret,
+    set_vault_client,
+)
 
 __version__ = "0.1.0"
 
@@ -88,13 +94,17 @@ __all__ = [
     "UpstreamFailedError",
     "UpstreamTimeoutError",
     "ValidationError",
+    "VaultClient",
     "__version__",
     "decode_cursor",
     "encode_cursor",
+    "get_vault",
     "make_handlers",
     "operation_response",
     "parse_pagination_query",
     "problem_response",
     "require_course_role",
     "require_global_role",
+    "resolve_secret",
+    "set_vault_client",
 ]

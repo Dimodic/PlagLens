@@ -54,16 +54,19 @@ class Settings(BaseSettings):
     DEFAULT_MODEL: str | None = None
     DEFAULT_BASE_URL: str | None = None
 
-    # ----------------------- Provider API keys (env-only) -----------------
+    # ----------------------- Provider API keys (env or Vault) -------------
     # Never persisted in DB. ProviderConfig.api_key_env_var carries the env
-    # var *name*; the value lives in env / Vault. resolve_api_key() reads it
-    # at request time.
+    # var *name*; the value lives in env (per-deploy override) or Vault (shared
+    # source of truth). resolve_api_key() reads it at request time.
     OPENROUTER_API_KEY: str | None = None
     OPENAI_API_KEY: str | None = None
     OPENAI_API_KEY_PATH: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     YANDEX_GPT_API_KEY: str | None = None
     GIGACHAT_AUTH_KEY: str | None = None
+
+    # Vault KV v2 path (under secret/plaglens/) holding the default LLM key.
+    VAULT_LLM_SECRET_PATH: str = "llm/openai"
 
     DEFAULT_PROMPT_VERSION: str = "v1"
 
@@ -128,6 +131,8 @@ class Settings(BaseSettings):
         2. Provider-specific settings field (e.g. ``OPENROUTER_API_KEY``).
         3. Generic ``OPENAI_API_KEY`` (legacy default).
         4. ``OPENAI_API_KEY_PATH`` (file-based, legacy).
+        5. Vault (``secret/plaglens/{VAULT_LLM_SECRET_PATH}`` key ``api_key``)
+           — the shared source of truth when nothing is set in the env.
         """
         if env_var:
             value = os.environ.get(env_var)
@@ -137,7 +142,7 @@ class Settings(BaseSettings):
             attr = getattr(self, env_var, None)
             if attr:
                 return str(attr)
-            return None
+            return self._vault_llm_key()
         if self.OPENROUTER_API_KEY:
             return self.OPENROUTER_API_KEY
         if self.OPENAI_API_KEY:
@@ -145,7 +150,15 @@ class Settings(BaseSettings):
         if self.OPENAI_API_KEY_PATH and os.path.isfile(self.OPENAI_API_KEY_PATH):
             with open(self.OPENAI_API_KEY_PATH, encoding="utf-8") as fh:
                 return fh.read().strip()
-        return None
+        return self._vault_llm_key()
+
+    def _vault_llm_key(self) -> str | None:
+        """Fetch the default LLM API key from Vault (or ``None`` if Vault is
+        unavailable / unset / placeholder). Import is local so the service has
+        no hard dependency on a running Vault."""
+        from plaglens_common.secrets import get_vault
+
+        return get_vault().get_secret(self.VAULT_LLM_SECRET_PATH, "api_key")
 
 
 @lru_cache

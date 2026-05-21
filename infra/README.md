@@ -81,6 +81,11 @@ infra/
 - Vault runs in **dev mode**. Data is in `vault-data` but secrets are
   re-seeded by the `vault-init` one-shot every restart. Do not use as-is
   in any environment that handles real secrets.
+- Services read secrets through `plaglens_common.secrets` (`hvac` KV v2) with
+  **env-first precedence**: an explicit env var always wins, Vault is consulted
+  only when it is unset, and a missing/unreachable Vault or a `REPLACE_ME`
+  placeholder degrades to `None` so containers still boot. ai-analysis resolves
+  its default LLM key this way (`secret/plaglens/llm/openai`).
 - Traefik uses Let's Encrypt **staging** by default; certificates are
   untrusted by browsers (expected for dev).
 - Healthchecks are configured on all critical services. Application
