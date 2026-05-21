@@ -4,7 +4,6 @@
 import { useEffect, useState } from 'react';
 import { Loader2, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
@@ -31,7 +30,7 @@ import type { EmailTransport } from '@/api/endpoints/notificationsAdmin';
 import type { Problem } from '@/api/types';
 
 export function EmailConfigPage() {
-  useDocumentTitle('Email config');
+  useDocumentTitle('Email-конфиг');
   const { user } = useAuth();
   const notify = useNotifications();
   const cfgQ = useEmailConfig();
@@ -105,10 +104,9 @@ export function EmailConfigPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <Card>
-          <CardContent className="p-6 space-y-4">
+        <div className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email-transport">Transport</Label>
+              <Label htmlFor="email-transport">Транспорт</Label>
               <Select
                 value={transport}
                 onValueChange={(v) => setTransport((v as EmailTransport) ?? 'smtp')}
@@ -176,7 +174,7 @@ export function EmailConfigPage() {
                     checked={smtpTls}
                     onCheckedChange={(v) => setSmtpTls(v)}
                   />
-                  <Label htmlFor="smtp-tls">Use TLS</Label>
+                  <Label htmlFor="smtp-tls">Использовать TLS</Label>
                 </div>
               </>
             )}
@@ -245,8 +243,7 @@ export function EmailConfigPage() {
                 Сохранить
               </Button>
             </div>
-          </CardContent>
-        </Card>
+        </div>
       )}
     </Page>
   );

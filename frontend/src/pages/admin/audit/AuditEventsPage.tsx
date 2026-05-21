@@ -9,7 +9,6 @@ import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -170,8 +169,7 @@ export function AuditEventsPage() {
       ) : data && data.data.length === 0 ? (
         <EmptyState title="Событий нет" />
       ) : (
-        <Card>
-          <CardContent className="p-0">
+        <div className="border-y">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -243,8 +241,7 @@ export function AuditEventsPage() {
                 })}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+        </div>
       )}
     </Page>
   );
