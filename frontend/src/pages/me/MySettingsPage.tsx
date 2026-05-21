@@ -17,14 +17,12 @@ interface RowProps {
   isFirst?: boolean;
 }
 
-function NavRow({ to, title, testid, isFirst }: RowProps) {
+function NavRow({ to, title, testid }: RowProps) {
   return (
     <Link
       to={to}
       data-testid={testid}
-      className={`flex items-center gap-4 py-3 transition-colors hover:bg-muted/30 -mx-2 px-2 rounded-md ${
-        !isFirst ? 'border-t border-border/50 mt-0 rounded-none' : ''
-      }`}
+      className="-mx-2 flex items-center gap-4 rounded-lg px-3 py-3 transition-colors hover:bg-muted/50"
     >
       <div className="min-w-0 flex-1 text-sm font-medium text-foreground">
         {title}

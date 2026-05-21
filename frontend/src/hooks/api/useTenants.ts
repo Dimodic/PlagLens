@@ -37,7 +37,8 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: CreateTenantInput) => tenantsApi.create(input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: tenantKeys.all }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: tenantKeys.all, refetchType: 'all' }),
   });
 }
 

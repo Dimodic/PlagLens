@@ -50,7 +50,7 @@ export function TenantsListPage() {
             }
           />
         ) : (
-          <div className="divide-y border-y">
+          <div className="divide-y divide-border/50">
             {data?.data.map((t) => (
               <Link
                 key={t.id}

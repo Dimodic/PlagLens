@@ -113,7 +113,7 @@ export function AdminDashboardPage() {
             Нет настроенных интеграций.
           </p>
         ) : (
-          <div className="divide-y border-y" data-testid="admin-home-integrations">
+          <div className="divide-y divide-border/50" data-testid="admin-home-integrations">
             {integrations.map((it) => (
               <div key={it.id} className="flex items-center gap-4 px-3 py-4">
                 <span className={`h-2 w-2 flex-none rounded-full ${statusDot(it.status)}`} />
@@ -156,7 +156,7 @@ export function AdminDashboardPage() {
             Событий пока нет.
           </p>
         ) : (
-          <div className="divide-y border-y" data-testid="admin-home-audit">
+          <div className="divide-y divide-border/50" data-testid="admin-home-audit">
             {auditEvents.map((e) => {
               const tone =
                 e.result === 'failure'

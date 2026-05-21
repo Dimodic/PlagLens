@@ -150,16 +150,18 @@ export function AuditEventsPage() {
           </SelectContent>
         </Select>
 
-        <Button onClick={apply} data-testid="audit-apply-filters">
-          Применить
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={reset}
-          data-testid="audit-reset-filters"
-        >
-          Сброс
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button onClick={apply} data-testid="audit-apply-filters">
+            Применить
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={reset}
+            data-testid="audit-reset-filters"
+          >
+            Сброс
+          </Button>
+        </div>
       </div>
 
       {error && <ProblemAlert problem={error as unknown as Problem} />}
