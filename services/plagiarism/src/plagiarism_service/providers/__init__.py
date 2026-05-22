@@ -1,4 +1,10 @@
-"""Pluggable plagiarism providers."""
+"""Pluggable plagiarism providers.
+
+Only Dolos is shipped as a working implementation. The ``PlagiarismProvider``
+abstract base + the registry below stay in place so adding another engine
+(JPlag, MOSS, Codequiry, …) is a matter of dropping in one more subclass —
+no orchestrator-side changes required.
+"""
 
 from .base import (
     PlagiarismProvider,
@@ -12,16 +18,10 @@ from .base import (
     SubmissionItem,
     SubmissionSet,
 )
-from .codequiry import CodequiryProvider
 from .dolos import DolosProvider
-from .jplag import JPlagProvider
-from .moss import MossProvider
 
 __all__ = [
-    "CodequiryProvider",
     "DolosProvider",
-    "JPlagProvider",
-    "MossProvider",
     "PlagiarismProvider",
     "ProviderArtifact",
     "ProviderCapabilities",
@@ -40,9 +40,6 @@ def get_provider(name: str) -> PlagiarismProvider:
     """Resolve a provider by name. Raises ``ValueError`` if unknown."""
     name = name.lower()
     table: dict[str, type[PlagiarismProvider]] = {
-        "jplag": JPlagProvider,
-        "moss": MossProvider,
-        "codequiry": CodequiryProvider,
         "dolos": DolosProvider,
     }
     cls = table.get(name)

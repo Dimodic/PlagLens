@@ -68,22 +68,9 @@ class Settings(BaseSettings):
     auth_required: bool = True
 
     # ----- providers -----
-    default_provider: str = "jplag"
-    jplag_jar_path: str = "/opt/jplag.jar"
-    jplag_java_bin: str = "java"
-    jplag_min_tokens: int = 9
-    jplag_timeout_seconds: int = 600
-    jplag_version: str = "5.1.0"
-    # Optional working-directory prefix; default uses tempfile.mkdtemp.
-    jplag_workspace_root: str = ""
-
-    moss_user_email: str = ""
-    moss_server_host: str = "moss.stanford.edu"
-    moss_server_port: int = 7690
-
-    codequiry_api_base: str = "https://codequiry.com/api/v1"
-    codequiry_api_key: str = ""
-
+    # Only Dolos is shipped as a working implementation; the abstract
+    # ``PlagiarismProvider`` interface remains open for future engines.
+    default_provider: str = "dolos"
     dolos_bin: str = "dolos"
     dolos_timeout_seconds: int = 600
 

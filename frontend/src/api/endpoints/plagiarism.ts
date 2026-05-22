@@ -9,7 +9,7 @@ import { buildListParams, type ListParams } from '../pagination';
 
 // ---------- Domain types ----------
 
-export type PlagiarismProvider = 'jplag' | 'moss' | 'dolos' | 'codequiry';
+export type PlagiarismProvider = 'dolos';
 export type RunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 export type FlagSeverity = 'low' | 'medium' | 'high';
 

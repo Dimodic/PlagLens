@@ -142,23 +142,12 @@ export default function AdminProvidersPage() {
       <section className="space-y-3">
         <h2 className="text-base font-semibold tracking-tight">Антиплагиат</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {/* TODO(plagiarism): switch JPlag/MOSS status to a real toggle once
-              /api/v1/admin/plagiarism/providers (or equivalent) is exposed. The
-              plagiarism service has no admin-visible enabled/disabled flag today,
-              so we keep the deployment defaults: JPlag built-in, MOSS opt-in. */}
           <ProviderTile
-            name="JPlag"
+            name="Dolos"
             category="Provider"
             status="enabled"
             to="/admin/plagiarism-corpus"
-            testid="provider-tile-jplag"
-          />
-          <ProviderTile
-            name="MOSS"
-            category="Provider"
-            status="disabled"
-            to="/admin/plagiarism-corpus"
-            testid="provider-tile-moss"
+            testid="provider-tile-dolos"
           />
         </div>
       </section>

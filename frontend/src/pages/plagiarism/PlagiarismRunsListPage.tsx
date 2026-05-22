@@ -49,10 +49,7 @@ import type { PlagiarismProvider as ProviderName } from '@/api/endpoints/plagiar
 import type { Problem } from '@/api/types';
 
 const PROVIDERS: Array<{ value: ProviderName; label: string }> = [
-  { value: 'jplag', label: 'JPlag (default)' },
-  { value: 'moss', label: 'MOSS' },
   { value: 'dolos', label: 'Dolos' },
-  { value: 'codequiry', label: 'Codequiry' },
 ];
 
 function fmt(date: string | null): string {
@@ -67,7 +64,7 @@ interface RunModalProps {
 }
 
 function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
-  const [provider, setProvider] = useState<ProviderName>('jplag');
+  const [provider, setProvider] = useState<ProviderName>('dolos');
   const [withCorpus, setWithCorpus] = useState(true);
   const [threshold, setThreshold] = useState(0.6);
   const [includeVersions, setIncludeVersions] = useState<
