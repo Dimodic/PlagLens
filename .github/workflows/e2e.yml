@@ -1,10 +1,11 @@
 name: E2E (Playwright)
 
+# Manual-only: bringing up the full docker compose stack (Postgres +
+# Redis + Kafka + MinIO + 7 services) inside a GitHub-hosted runner
+# does not fit within the 2 vCPU / 7 GB / 30 min envelope. Reliably
+# runs locally via `make e2e` and on a real staging environment;
+# triggered from the Actions UI when needed.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 concurrency:
