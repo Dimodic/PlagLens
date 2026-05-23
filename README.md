@@ -17,39 +17,39 @@ rationale; start here if you want to run the stack.
 ## Architecture at a glance
 
 ```mermaid
-flowchart LR
-    User[Web SPA / Bot]
-    GW[API Gateway]
-    subgraph Domain
-        ID[Identity]
-        CS[Course-Submission]
+flowchart TB
+    Client["Web Frontend"]
+    GW["API Gateway"]
+    Bus[("Apache Kafka")]
+
+    Client --> GW
+    GW --> Apps
+
+    subgraph Apps[" Domain services "]
+        direction LR
+        ID["identity"]
+        CS["course-submission"]
+        INT["integration"]
+        PL["plagiarism"]
+        AI["ai-analysis"]
+        REP["reporting"]
     end
-    subgraph Processing
-        PS[Plagiarism]
-        AI[AI Analysis]
+
+    Apps -->|publish / consume| Bus
+
+    subgraph Storage[" Storage "]
+        direction LR
+        PG[("Postgres")]
+        RD[("Redis")]
+        S3[("MinIO")]
     end
-    subgraph Integration
-        IS[Integration]
-        RP[Reporting<br/>audit + notification]
-    end
-    subgraph Infra
-        PG[(Postgres)]
-        RD[(Redis)]
-        KF[(Kafka)]
-        S3[(MinIO)]
-    end
-    User --> GW
-    GW --> ID & CS & PS & AI & IS & RP
-    ID & CS & PS & AI & IS & RP --> PG
-    ID & GW & RP --> RD
-    CS & PS & RP --> S3
-    ID & CS & IS & PS & AI & RP --> KF
+
+    Apps --> Storage
 ```
 
-Seven application services, schema-per-service Postgres, Kafka for events,
-Redis for cache + rate-limiting, MinIO for files. See
-[`docs/architecture/PROJECT-MAP.md`](docs/architecture/PROJECT-MAP.md)
-for the full picture.
+Seven application services on a shared domain model, an Apache Kafka event
+bus, schema-per-service Postgres, Redis for cache and rate-limiting, and
+MinIO for files. The whole stack comes up with a single `docker compose up`.
 
 ## Quickstart
 
