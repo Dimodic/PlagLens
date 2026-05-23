@@ -6,6 +6,7 @@ on:
     branches: [main]
   push:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions:
   contents: read
@@ -129,10 +130,17 @@ jobs:
         run: docker compose -f infra/docker-compose.yml --env-file infra/.env config --quiet
 
   # ---------------------------------------------------------------------------
-  # E2E (best-effort — does not block the PR)
+  # E2E smoke — manual only.
+  #
+  # Brings the full docker compose stack up inside a GitHub-hosted runner
+  # (Postgres + Redis + Kafka + MinIO + 7 services). Reliably runs locally
+  # via `make e2e`, but free GitHub runners (2 vCPU / 7 GB RAM) don't give
+  # enough headroom for the cold-start, so we ship it as a workflow_dispatch
+  # job instead of running it on every push.
   # ---------------------------------------------------------------------------
   e2e:
     name: E2E smoke
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     needs: docker-compose-validate
     continue-on-error: true
