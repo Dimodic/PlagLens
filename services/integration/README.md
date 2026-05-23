@@ -61,8 +61,6 @@ src/integration_service/
 - Admin health / webhook-events / dlq + standard `/healthz`, `/readyz`,
   `/metrics`, `/v1/version`
 
-Total: ≥ 35 endpoints. Spec: `docs/architecture/legacy/07-INTEGRATION.md`.
-
 ## Yandex.Contest OAuth — dev setup
 
 The adapter calls `https://api.contest.yandex.net/api/public/v2/...` with

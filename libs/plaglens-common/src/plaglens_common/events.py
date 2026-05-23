@@ -1,6 +1,5 @@
 """CloudEvents envelope + thin async Kafka producer/consumer.
 
-See `docs/architecture/legacy/03-EVENTS.md`.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ from typing import Any, Protocol
 from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
-
 
 class CloudEvent(BaseModel):
     """Subset of CloudEvents v1.0 used across PlagLens.
@@ -57,7 +55,6 @@ class CloudEvent(BaseModel):
             out.append(("ce_trace_id", self.trace_id.encode("utf-8")))
         return out
 
-
 class ProcessedEventStore(Protocol):
     """DI Protocol used by `KafkaEventConsumer` for idempotency.
 
@@ -66,7 +63,6 @@ class ProcessedEventStore(Protocol):
 
     async def is_processed(self, event_id: str, *, consumer_group: str) -> bool: ...
     async def mark_processed(self, event_id: str, *, consumer_group: str) -> None: ...
-
 
 class InMemoryProcessedEventStore:
     """Tiny default implementation, **not** for production."""
@@ -79,7 +75,6 @@ class InMemoryProcessedEventStore:
 
     async def mark_processed(self, event_id: str, *, consumer_group: str) -> None:
         self._seen.add((consumer_group, event_id))
-
 
 class KafkaEventProducer:
     """Async wrapper around `aiokafka.AIOKafkaProducer`.
@@ -145,9 +140,7 @@ class KafkaEventProducer:
     async def __aexit__(self, *exc: Any) -> None:
         await self.stop()
 
-
 HandlerT = Callable[[CloudEvent], Awaitable[None]]
-
 
 class KafkaEventConsumer:
     """Async consumer that decodes CloudEvents and applies idempotency."""
@@ -228,7 +221,6 @@ class KafkaEventConsumer:
 
             if self._stopped:
                 break
-
 
 __all__ = [
     "CloudEvent",

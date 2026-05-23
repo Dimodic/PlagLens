@@ -1,7 +1,5 @@
 """Prometheus metrics middleware + helpers.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §11.
-
 The default registry is used so `/metrics` from `health.health_router` exposes
 everything that this module records.
 """
@@ -24,12 +22,10 @@ except ImportError:  # pragma: no cover
     Histogram = None  # type: ignore[assignment]
     CollectorRegistry = None  # type: ignore[assignment]
 
-
 _HTTP_BUCKETS: tuple[float, ...] = (
     0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10,
 )
 _EXT_BUCKETS: tuple[float, ...] = (0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30)
-
 
 def _get_or_create_metric(factory: Any, name: str, *args: Any, registry: Any = None, **kwargs: Any) -> Any:
     reg = registry or REGISTRY
@@ -39,7 +35,6 @@ def _get_or_create_metric(factory: Any, name: str, *args: Any, registry: Any = N
     if existing is not None:
         return existing
     return factory(name, *args, registry=reg, **kwargs)
-
 
 def _http_metrics(registry: Any = None) -> tuple[Any, Any]:
     requests = _get_or_create_metric(
@@ -59,7 +54,6 @@ def _http_metrics(registry: Any = None) -> tuple[Any, Any]:
     )
     return requests, duration
 
-
 def _external_metrics(registry: Any = None) -> tuple[Any, Any]:
     duration = _get_or_create_metric(
         Histogram,
@@ -77,7 +71,6 @@ def _external_metrics(registry: Any = None) -> tuple[Any, Any]:
         registry=registry,
     )
     return duration, errors
-
 
 class PrometheusMiddleware:
     """ASGI middleware exporting `http_requests_total` and `http_request_duration_seconds`."""
@@ -111,7 +104,6 @@ class PrometheusMiddleware:
             self._requests.labels(*labels).inc()
             self._duration.labels(*labels).observe(elapsed)
 
-
 def record_external_call(provider: str, operation: str, duration: float, status: str) -> None:
     """Record one external API call result."""
 
@@ -121,6 +113,5 @@ def record_external_call(provider: str, operation: str, duration: float, status:
     duration_metric.labels(provider, operation, status).observe(duration)
     if status not in ("ok", "success"):
         errors_metric.labels(provider, operation, status).inc()
-
 
 __all__ = ["PrometheusMiddleware", "record_external_call"]

@@ -4,7 +4,6 @@ Services raise ``ProblemException(status=..., code=..., title=...)`` from
 anywhere and register the handlers returned by :func:`make_handlers` on their
 FastAPI app. The wire content-type is ``application/problem+json``.
 
-See ``docs/architecture/legacy/01-CROSS-CUTTING.md`` §5.
 """
 
 from __future__ import annotations
@@ -64,10 +63,8 @@ DEFAULT_TYPE_BASE: Final[str] = "https://docs.plaglens.ru/errors/"
 
 logger = logging.getLogger(__name__)
 
-
 def _type_for(code: str, type_: str | None = None) -> str:
     return type_ or (DEFAULT_TYPE_BASE + code.lower())
-
 
 class ProblemFieldError(BaseModel):
     """One per-field validation error inside ``Problem.errors``."""
@@ -77,7 +74,6 @@ class ProblemFieldError(BaseModel):
     field: str
     code: str
     message: str
-
 
 class Problem(BaseModel):
     """RFC 7807 Problem Details. Wire content-type: ``application/problem+json``."""
@@ -119,7 +115,6 @@ class Problem(BaseModel):
             request_id=request_id,
         )
 
-
 class ProblemException(Exception):
     """Raise from anywhere; the handlers from :func:`make_handlers` render it."""
 
@@ -142,7 +137,6 @@ class ProblemException(Exception):
         self.errors = errors
         self.headers = headers or {}
         super().__init__(detail or title)
-
 
 def problem_response(
     request: Any,
@@ -177,7 +171,6 @@ def problem_response(
         content=jsonable_encoder(body, exclude_none=True),
         headers=response_headers,
     )
-
 
 def make_handlers() -> dict[type[Exception], Any]:
     """Exception handlers to register via ``app.add_exception_handler``."""
@@ -240,7 +233,6 @@ def make_handlers() -> dict[type[Exception], Any]:
         Exception: _unhandled,
     }
 
-
 # --------------------------------------------------------------------------- #
 # Factory helpers — ergonomic constructors for the common error shapes.
 # --------------------------------------------------------------------------- #
@@ -251,22 +243,17 @@ def bad_request(
         status=400, code="BAD_REQUEST", title="Bad Request", detail=detail, errors=errors
     )
 
-
 def unauthenticated(detail: str = "Authentication required") -> ProblemException:
     return ProblemException(status=401, code="UNAUTHENTICATED", title="Unauthenticated", detail=detail)
-
 
 def forbidden(detail: str = "Forbidden") -> ProblemException:
     return ProblemException(status=403, code="FORBIDDEN", title="Forbidden", detail=detail)
 
-
 def not_found(detail: str = "Resource not found") -> ProblemException:
     return ProblemException(status=404, code="NOT_FOUND", title="Not Found", detail=detail)
 
-
 def conflict(detail: str = "Conflict", code: str = "CONFLICT") -> ProblemException:
     return ProblemException(status=409, code=code, title="Conflict", detail=detail)
-
 
 def validation(
     detail: str = "Validation failed", errors: list[ProblemFieldError] | None = None
@@ -275,13 +262,11 @@ def validation(
         status=422, code="VALIDATION_FAILED", title="Validation Error", detail=detail, errors=errors
     )
 
-
 def rate_limited(detail: str = "Rate limited", *, retry_after: int = 60) -> ProblemException:
     return ProblemException(
         status=429, code="RATE_LIMITED", title="Too Many Requests", detail=detail,
         headers={"Retry-After": str(retry_after)},
     )
-
 
 def budget_exceeded(detail: str = "Budget exceeded", *, retry_after: int = 3600) -> ProblemException:
     return ProblemException(
@@ -289,24 +274,19 @@ def budget_exceeded(detail: str = "Budget exceeded", *, retry_after: int = 3600)
         headers={"Retry-After": str(retry_after)},
     )
 
-
 def upstream_failed(detail: str = "Upstream failed") -> ProblemException:
     return ProblemException(status=502, code="UPSTREAM_FAILED", title="Upstream Failed", detail=detail)
 
-
 def upstream_timeout(detail: str = "External provider timed out") -> ProblemException:
     return ProblemException(status=504, code="UPSTREAM_TIMEOUT", title="Upstream Timeout", detail=detail)
-
 
 def tenant_mismatch(
     detail: str = "Resource does not belong to the caller's tenant",
 ) -> ProblemException:
     return ProblemException(status=403, code="TENANT_MISMATCH", title="Tenant Mismatch", detail=detail)
 
-
 def locked(detail: str = "Resource is locked") -> ProblemException:
     return ProblemException(status=423, code="LOCKED", title="Locked", detail=detail)
-
 
 __all__ = [
     "CONTENT_TYPE_PROBLEM",

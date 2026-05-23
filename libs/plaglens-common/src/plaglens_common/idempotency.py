@@ -1,7 +1,5 @@
 """ASGI middleware implementing the Idempotency-Key contract.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §6.
-
 Behavior
 --------
 - Only POST requests with an `Idempotency-Key` header are intercepted.
@@ -34,19 +32,15 @@ DEFAULT_TTL_SECONDS: int = 24 * 3600  # 24h per spec
 DEFAULT_PREFIX: str = "plaglens:idem:"
 DEFAULT_MAX_BODY_BYTES: int = 2 * 1024 * 1024  # 2 MiB
 
-
 class _AsyncRedisLike(Protocol):
     async def get(self, key: str) -> Any: ...
     async def set(self, key: str, value: Any, ex: int | None = None, nx: bool = False) -> Any: ...
 
-
 def _hash_body(body: bytes) -> str:
     return hashlib.sha256(body).hexdigest()
 
-
 def _build_cache_key(prefix: str, tenant_id: str | None, key: str) -> str:
     return f"{prefix}{tenant_id or 'global'}:{key}"
-
 
 class IdempotencyMiddleware:
     """ASGI middleware. Wrap your FastAPI app::
@@ -158,7 +152,6 @@ class IdempotencyMiddleware:
             except Exception:  # pragma: no cover
                 logger.warning("Redis idempotency store failed", exc_info=True)
 
-
 def _decode_cached(raw: Any) -> dict[str, Any] | None:
     if isinstance(raw, bytes | bytearray):
         raw = raw.decode("utf-8")
@@ -172,7 +165,6 @@ def _decode_cached(raw: Any) -> dict[str, Any] | None:
         return None
     return loaded
 
-
 async def _replay(entry: dict[str, Any], send: Any) -> None:
     raw_headers = entry.get("headers") or []
     encoded_headers = [(k.encode("latin-1"), v.encode("latin-1")) for k, v in raw_headers]
@@ -185,7 +177,6 @@ async def _replay(entry: dict[str, Any], send: Any) -> None:
     )
     body = base64.b64decode(entry.get("body_b64", "").encode("ascii"))
     await send({"type": "http.response.body", "body": body, "more_body": False})
-
 
 async def _send_conflict(send: Any, request_id: str | None) -> None:
     err = IdempotencyKeyConflictError(
@@ -203,7 +194,6 @@ async def _send_conflict(send: Any, request_id: str | None) -> None:
         headers.append((REQUEST_ID.encode("latin-1"), request_id.encode("latin-1")))
     await send({"type": "http.response.start", "status": 409, "headers": headers})
     await send({"type": "http.response.body", "body": body, "more_body": False})
-
 
 class IdempotencyStore:
     """Key/response cache for the Idempotency-Key contract handled *inside* a
@@ -246,7 +236,6 @@ class IdempotencyStore:
             self._local[key] = (body_hash, response)
             return
         await self._redis.set(f"idem:{key}", json.dumps(doc, default=str), ex=self._ttl)
-
 
 __all__ = [
     "DEFAULT_MAX_BODY_BYTES",

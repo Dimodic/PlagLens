@@ -1,7 +1,5 @@
 """Cursor-based pagination primitives.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §4.
-
 Cursor format
 -------------
 Opaque to clients. Internally we encode `(sort_value, id)` as JSON then
@@ -26,7 +24,6 @@ DEFAULT_LIMIT: int = 50
 MIN_LIMIT: int = 1
 MAX_LIMIT: int = 200
 
-
 class CursorPagination(BaseModel):
     """Pagination block returned in list endpoints."""
 
@@ -36,7 +33,6 @@ class CursorPagination(BaseModel):
     has_more: bool = False
     limit: int = Field(default=DEFAULT_LIMIT, ge=MIN_LIMIT, le=MAX_LIMIT)
 
-
 class PaginatedResponse(BaseModel, Generic[T]):
     """Envelope used for list responses. `T` is the item model."""
 
@@ -44,7 +40,6 @@ class PaginatedResponse(BaseModel, Generic[T]):
 
     data: list[T] = Field(default_factory=list)
     pagination: CursorPagination
-
 
 def encode_cursor(sort_value: Any, item_id: Any) -> str:
     """Encode `(sort_value, id)` to opaque url-safe base64 cursor.
@@ -55,7 +50,6 @@ def encode_cursor(sort_value: Any, item_id: Any) -> str:
         "utf-8"
     )
     return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
-
 
 def decode_cursor(cursor: str) -> tuple[Any, Any]:
     """Decode cursor produced by `encode_cursor`. Raises `ValidationError` on garbage."""
@@ -73,7 +67,6 @@ def decode_cursor(cursor: str) -> tuple[Any, Any]:
         raise ValidationError("Cursor payload must be a 2-element array")
     return decoded[0], decoded[1]
 
-
 def parse_pagination_query(
     cursor: str | None = None,
     limit: int = DEFAULT_LIMIT,
@@ -87,11 +80,9 @@ def parse_pagination_query(
         raise ValidationError(f"limit must be between {MIN_LIMIT} and {MAX_LIMIT}")
     return CursorPagination(next_cursor=cursor, has_more=False, limit=limit)
 
-
 # Convenience type aliases for FastAPI typing
 LimitQuery = Annotated[int, Field(ge=MIN_LIMIT, le=MAX_LIMIT, default=DEFAULT_LIMIT)]
 CursorQuery = Annotated[str | None, Field(default=None)]
-
 
 __all__ = [
     "CursorPagination",

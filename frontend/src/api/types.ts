@@ -1,6 +1,5 @@
 /**
  * Shared API types — match backend contracts (RFC 7807 problems, cursor pagination, etc.).
- * See docs/architecture/legacy/01-CROSS-CUTTING.md and 04-IDENTITY.md.
  */
 
 // ---------- RFC 7807 ----------

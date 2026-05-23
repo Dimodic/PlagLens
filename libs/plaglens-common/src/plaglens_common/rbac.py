@@ -1,6 +1,5 @@
 """Role-based authorization helpers.
 
-See `docs/architecture/legacy/02-RBAC.md`.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from .errors import ForbiddenError, TenantMismatchError, UnauthenticatedError
 GLOBAL_ROLES: tuple[str, ...] = ("super_admin", "admin", "teacher", "student")
 COURSE_ROLES: tuple[str, ...] = ("owner", "co_owner", "assistant", "student")
 SUPER_ADMIN: str = "super_admin"
-
 
 class AuthzContext(BaseModel):
     """Context object passed through dependencies for authz decisions."""
@@ -43,7 +41,6 @@ class AuthzContext(BaseModel):
             return True
         return role in roles
 
-
 def _extract_user(args: tuple[Any, ...], kwargs: dict[str, Any]) -> CurrentUser:
     user = kwargs.get("user") or kwargs.get("current_user")
     if isinstance(user, CurrentUser):
@@ -59,7 +56,6 @@ def _extract_user(args: tuple[Any, ...], kwargs: dict[str, Any]) -> CurrentUser:
     raise UnauthenticatedError(
         "Authorization decorator requires `user`/`current_user`/`authz` parameter"
     )
-
 
 def _extract_course_id(
     args: tuple[Any, ...],
@@ -78,7 +74,6 @@ def _extract_course_id(
     if isinstance(ctx, AuthzContext) and ctx.course_id:
         return ctx.course_id
     return None
-
 
 def _wrap(
     fn: Callable[..., Any],
@@ -102,7 +97,6 @@ def _wrap(
 
     return _sync
 
-
 def require_global_role(*allowed: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory: only users with one of `allowed` global roles pass."""
 
@@ -125,7 +119,6 @@ def require_global_role(*allowed: str) -> Callable[[Callable[..., Any]], Callabl
         return _wrap(fn, make_check)
 
     return decorator
-
 
 def require_course_role(*allowed: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory: pass if user has any of `allowed` roles in the course.
@@ -173,7 +166,6 @@ def require_course_role(*allowed: str) -> Callable[[Callable[..., Any]], Callabl
 
     return decorator
 
-
 def _normalise(roles: Iterable[str], universe: Iterable[str]) -> set[str]:
     universe_set = set(universe)
     out = set(roles)
@@ -181,7 +173,6 @@ def _normalise(roles: Iterable[str], universe: Iterable[str]) -> set[str]:
     if unknown:
         raise ValueError(f"Unknown role(s): {sorted(unknown)}; expected subset of {sorted(universe_set)}")
     return out
-
 
 __all__ = [
     "COURSE_ROLES",

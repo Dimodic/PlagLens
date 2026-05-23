@@ -49,7 +49,6 @@ Read from environment:
 ## Behaviour when a route isn't built yet
 
 Tests use `pytest.skip(...)` (not `fail`) on `404` from the gateway —
-the suite is forward-compatible with KT-1 (architecture-only) and with
 later KTs as services come online.
 
 ## Skipping the whole suite

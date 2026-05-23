@@ -1,6 +1,5 @@
 """OpenTelemetry tracing setup.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §12.
 """
 
 from __future__ import annotations
@@ -9,7 +8,6 @@ import logging
 from typing import Any
 
 logger = logging.getLogger(__name__)
-
 
 def configure_opentelemetry(
     service_name: str,
@@ -58,6 +56,5 @@ def configure_opentelemetry(
         provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=otlp_endpoint)))
     trace.set_tracer_provider(provider)
     return provider
-
 
 __all__ = ["configure_opentelemetry"]

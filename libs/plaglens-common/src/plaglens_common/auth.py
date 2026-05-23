@@ -1,9 +1,4 @@
-"""JWT bearer auth using RS256 + JWKS, with Redis-cached JWKS and revocation list.
-
-See:
-- `docs/architecture/legacy/01-CROSS-CUTTING.md` §8 (auth)
-- `docs/architecture/legacy/02-RBAC.md` §6 (JWT payload)
-"""
+"""JWT bearer auth using RS256 + JWKS, with Redis-cached JWKS and revocation list."""
 
 from __future__ import annotations
 
@@ -29,14 +24,12 @@ JWKS_CACHE_KEY: str = "plaglens:jwks"
 REVOKED_PREFIX: str = "plaglens:jti_revoked:"
 DEFAULT_TTL_SECONDS: int = 3600  # 1h
 
-
 class _AsyncRedisLike(Protocol):
     """Minimal subset of redis.asyncio.Redis we depend on."""
 
     async def get(self, key: str) -> Any: ...
     async def set(self, key: str, value: Any, ex: int | None = None) -> Any: ...
     async def exists(self, key: str) -> Any: ...
-
 
 class CurrentUser(BaseModel):
     """User context derived from a verified JWT.
@@ -55,7 +48,6 @@ class CurrentUser(BaseModel):
     iat: int | None = None
     course_roles_truncated: bool = False
     raw: dict[str, Any] = Field(default_factory=dict)
-
 
 class JWKSCache:
     """Fetch + cache JWKS via Redis with TTL."""
@@ -129,7 +121,6 @@ class JWKSCache:
                 return jwt.PyJWK(key).key
         raise UnauthenticatedError(f"Signing key {kid!r} not found in JWKS")
 
-
 class JWTBearer:
     """Async JWT verifier using RS256 keys from a JWKS endpoint.
 
@@ -182,7 +173,6 @@ class JWTBearer:
 
         return payload
 
-
 def revoke_check(redis: _AsyncRedisLike, prefix: str = REVOKED_PREFIX) -> Callable[[str], Awaitable[bool]]:
     """Return an async predicate that checks Redis for a revoked `jti`.
 
@@ -201,7 +191,6 @@ def revoke_check(redis: _AsyncRedisLike, prefix: str = REVOKED_PREFIX) -> Callab
 
     return _check
 
-
 def _payload_to_user(payload: dict[str, Any]) -> CurrentUser:
     return CurrentUser(
         sub=str(payload["sub"]),
@@ -215,7 +204,6 @@ def _payload_to_user(payload: dict[str, Any]) -> CurrentUser:
         raw=payload,
     )
 
-
 def _header_default() -> Any:
     """Return a `fastapi.Header(default=None)` if FastAPI is available, else `None`."""
     try:
@@ -223,7 +211,6 @@ def _header_default() -> Any:
     except ImportError:  # pragma: no cover
         return None
     return Header(default=None)
-
 
 def get_current_user(
     bearer: JWTBearer,
@@ -250,7 +237,6 @@ def get_current_user(
 
     return _dep
 
-
 def get_optional_user(
     bearer: JWTBearer,
     *,
@@ -275,7 +261,6 @@ def get_optional_user(
         return _payload_to_user(payload)
 
     return _dep
-
 
 __all__ = [
     "DEFAULT_TTL_SECONDS",

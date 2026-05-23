@@ -2,7 +2,6 @@
 
 Each test is best-effort: if the gateway routes are not implemented yet, we
 emit `pytest.skip` rather than failing — the suite is meant to grow with
-the codebase, not gate KT-1 on a not-yet-built feature.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ import pytest
 
 pytestmark = pytest.mark.asyncio
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -27,7 +25,6 @@ def _ok_or_skip(resp: httpx.Response, *expected: int) -> None:
         f"{resp.request.method} {resp.request.url.path} → {resp.status_code}: {resp.text[:200]}"
     )
 
-
 # ---------------------------------------------------------------------------
 # 1. Per-service /healthz and /readyz (10 services, via gateway aggregation)
 # ---------------------------------------------------------------------------
@@ -35,12 +32,10 @@ async def test_gateway_healthz(http_client: httpx.AsyncClient) -> None:
     r = await http_client.get("/healthz")
     assert r.status_code == 200, r.text
 
-
 async def test_gateway_readyz(http_client: httpx.AsyncClient) -> None:
     r = await http_client.get("/readyz")
     # 200 ready, 503 not-ready but reachable — both are acceptable signals
     assert r.status_code in (200, 503), r.text
-
 
 async def test_aggregated_health_v1(http_client: httpx.AsyncClient) -> None:
     """Gateway exposes /v1/health which aggregates all backends."""
@@ -50,7 +45,6 @@ async def test_aggregated_health_v1(http_client: httpx.AsyncClient) -> None:
     assert r.status_code in (200, 503), r.text
     body = r.json()
     assert "status" in body or "services" in body, f"unexpected body: {body}"
-
 
 @pytest.mark.parametrize(
     "service",
@@ -85,7 +79,6 @@ async def test_per_service_status_through_aggregator(
         keys = {s.get("name") for s in services if isinstance(s, dict)}
     assert service in keys, f"{service} missing from aggregated health: {keys}"
 
-
 # ---------------------------------------------------------------------------
 # 2. JWKS — public keys used to verify access tokens
 # ---------------------------------------------------------------------------
@@ -102,7 +95,6 @@ async def test_jwks_endpoint(http_client: httpx.AsyncClient) -> None:
         assert "kty" in first
         if first.get("kty") == "RSA":
             assert "n" in first and "e" in first
-
 
 # ---------------------------------------------------------------------------
 # 3. Auth — protected routes refuse unauthenticated requests
@@ -122,7 +114,6 @@ async def test_protected_endpoint_requires_auth(http_client: httpx.AsyncClient, 
         pytest.skip(f"{path} not implemented yet")
     assert r.status_code == 401, f"{path} returned {r.status_code} for unauth call"
 
-
 async def test_cross_tenant_access_denied(
     http_client: httpx.AsyncClient, auth_headers: dict[str, str]
 ) -> None:
@@ -135,11 +126,9 @@ async def test_cross_tenant_access_denied(
     # 401 also acceptable: gateway may reject before tenant check.
     assert r.status_code in (401, 403), r.text
 
-
 # ---------------------------------------------------------------------------
 # 4. End-to-end happy path — register → login → course → assignment →
 #    submission → operation status. Skipped (not failed) if any step is
-#    not yet implemented; KT-1 is architecture, not full impl.
 # ---------------------------------------------------------------------------
 async def test_simulated_user_flow(
     http_client: httpx.AsyncClient, auth_headers: dict[str, str]

@@ -1,7 +1,6 @@
 /**
  * Course discovery — listing courses by role.
  *
- * The /users/me/courses endpoint may not be implemented in early KT-1; this
  * spec exercises the existing /courses listing as a fallback so we still
  * verify per-role visibility through the public UI.
  */

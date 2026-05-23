@@ -19,7 +19,6 @@ from ..models.reporting import (
 
 HandlerFn = Callable[[AsyncSession, dict[str, Any]], Awaitable[None]]
 
-
 _COURSE_DEFAULTS = dict(
     enrolled_students=0,
     assignments_count=0,
@@ -62,14 +61,12 @@ _UG_DEFAULTS = dict(
     suspicious_count=0,
 )
 
-
 async def _course(session: AsyncSession, course_id: str, tenant_id: str) -> CourseStats:
     obj = await session.get(CourseStats, course_id)
     if obj is None:
         obj = CourseStats(course_id=course_id, tenant_id=tenant_id, **_COURSE_DEFAULTS)
         session.add(obj)
     return obj
-
 
 async def _assignment(
     session: AsyncSession, assignment_id: str, course_id: str, tenant_id: str
@@ -85,14 +82,12 @@ async def _assignment(
         session.add(obj)
     return obj
 
-
 async def _tenant(session: AsyncSession, tenant_id: str) -> TenantStats:
     obj = await session.get(TenantStats, tenant_id)
     if obj is None:
         obj = TenantStats(tenant_id=tenant_id, **_TENANT_DEFAULTS)
         session.add(obj)
     return obj
-
 
 async def _ugrades(
     session: AsyncSession, user_id: str, course_id: str, tenant_id: str
@@ -105,7 +100,6 @@ async def _ugrades(
         session.add(obj)
     return obj
 
-
 async def on_course_created(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
     data = env.get("data", {})
@@ -116,7 +110,6 @@ async def on_course_created(session: AsyncSession, env: dict[str, Any]) -> None:
     t = await _tenant(session, tenant_id)
     t.active_courses = (t.active_courses or 0) + 1
     t.updated_at = utcnow()
-
 
 async def on_course_archived(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
@@ -130,7 +123,6 @@ async def on_course_archived(session: AsyncSession, env: dict[str, Any]) -> None
     t.active_courses = max(0, (t.active_courses or 0) - 1)
     t.updated_at = utcnow()
 
-
 async def on_assignment_created(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
     data = env.get("data", {})
@@ -143,7 +135,6 @@ async def on_assignment_created(session: AsyncSession, env: dict[str, Any]) -> N
     cs.assignments_count = (cs.assignments_count or 0) + 1
     cs.last_activity_at = utcnow()
     cs.updated_at = utcnow()
-
 
 async def on_submission_created(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
@@ -181,7 +172,6 @@ async def on_submission_created(session: AsyncSession, env: dict[str, Any]) -> N
     t.submissions_30d += 1
     t.updated_at = utcnow()
 
-
 async def on_grade_assigned(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
     data = env.get("data", {})
@@ -212,9 +202,7 @@ async def on_grade_assigned(session: AsyncSession, env: dict[str, Any]) -> None:
         ug.average_score = ug.score_sum / max(1, ug.score_count)
         ug.updated_at = utcnow()
 
-
 async def on_grade_changed(session: AsyncSession, env: dict[str, Any]) -> None:
-    # treat as overwrite of the previous datapoint; for KT-1 simplicity update average via diff
     data = env.get("data", {})
     diff = float(data.get("score_diff", 0.0))
     if diff == 0.0:
@@ -234,7 +222,6 @@ async def on_grade_changed(session: AsyncSession, env: dict[str, Any]) -> None:
         ug.average_score = ug.score_sum / max(1, ug.score_count)
         ug.updated_at = utcnow()
 
-
 async def on_plagiarism_run_completed(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
     data = env.get("data", {})
@@ -251,7 +238,6 @@ async def on_plagiarism_run_completed(session: AsyncSession, env: dict[str, Any]
     t = await _tenant(session, tenant_id)
     t.plagiarism_runs_30d += 1
     t.updated_at = utcnow()
-
 
 async def on_suspicious_pair(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
@@ -272,7 +258,6 @@ async def on_suspicious_pair(session: AsyncSession, env: dict[str, Any]) -> None
         ug = await _ugrades(session, user_id, course_id, tenant_id)
         ug.suspicious_count += 1
         ug.updated_at = utcnow()
-
 
 async def on_ai_completed(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
@@ -295,12 +280,10 @@ async def on_ai_completed(session: AsyncSession, env: dict[str, Any]) -> None:
     t.ai_cost_total_30d += cost
     t.updated_at = utcnow()
 
-
 async def on_budget_exceeded(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
     t = await _tenant(session, tenant_id)
     t.updated_at = utcnow()
-
 
 async def on_import_completed(session: AsyncSession, env: dict[str, Any]) -> None:
     tenant_id = env.get("tenant_id", "")
@@ -316,7 +299,6 @@ async def on_import_completed(session: AsyncSession, env: dict[str, Any]) -> Non
     t.submissions_30d += imported
     t.updated_at = utcnow()
 
-
 async def on_user_anonymized(session: AsyncSession, env: dict[str, Any]) -> None:
     user_id = str(env.get("data", {}).get("user_id", ""))
     if not user_id:
@@ -326,7 +308,6 @@ async def on_user_anonymized(session: AsyncSession, env: dict[str, Any]) -> None
     for r in rows:
         r.user_id = f"anon_{user_id[-6:]}"
         r.updated_at = utcnow()
-
 
 def build_handler_registry() -> dict[str, list[HandlerFn]]:
     return {

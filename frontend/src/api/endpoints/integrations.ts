@@ -1,5 +1,4 @@
 /**
- * Integration Service — see docs/architecture/legacy/07-INTEGRATION.md.
  */
 import api from '../client';
 import type { Operation, Paginated } from '../types';

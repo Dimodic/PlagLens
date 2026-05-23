@@ -1,6 +1,5 @@
 """Standard health, readiness, version and metrics endpoints.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §11.
 """
 
 from __future__ import annotations
@@ -12,7 +11,6 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 CheckFn = Callable[[], Awaitable[bool] | bool]
-
 
 def health_router(
     *,
@@ -96,6 +94,5 @@ def health_router(
         )
 
     return router
-
 
 __all__ = ["health_router"]

@@ -1,7 +1,6 @@
 /**
  * Plagiarism Service API client.
  *
- * See docs/architecture/legacy/08-PLAGIARISM.md.
  */
 import api from '../client';
 import type { Paginated } from '../types';

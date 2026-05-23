@@ -1,6 +1,5 @@
 /**
  * Notifications API client.
- * Mirrors docs/architecture/legacy/10-NOTIFICATION.md.
  *
  * Covers: feed, unread count, read/archive/delete, preferences (channels +
  * per-event matrix + quiet hours), web-push (VAPID subscribe/unsubscribe),

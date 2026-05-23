@@ -1,7 +1,6 @@
 /**
  * Course duplication — owner triggers POST :duplicate.
  *
- * The backend in early KT-1 may not implement the operations API; the UI
  * shows AsyncOperationStatus when the POST returns 202. We verify that the
  * UI does not crash and that, when the call succeeds synchronously, a new
  * course is reachable.

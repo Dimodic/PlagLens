@@ -1,6 +1,5 @@
 """structlog JSON logging configuration.
 
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §13.
 """
 
 from __future__ import annotations
@@ -14,18 +13,15 @@ try:
 except ImportError:  # pragma: no cover
     structlog = None  # type: ignore[assignment]
 
-
 SENSITIVE_KEYS: frozenset[str] = frozenset(
     {"password", "token", "access_token", "refresh_token", "authorization", "secret", "api_key"}
 )
-
 
 def _redact_sensitive(_logger: Any, _name: str, event_dict: dict[str, Any]) -> dict[str, Any]:
     for k in list(event_dict.keys()):
         if k.lower() in SENSITIVE_KEYS:
             event_dict[k] = "[REDACTED]"
     return event_dict
-
 
 def configure_structlog(
     service_name: str,
@@ -81,12 +77,10 @@ def configure_structlog(
     )
     structlog.contextvars.bind_contextvars(service=service_name)
 
-
 def get_logger(name: str | None = None) -> Any:
     """Return a structlog logger (falls back to stdlib if structlog is absent)."""
     if structlog is None:  # pragma: no cover
         return logging.getLogger(name)
     return structlog.get_logger(name)
-
 
 __all__ = ["SENSITIVE_KEYS", "configure_structlog", "get_logger"]

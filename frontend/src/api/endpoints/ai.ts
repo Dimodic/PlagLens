@@ -1,7 +1,6 @@
 /**
  * AI Analysis Service API client.
  *
- * See docs/architecture/legacy/09-AI-ANALYSIS.md.
  */
 import api from '../client';
 import type { Paginated } from '../types';

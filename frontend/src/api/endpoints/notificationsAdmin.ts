@@ -1,6 +1,5 @@
 /**
  * Notification Service — admin endpoints (templates, deliveries, DLQ, email config).
- * See docs/architecture/legacy/10-NOTIFICATION.md.
  */
 import api from '../client';
 import type { Paginated } from '../types';

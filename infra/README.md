@@ -102,7 +102,7 @@ docker compose -f docker-compose.yml config
 docker compose -f docker-compose.yml -f docker-compose.dev.override.yml config
 ```
 
-## Production hardening checklist (out of scope for КТ-1)
+## Production hardening checklist
 
 - [ ] Replace dev-mode Vault with a sealed cluster + auto-unseal.
 - [ ] Issue real TLS certs (LE production directory or in-house CA).

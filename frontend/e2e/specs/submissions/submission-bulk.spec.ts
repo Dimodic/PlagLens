@@ -26,7 +26,6 @@ test.describe('Submission bulk operations', () => {
       });
       // 202 (Operation) or 200 — both acceptable.
       // 200/202/207 means accepted, 404 means the bulk endpoint is not yet
-      // wired through the gateway — both are acceptable for KT-1.
       expect([200, 202, 207, 404]).toContain(r.status());
     } finally {
       await api.dispose();
@@ -48,7 +47,6 @@ test.describe('Submission bulk operations', () => {
         submission_ids: ids,
       });
       // 200/202/207 means accepted, 404 means the bulk endpoint is not yet
-      // wired through the gateway — both are acceptable for KT-1.
       expect([200, 202, 207, 404]).toContain(r.status());
     } finally {
       await api.dispose();
@@ -64,7 +62,6 @@ test.describe('Submission bulk operations', () => {
         rule: 'best',
       });
       // 200/202/207 means accepted, 404 means the bulk endpoint is not yet
-      // wired through the gateway — both are acceptable for KT-1.
       expect([200, 202, 207, 404]).toContain(r.status());
     } finally {
       await api.dispose();
@@ -79,7 +76,6 @@ test.describe('Submission bulk operations', () => {
         rule: 'last',
       });
       // 200/202/207 means accepted, 404 means the bulk endpoint is not yet
-      // wired through the gateway — both are acceptable for KT-1.
       expect([200, 202, 207, 404]).toContain(r.status());
     } finally {
       await api.dispose();
@@ -95,7 +91,6 @@ test.describe('Submission bulk operations', () => {
         ids: [sId],
       });
       // 200/202/207 means accepted, 404 means the bulk endpoint is not yet
-      // wired through the gateway — both are acceptable for KT-1.
       expect([200, 202, 207, 404]).toContain(r.status());
     } finally {
       await api.dispose();

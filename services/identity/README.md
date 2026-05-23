@@ -1,7 +1,6 @@
 # PlagLens Identity Service
 
 Authentication, user management, tenant management, RBAC, OAuth, 2FA, API keys
-for the PlagLens platform. Implements the spec in `docs/architecture/legacy/04-IDENTITY.md`.
 
 ## Tech stack
 

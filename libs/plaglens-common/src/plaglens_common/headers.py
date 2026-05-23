@@ -1,7 +1,6 @@
 """Standard HTTP header names used across PlagLens services.
 
 Centralised so that header strings are not duplicated/typoed across the codebase.
-See `docs/architecture/legacy/01-CROSS-CUTTING.md` §3.
 """
 
 from __future__ import annotations
@@ -30,7 +29,6 @@ CONTENT_TYPE: Final[str] = "Content-Type"
 CONTENT_TYPE_JSON: Final[str] = "application/json"
 CONTENT_TYPE_PROBLEM: Final[str] = "application/problem+json"
 
-
 def request_id_or_default(headers: object, default: str | None = None) -> str | None:
     """Best-effort retrieval of X-Request-Id from a Starlette/HTTPX-like Headers mapping.
 
@@ -43,7 +41,6 @@ def request_id_or_default(headers: object, default: str | None = None) -> str | 
     if value is None:
         return default
     return str(value)
-
 
 __all__ = [
     "ACCEPT_LANGUAGE",

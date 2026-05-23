@@ -1,18 +1,11 @@
 # PlagLens
 
 Multi-tenant plagiarism-detection and LLM-assisted code-review platform
-for university CS courses.  PlagLens ingests submissions from Stepik,
-Yandex.Contest, Telegram and Google Sheets; orchestrates external
-plagiarism engines (JPlag, MOSS, Dolos, Codequiry); runs LLM analysis
-against an OpenAI-compatible API; and surfaces the results to teachers
-and students through a single FastAPI gateway.
-
-Architecture is documented in
-[`docs/architecture/PROJECT-MAP.md`](docs/architecture/PROJECT-MAP.md)
-(current 7-service topology — source of truth). The original KT-1 report
-lives under [`docs/architecture/legacy/`](docs/architecture/legacy/) and is
-kept as an academic artefact. Start in PROJECT-MAP if you want the design
-rationale; start here if you want to run the stack.
+for university CS courses. PlagLens ingests submissions from Stepik,
+Yandex.Contest, eJudge and direct uploads; runs the Dolos plagiarism
+engine against the code; runs LLM analysis against an OpenAI-compatible
+API; and surfaces the results to teachers and students through a single
+FastAPI gateway.
 
 ## Architecture at a glance
 
