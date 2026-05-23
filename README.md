@@ -108,9 +108,9 @@ or `http://localhost:3000` for the bundled Grafana dashboard.
 
 ## Repository layout
 
-```
+```text
 .
-├── docs/architecture/         PROJECT-MAP.md (current) + legacy/ (KT-1)
+├── frontend/                  React 19 + TypeScript SPA
 ├── infra/                     docker-compose, prometheus, grafana, traefik
 ├── libs/plaglens-common/      shared Python lib (errors, observability, rbac)
 ├── services/                  7 application services (FastAPI + SQLAlchemy)
@@ -133,9 +133,7 @@ or `http://localhost:3000` for the bundled Grafana dashboard.
 4. Tests: every PR must pass `make test-all`. New endpoints get
    coverage in `tools/e2e/`.
 5. Migrations: never edit a published Alembic revision; add a new one.
-6. Commits: imperative mood, ≤72 chars subject. Reference the relevant
-   `docs/architecture/NN-…md` file when introducing or changing a
-   contract.
+6. Commits: imperative mood, ≤72 chars subject.
 7. PRs to `main` require CI green (per-service ruff + mypy + pytest,
    compose validation, markdownlint).  E2E is best-effort.
 
