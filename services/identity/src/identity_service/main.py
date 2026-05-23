@@ -16,6 +16,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import APIRouter, FastAPI, Request, Response
+from plaglens_common.observability import install_observability
 from prometheus_client import (
     CONTENT_TYPE_LATEST,
     CollectorRegistry,
@@ -23,7 +24,6 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
-from plaglens_common.observability import install_observability
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from .api.v1 import api_v1

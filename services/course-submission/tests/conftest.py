@@ -20,9 +20,10 @@ os.environ.setdefault("JWT_HS_SECRET", "test-secret")
 os.environ.setdefault("JWT_ALGORITHM", "HS256")
 
 import pytest_asyncio
-from course_service.models import Base
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
+
+from course_service.models import Base
 
 
 @pytest_asyncio.fixture

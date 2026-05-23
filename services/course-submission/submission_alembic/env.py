@@ -10,10 +10,10 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from submission_service.models.base import Base
 from submission_service.models import (  # noqa: F401  ensure import for autogenerate
     submission as _submission,
 )
+from submission_service.models.base import Base
 
 config = context.config
 

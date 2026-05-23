@@ -8,7 +8,6 @@ from typing import AsyncIterator
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
 from plaglens_common.observability import install_observability
 
 from integration_service import __version__

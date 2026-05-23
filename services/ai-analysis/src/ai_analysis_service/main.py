@@ -7,9 +7,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from pydantic import ValidationError
-
 from plaglens_common.observability import install_observability
+from pydantic import ValidationError
 
 from .api import build_router
 from .common.logging import configure_logging

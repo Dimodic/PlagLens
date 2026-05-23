@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from notification_service.models import (  # noqa: F401
     base as _base,
-    entities as _entities,
 )
 from notification_service.models.base import Base
 

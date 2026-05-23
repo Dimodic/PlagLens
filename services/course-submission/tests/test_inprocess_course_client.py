@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from course_service.models import Assignment, Course
-
 from course_submission_service.course_client import InProcessCourseClient
 
 

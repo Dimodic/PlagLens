@@ -42,7 +42,7 @@ class InvitationCreate(BaseModel):
         callers with a 422."""
         if v is None or isinstance(v, str):
             return v
-        if isinstance(v, (int, float)):
+        if isinstance(v, int | float):
             return str(int(v))
         return v
 

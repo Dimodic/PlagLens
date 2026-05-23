@@ -13,9 +13,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from course_service.models import Assignment, Course
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
+
+from course_service.models import Assignment, Course
 from submission_service.services.course_client import AssignmentInfo
 
 

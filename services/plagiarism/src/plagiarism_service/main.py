@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
 from fastapi import FastAPI
-
 from plaglens_common.observability import install_observability
 
 from .api.deps import get_orchestrator, set_producer

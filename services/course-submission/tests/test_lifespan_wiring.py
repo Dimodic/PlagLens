@@ -5,7 +5,6 @@ from __future__ import annotations
 import course_service.deps as course_deps
 import submission_service.api.deps as submission_api_deps
 import submission_service.db as submission_db
-
 from course_submission_service.course_client import InProcessCourseClient
 from course_submission_service.main import wire_shared_session
 

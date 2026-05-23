@@ -10,6 +10,12 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from typing import Any
 
+from fastapi import FastAPI
+from plaglens_common.health import health_router
+from plaglens_common.observability import install_observability
+from plaglens_common.problem import make_handlers
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
 import course_service.api._helpers as course_helpers
 import course_service.deps as course_deps
 import submission_service.api.deps as submission_api_deps
@@ -25,11 +31,6 @@ from course_service.common.redis_client import RedisClient
 from course_service.config import get_settings as get_course_settings
 from course_service.events.consumer import IdentityEventsConsumer
 from course_service.events.producer import CourseEventPublisher
-from fastapi import FastAPI
-from plaglens_common.health import health_router
-from plaglens_common.observability import install_observability
-from plaglens_common.problem import make_handlers
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from submission_service.api.routers import bulk as submission_bulk
 from submission_service.api.routers import feedback as submission_feedback
 from submission_service.api.routers import flags as submission_flags

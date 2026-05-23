@@ -28,7 +28,6 @@ from ..repositories.tenants import TenantRepository
 from ..repositories.two_factor import TwoFactorRepository
 from ..repositories.users import UserRepository
 
-
 # ----- 2FA helpers ---------------------------------------------------------- #
 
 MFA_TOKEN_TTL_SECONDS = 90

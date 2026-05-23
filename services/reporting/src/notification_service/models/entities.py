@@ -40,7 +40,7 @@ MutableJSON = MutableDict.as_mutable(JSON_T)
 # clock in milliseconds: any second-process / restart starts strictly higher
 # than the previous run's last issued seq, eliminating duplicate-key crashes
 # after make-reset cycles or container restarts.
-import time as _time
+import time as _time  # noqa: E402  (kept here for proximity to the comment block above)
 
 _seq_counter = itertools.count(int(_time.time() * 1000))
 

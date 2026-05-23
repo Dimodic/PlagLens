@@ -25,6 +25,12 @@ from __future__ import annotations
 
 from contextlib import AsyncExitStack, asynccontextmanager
 
+from fastapi import APIRouter, FastAPI
+from plaglens_common.health import health_router
+from plaglens_common.observability import install_observability
+from plaglens_common.problem import make_handlers
+from pydantic import ValidationError
+
 from audit_service.api.v1.admin import router as _audit_admin_router
 from audit_service.api.v1.events import router as _audit_events_router
 from audit_service.api.v1.events import shortcut_router as _audit_shortcut_router
@@ -32,14 +38,9 @@ from audit_service.api.v1.internal import router as _audit_internal_router
 
 # Module-level sub-apps (already built at import) — we reuse their lifespans.
 from audit_service.main import app as _audit_app
-from fastapi import APIRouter, FastAPI
 from notification_service.api.v1 import router as _notification_v1_router
 from notification_service.errors import pydantic_validation_handler
 from notification_service.main import app as _notification_app
-from plaglens_common.health import health_router
-from plaglens_common.observability import install_observability
-from plaglens_common.problem import make_handlers
-from pydantic import ValidationError
 from reporting_service.api.v1 import (
     audit_proxy as _rep_audit_proxy,
 )

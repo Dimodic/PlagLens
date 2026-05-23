@@ -12,7 +12,6 @@ from ...common.ids import invitation_id, user_id
 from ...common.invite_code import new_code, normalize_code
 from ...common.problem import ProblemException
 from ...common.security import hash_password, hash_token, new_opaque_token
-from ...config import settings
 from ...deps import (
     CurrentUser,
     assert_same_tenant,
