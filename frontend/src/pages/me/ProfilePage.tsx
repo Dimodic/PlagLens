@@ -358,15 +358,28 @@ export function ProfilePage() {
         </div>
       </section>
 
-      {/* Безопасность — 4 inline subsections, no separate page. */}
-      <section className="space-y-6 border-t border-border/50 pt-6">
+      {/* Безопасность — 4 inline subsections separated by hairlines.
+          No Card chrome, no separate page. Each row collapses heavy
+          forms behind a single «Сменить» / «Включить» trigger so the
+          page doesn't shout three password inputs at a visitor. */}
+      <section className="border-t border-border/50 pt-6 space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Безопасность
         </h2>
-        <PasswordSection />
-        <TwoFactorSection />
-        <OAuthLinksSection />
-        <SessionsSection />
+        <div className="divide-y divide-border/40">
+          <div className="py-4 first:pt-0">
+            <PasswordSection />
+          </div>
+          <div className="py-4">
+            <TwoFactorSection />
+          </div>
+          <div className="py-4">
+            <OAuthLinksSection />
+          </div>
+          <div className="py-4 last:pb-0">
+            <SessionsSection />
+          </div>
+        </div>
       </section>
 
       {/* Код приглашения */}

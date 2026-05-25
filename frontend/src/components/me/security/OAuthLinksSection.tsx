@@ -38,9 +38,7 @@ export function OAuthLinksSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm font-medium text-foreground">
-        Привязанные аккаунты
-      </h3>
+      <h3 className="text-sm text-foreground">Привязанные аккаунты</h3>
       <OAuthLinksList
         linked={(user?.linked_oauth as OAuthProvider[]) ?? []}
         loadingProvider={loading}
