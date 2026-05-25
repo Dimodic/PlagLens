@@ -48,10 +48,22 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
     );
   }
   if (provider === 'yandex') {
-    // Source: simple-icons/yandex.svg — single bold Я mark.
+    // Source: Tabler Icons brand-yandex (stroke-based outline of the
+    // letter Я). Other glyphs in this row are fill-based; Я is the only
+    // one that reads better as an outline at 20px.
     return (
-      <svg {...common}>
-        <path d="M2.04 0v24h4.86V12.42l5.94 11.58H18l-6.42-12.06L17.4 0h-5.16l-5.34 10.5V0H2.04z" />
+      <svg
+        viewBox="0 0 24 24"
+        className="h-5 w-5"
+        aria-hidden
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d="M15 20v-16h-2a4 4 0 0 0 -4 4v1a4 4 0 0 0 4 4h2" />
+        <path d="M9 20l3 -7" />
       </svg>
     );
   }
