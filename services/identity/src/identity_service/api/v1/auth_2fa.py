@@ -173,7 +173,7 @@ async def two_factor_verify(
         max_age=settings.refresh_ttl_seconds,
         httponly=True,
         secure=settings.cookie_secure,
-        samesite="strict",
+        samesite="lax",
         path="/",
     )
     return TwoFactorVerifyResponse(
