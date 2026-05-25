@@ -1,6 +1,7 @@
 """Starlette middleware stack for the gateway."""
 
 from gateway_service.middlewares.body_size import BodySizeLimitMiddleware
+from gateway_service.middlewares.cache_control import NoCacheAPIMiddleware
 from gateway_service.middlewares.cors import build_cors_middleware
 from gateway_service.middlewares.idempotency_mw import IdempotencyMiddleware
 from gateway_service.middlewares.jwt_mw import JWTMiddleware
@@ -19,6 +20,7 @@ __all__ = [
     "IdempotencyMiddleware",
     "JWTMiddleware",
     "LoggingMiddleware",
+    "NoCacheAPIMiddleware",
     "PerIPRateLimitMiddleware",
     "PerUserRateLimitMiddleware",
     "RBACMiddleware",

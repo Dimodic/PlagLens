@@ -63,6 +63,7 @@ from gateway_service.middlewares import (
     IdempotencyMiddleware,
     JWTMiddleware,
     LoggingMiddleware,
+    NoCacheAPIMiddleware,
     PerIPRateLimitMiddleware,
     PerUserRateLimitMiddleware,
     RBACMiddleware,
@@ -114,6 +115,10 @@ def create_app() -> FastAPI:
 
     # -- Middlewares (registered LAST → executed FIRST) --
     # Innermost wraps responses → registered first.
+    # NoCacheAPIMiddleware sits inside everything so it sees the final
+    # response after Response normalization and stamps Cache-Control
+    # before anything else can touch it.
+    app.add_middleware(NoCacheAPIMiddleware)
     app.add_middleware(ResponseNormalizationMiddleware)
     app.add_middleware(IdempotencyMiddleware)
     app.add_middleware(PerUserRateLimitMiddleware)
