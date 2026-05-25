@@ -19,6 +19,8 @@ export interface StatsPanelItem {
   label: ReactNode;
   value: ReactNode;
   hint?: ReactNode;
+  /** Native tooltip shown on hover over the cell — for acronyms like DAU/MAU. */
+  tooltip?: string;
 }
 
 interface StatsPanelProps {
@@ -44,7 +46,11 @@ export function StatsPanel({
       {items.map((it, i) => (
         <div
           key={i}
-          className="flex-1 min-w-[160px] px-6 first:pl-0 last:pr-0"
+          title={it.tooltip}
+          className={cn(
+            'flex-1 min-w-[160px] px-6 first:pl-0 last:pr-0',
+            it.tooltip && 'cursor-help',
+          )}
         >
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             {it.icon && <span className="size-4 shrink-0">{it.icon}</span>}

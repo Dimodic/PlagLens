@@ -6,12 +6,12 @@
 import dayjs from 'dayjs';
 import { Link, useParams } from 'react-router-dom';
 import {
-  Brain,
-  Building,
+  Building2,
   Database,
-  DollarSign,
+  FileText,
   Loader2,
-  Shield,
+  ShieldCheck,
+  UserCheck,
   Users,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
@@ -64,47 +64,32 @@ export default function TenantDashboardPage() {
         data-testid="tenant-dashboard-kpis"
         items={[
           {
-            icon: <Building className="h-4 w-4" />,
+            icon: <Building2 className="h-4 w-4" />,
             label: 'Курсов',
             value: fmt(data?.active_courses),
           },
           {
-            icon: <Users className="h-4 w-4" />,
+            icon: <FileText className="h-4 w-4" />,
+            label: 'Посылок 30д',
+            value: fmt(data?.submissions_30d),
+          },
+          {
+            icon: <UserCheck className="h-4 w-4" />,
             label: 'DAU',
             value: fmt(data?.active_users_dau),
+            tooltip: 'Daily Active Users — уникальных пользователей зашло за последние 24 часа',
           },
           {
             icon: <Users className="h-4 w-4" />,
             label: 'MAU',
             value: fmt(data?.active_users_mau),
+            tooltip: 'Monthly Active Users — уникальных пользователей зашло за последние 30 дней',
           },
           {
-            icon: <Building className="h-4 w-4" />,
-            label: 'Посылок 30д',
-            value: fmt(data?.submissions_30d),
-          },
-        ]}
-      />
-
-      <StatsPanel
-        items={[
-          {
-            icon: <Brain className="h-4 w-4" />,
-            label: 'AI токенов 30д',
-            value: fmt(data?.ai_tokens_total_30d),
-          },
-          {
-            icon: <DollarSign className="h-4 w-4" />,
-            label: 'AI стоимость 30д',
-            value:
-              data?.ai_cost_total_30d !== undefined
-                ? `$${data.ai_cost_total_30d.toFixed(2)}`
-                : '—',
-          },
-          {
-            icon: <Shield className="h-4 w-4" />,
-            label: 'Plagiarism 30д',
+            icon: <ShieldCheck className="h-4 w-4" />,
+            label: 'Проверок 30д',
             value: fmt(data?.plagiarism_runs_30d),
+            tooltip: 'Запусков проверки на заимствования за последние 30 дней',
           },
           {
             icon: <Database className="h-4 w-4" />,
@@ -113,6 +98,7 @@ export default function TenantDashboardPage() {
               data?.storage_used_bytes !== undefined
                 ? `${(data.storage_used_bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
                 : '—',
+            tooltip: 'Объём файлов в MinIO (решения студентов, экспорты, отчёты)',
           },
         ]}
       />

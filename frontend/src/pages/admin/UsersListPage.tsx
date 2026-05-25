@@ -1,9 +1,10 @@
 /**
  * /admin/users — admin users list with role filter, search and bulk actions.
  *
- * Tabs role filter, search box, table with avatar + name + email + role +
- * status. Click row → user detail. All existing behaviour preserved through
- * `UserActionMenu`. Test ids unchanged.
+ * Layout: a single card with an inline filter bar (tabs + search) on top and
+ * the user table below. Tab counters come from a SEPARATE query that has no
+ * role filter applied — otherwise switching the tab dropped the other tabs'
+ * counters to zero because the data the page sees is already filtered.
  */
 import { useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -20,7 +21,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { StatusPill } from '@/components/common/StatusPill';
@@ -41,6 +41,7 @@ import {
 import type { GlobalRole, Problem } from '@/api/types';
 import type { UserDetail } from '@/api/endpoints/users';
 import { roleLabel } from '@/lib/roles';
+import { cn } from '@/components/ui/utils';
 
 type RoleFilter = 'all' | GlobalRole;
 
@@ -85,6 +86,7 @@ export function UsersListPage() {
     kind: 'anonymize';
   } | null>(null);
 
+  // Main query — narrowed by the currently selected role tab and by search.
   const filters = useMemo(
     () => ({
       q: q || undefined,
@@ -95,20 +97,34 @@ export function UsersListPage() {
     [q, filter, tenantIdFilter],
   );
 
+  // Counter query — same tenant + same search, but ALL roles. Without this
+  // the per-role counters in the tabs would collapse to zero as soon as the
+  // user picked any tab other than "Все", because the main `list` is then
+  // narrowed to a single role.
+  const counterFilters = useMemo(
+    () => ({
+      q: q || undefined,
+      tenant_id: tenantIdFilter,
+      limit: 500,
+    }),
+    [q, tenantIdFilter],
+  );
+
   const { data, isPending, error, refetch } = useUsers(filters);
+  const countersQuery = useUsers(counterFilters);
   const disable = useDisableUser();
   const enable = useEnableUser();
   const anonymize = useAnonymizeUser();
   const reset = useResetUserPassword();
   const forceLogout = useForceLogout();
 
-  const list = data?.data ?? [];
+  const all = countersQuery.data?.data ?? [];
   const counts: Record<RoleFilter, number> = {
-    all: list.length,
-    admin: list.filter((u) => u.global_role === 'admin').length,
-    teacher: list.filter((u) => u.global_role === 'teacher').length,
-    assistant: list.filter((u) => u.global_role === 'assistant').length,
-    student: list.filter((u) => u.global_role === 'student').length,
+    all: all.length,
+    admin: all.filter((u) => u.global_role === 'admin').length,
+    teacher: all.filter((u) => u.global_role === 'teacher').length,
+    assistant: all.filter((u) => u.global_role === 'assistant').length,
+    student: all.filter((u) => u.global_role === 'student').length,
   };
 
   const handleDisable = async (u: UserDetail) => {
@@ -160,6 +176,8 @@ export function UsersListPage() {
     }
   };
 
+  const rows = data?.data ?? [];
+
   return (
     <>
       <Page width="wide">
@@ -175,121 +193,155 @@ export function UsersListPage() {
           }
         />
 
-        {/* Filters */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-          <Tabs
-            value={filter}
-            onValueChange={(v) => setFilter(v as RoleFilter)}
-          >
-            <TabsList>
-              {FILTERS.map((f) => (
-                <TabsTrigger key={f.id} value={f.id}>
-                  {f.label}
-                  <span className="ml-1.5 text-xs tabular-nums text-muted-foreground">
-                    {counts[f.id]}
-                  </span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              value={q}
-              onChange={(e) => setQ(e.currentTarget.value)}
-              placeholder="Поиск по email или имени"
-              className="pl-9"
-              data-testid="users-search-input"
-            />
+        {/*
+         * One self-contained card holds the whole list: filter bar, optional
+         * error, then the table. No outer borders bleed into the page so the
+         * layout stays calm.
+         */}
+        <div className="overflow-hidden rounded-xl border bg-card">
+          {/* Filter bar */}
+          <div className="flex flex-col gap-3 border-b bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div
+              role="tablist"
+              aria-label="Фильтр по роли"
+              className="flex flex-wrap items-center gap-1"
+            >
+              {FILTERS.map((f) => {
+                const active = f.id === filter;
+                return (
+                  <button
+                    key={f.id}
+                    role="tab"
+                    type="button"
+                    aria-selected={active}
+                    data-testid={`users-filter-${f.id}`}
+                    onClick={() => setFilter(f.id)}
+                    className={cn(
+                      'inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                      active
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                    )}
+                  >
+                    {f.label}
+                    <span
+                      className={cn(
+                        'rounded-full px-1.5 text-xs tabular-nums',
+                        active ? 'bg-background/15 text-background' : 'text-muted-foreground/80',
+                      )}
+                    >
+                      {counts[f.id]}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="relative w-full sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={q}
+                onChange={(e) => setQ(e.currentTarget.value)}
+                placeholder="Найти по email или имени"
+                className="h-9 pl-9"
+                data-testid="users-search-input"
+              />
+            </div>
           </div>
-        </div>
 
-        {error && <ProblemAlert problem={error as unknown as Problem} />}
+          {error && (
+            <div className="p-4">
+              <ProblemAlert problem={error as unknown as Problem} />
+            </div>
+          )}
 
-        {isPending && !data ? (
-          <SkeletonList rows={5} rowHeight={56} />
-        ) : data && data.data.length === 0 ? (
-          <EmptyState title="Не найдено" />
-        ) : (
-          <div className="border-y">
+          {isPending && !data ? (
+            <div className="p-4">
+              <SkeletonList rows={5} rowHeight={56} />
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="p-10">
+              <EmptyState title="Никого не нашли" />
+            </div>
+          ) : (
             <Table>
               <TableHeader>
-                <TableRow>
+                <TableRow className="border-b">
                   <TableHead>Пользователь</TableHead>
-                    <TableHead>Роль</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Активность</TableHead>
-                    <TableHead className="w-12 text-right" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {(data?.data ?? []).map((u) => {
-                    const lastSeen = u.last_login_at
-                      ? dayjs(u.last_login_at).fromNow()
-                      : '—';
-                    return (
-                      <TableRow
-                        key={u.id}
-                        data-testid={`user-row-${u.id}`}
-                        onClick={() => navigate(`/admin/users/${u.id}`)}
-                        className="cursor-pointer"
-                      >
-                        <TableCell>
-                          <div className="flex items-center gap-3 min-w-0">
-                            <Avatar className="h-8 w-8 shrink-0">
-                              <AvatarFallback className="bg-muted text-xs text-muted-foreground">
-                                {initials(u.display_name)}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <div className="text-sm font-medium text-foreground truncate">
-                                {u.display_name}
-                              </div>
-                              <div className="text-xs text-muted-foreground truncate">
-                                {u.email}
-                              </div>
+                  <TableHead className="w-40">Роль</TableHead>
+                  <TableHead className="w-28">Статус</TableHead>
+                  <TableHead className="w-40">Последний вход</TableHead>
+                  <TableHead className="w-12 text-right" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((u) => {
+                  const lastSeen = u.last_login_at
+                    ? dayjs(u.last_login_at).fromNow()
+                    : '—';
+                  return (
+                    <TableRow
+                      key={u.id}
+                      data-testid={`user-row-${u.id}`}
+                      onClick={() => navigate(`/admin/users/${u.id}`)}
+                      className="cursor-pointer transition-colors hover:bg-muted/40"
+                    >
+                      <TableCell>
+                        <div className="flex min-w-0 items-center gap-3">
+                          <Avatar className="h-9 w-9 shrink-0">
+                            <AvatarFallback className="bg-muted text-xs text-muted-foreground">
+                              {initials(u.display_name)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium text-foreground">
+                              {u.display_name || '—'}
+                            </div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              {u.email}
                             </div>
                           </div>
-                        </TableCell>
-                        <TableCell>{roleBadge(u.global_role)}</TableCell>
-                        <TableCell>
-                          {u.status === 'active' ? (
-                            <StatusPill tone="success">active</StatusPill>
-                          ) : (
-                            <StatusPill tone="neutral">disabled</StatusPill>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-xs text-muted-foreground">
-                            {lastSeen}
-                          </span>
-                        </TableCell>
-                        <TableCell
-                          className="text-right"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <UserActionMenu
-                            user={u}
-                            onView={() => navigate(`/admin/users/${u.id}`)}
-                            onResetPassword={handleReset}
-                            onForceLogout={handleForceLogout}
-                            onDisable={handleDisable}
-                            onEnable={handleEnable}
-                            onAnonymize={(usr) =>
-                              setConfirmAction({
-                                user: usr,
-                                kind: 'anonymize',
-                              })
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-        )}
+                        </div>
+                      </TableCell>
+                      <TableCell>{roleBadge(u.global_role)}</TableCell>
+                      <TableCell>
+                        {u.status === 'active' ? (
+                          <StatusPill tone="success">активен</StatusPill>
+                        ) : (
+                          <StatusPill tone="neutral">отключён</StatusPill>
+                        )}
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {lastSeen}
+                        </span>
+                      </TableCell>
+                      <TableCell
+                        className="text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <UserActionMenu
+                          user={u}
+                          onView={() => navigate(`/admin/users/${u.id}`)}
+                          onResetPassword={handleReset}
+                          onForceLogout={handleForceLogout}
+                          onDisable={handleDisable}
+                          onEnable={handleEnable}
+                          onAnonymize={(usr) =>
+                            setConfirmAction({
+                              user: usr,
+                              kind: 'anonymize',
+                            })
+                          }
+                        />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </div>
       </Page>
 
       <ConfirmDialog

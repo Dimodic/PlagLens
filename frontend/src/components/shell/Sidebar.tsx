@@ -21,13 +21,14 @@ import {
   Table2,
   FileSpreadsheet,
   Plug,
-  Brain,
-  Settings,
+  Sparkles,
+  Settings2,
   Inbox,
   Users,
-  ShieldAlert,
-  ScrollText,
+  ShieldCheck,
+  FileClock,
   Bell,
+  Building2,
 } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
 import { useAuth } from '@/auth/useAuth';
@@ -69,44 +70,30 @@ function buildSections(
   t: (k: string) => string,
 ): NavSection[] {
   if (role === 'admin') {
-    const tenantItems: NavLeaf[] = [
+    // Order is deliberate: overview → structure (tenants → users → roles) →
+    // platform (AI → integrations → notifications) → audit-trail (journal →
+    // system). Reads top-to-bottom as "what / who / how / when".
+    //
+    // Every item has a UNIQUE icon: previously "Обзор" and "Учреждения"
+    // both used LayoutGrid, which broke visual scan in the icon-only rail.
+    const items: NavLeaf[] = [
       { id: 'a_home', screenId: 'a_home', label: t('nav.overview'), icon: ic(LayoutGrid), to: '/admin/overview' },
-      { id: 'a_users', screenId: 'a_users', label: t('nav.users'), icon: ic(Users), to: '/admin/users' },
-      { id: 'a_audit', screenId: 'a_audit', label: t('nav.audit'), icon: ic(ScrollText), to: '/admin/audit' },
-      { id: 'a_roles', label: t('nav.admin.roles'), icon: ic(ShieldAlert), to: '/admin/roles' },
     ];
     if (isSuperAdmin) {
-      tenantItems.push({
-        id: 'a_tenants', screenId: 'tenants', label: t('nav.admin.tenants'), icon: ic(LayoutGrid), to: '/admin/tenants',
+      items.push({
+        id: 'a_tenants', screenId: 'tenants', label: t('nav.admin.tenants'), icon: ic(Building2), to: '/admin/tenants',
       });
     }
-    return [
-      { label: t('nav.tenant'), items: tenantItems },
-      {
-        label: t('nav.admin.notifications'),
-        items: [
-          { id: 'a_notifications', label: t('nav.admin.notifications'), icon: ic(Bell), to: '/admin/notifications/email' },
-        ],
-      },
-      {
-        label: t('nav.admin.ai'),
-        items: [
-          { id: 'a_ai', label: t('nav.admin.ai'), icon: ic(Brain), to: '/admin/ai/providers' },
-        ],
-      },
-      {
-        label: t('nav.integrations'),
-        items: [
-          { id: 'a_integrations', screenId: 'a_integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/admin/integrations' },
-        ],
-      },
-      {
-        label: t('nav.system'),
-        items: [
-          { id: 'a_system', label: t('nav.system'), icon: ic(Settings), to: '/admin/system/settings' },
-        ],
-      },
-    ];
+    items.push(
+      { id: 'a_users', screenId: 'a_users', label: t('nav.users'), icon: ic(Users), to: '/admin/users' },
+      { id: 'a_roles', label: t('nav.admin.roles'), icon: ic(ShieldCheck), to: '/admin/roles' },
+      { id: 'a_ai', label: t('nav.admin.ai'), icon: ic(Sparkles), to: '/admin/ai/providers' },
+      { id: 'a_integrations', screenId: 'a_integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/admin/integrations' },
+      { id: 'a_notifications', label: t('nav.admin.notifications'), icon: ic(Bell), to: '/admin/notifications/email' },
+      { id: 'a_audit', screenId: 'a_audit', label: t('nav.audit'), icon: ic(FileClock), to: '/admin/audit' },
+      { id: 'a_system', label: t('nav.system'), icon: ic(Settings2), to: '/admin/system/settings' },
+    );
+    return [{ label: t('nav.tenant'), items }];
   }
 
   if (role === 'student') {
@@ -146,7 +133,7 @@ function buildSections(
       label: t('nav.tools'),
       items: [
         { id: 'integrations', screenId: 'integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/integrations' },
-        { id: 'settings', screenId: 'settings', label: t('nav.settings'), icon: ic(Settings), to: '/settings' },
+        { id: 'settings', screenId: 'settings', label: t('nav.settings'), icon: ic(Settings2), to: '/settings' },
       ],
     },
   ];
