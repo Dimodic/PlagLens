@@ -12,6 +12,7 @@ from .auth_2fa import router as auth_2fa_router
 from .auth_email import router as auth_email_router
 from .auth_oauth import router as auth_oauth_router
 from .auth_password import router as auth_password_router
+from .auth_telegram import router as auth_telegram_router
 from .external_bindings import router as external_bindings_router
 from .invitations import router as invitations_router
 from .jwks import router as jwks_router
@@ -28,6 +29,7 @@ api_v1.include_router(auth_password_router)
 api_v1.include_router(auth_email_router)
 api_v1.include_router(auth_2fa_router)
 api_v1.include_router(auth_oauth_router)
+api_v1.include_router(auth_telegram_router)
 api_v1.include_router(tenants_router)
 api_v1.include_router(users_router)
 api_v1.include_router(me_router)

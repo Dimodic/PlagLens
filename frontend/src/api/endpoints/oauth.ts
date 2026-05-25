@@ -1,9 +1,26 @@
 /**
  * OAuth endpoints — Identity Service §E.
  */
+import api from '../client';
 import type { OAuthProvider } from '../types';
 
 const BASE_URL = (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1';
+
+/** Public bits the SPA needs to render the Telegram Login Widget. */
+export interface TelegramBotInfo {
+  enabled: boolean;
+  /** Bot's @-username (without @). Null when Telegram is not configured. */
+  bot_username: string | null;
+  /** Absolute URL of the backend callback — fed into widget's data-auth-url. */
+  redirect_uri: string;
+}
+
+export const telegramAuthApi = {
+  info: () =>
+    api
+      .get<TelegramBotInfo>('/auth/oauth/telegram/info')
+      .then((r) => r.data),
+};
 
 /**
  * Build the URL that kicks off provider OAuth.

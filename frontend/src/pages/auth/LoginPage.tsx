@@ -8,8 +8,8 @@
  *     and the form as the fallback.
  *   - All OAuth glyphs are monochrome (use currentColor) so the row feels
  *     like a single element of the page, not a brand carnival.
- *   - Telegram is rendered but inactive — clicking it surfaces a toast
- *     until the backend Telegram Login Widget integration ships.
+ *   - Telegram lives in the same icon row but opens a small modal
+ *     hosting the official Login Widget — see TelegramLoginDialog.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -20,13 +20,13 @@ import { tokenStore } from '@/api/client';
 import { startOAuth, OAUTH_PROVIDERS } from '@/api/endpoints/oauth';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { useNotifications } from '@/hooks/useNotifications';
 import { useTranslation } from '@/i18n';
 import type { OAuthProvider, Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { TelegramLoginDialog } from '@/components/auth/TelegramLoginDialog';
 
 // Monochrome brand glyphs taken from simple-icons (CC0). All four use
 // `fill: currentColor` so the row stays in lockstep with the theme. The
@@ -92,7 +92,6 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const queryClient = useQueryClient();
   const { login, reloadMe } = useAuth();
-  const notify = useNotifications();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -105,6 +104,7 @@ export function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
+  const [telegramOpen, setTelegramOpen] = useState(false);
 
   useEffect(() => {
     const err = params.get('error');
@@ -195,13 +195,12 @@ export function LoginPage() {
       : problem.detail || problem.title || 'Не удалось войти'
     : null;
 
-  // Display row: same order as OAUTH_PROVIDERS + Telegram appended as a
-  // disabled "coming soon" placeholder. When the Telegram backend ships,
-  // adding 'telegram' to OAUTH_PROVIDERS in /api/endpoints/oauth.ts will
-  // upgrade it to a normal active button.
-  const providerRow: { id: OAuthProvider; label: string; disabled?: boolean }[] = [
+  // Display row: same order as OAUTH_PROVIDERS + Telegram appended.
+  // Telegram doesn't speak OAuth2 — its widget runs from a modal
+  // (TelegramLoginDialog), so the row item carries no startOAuth call.
+  const providerRow: { id: OAuthProvider; label: string }[] = [
     ...OAUTH_PROVIDERS,
-    { id: 'telegram' as OAuthProvider, label: 'Telegram', disabled: true },
+    { id: 'telegram' as OAuthProvider, label: 'Telegram' },
   ];
 
   return (
@@ -239,10 +238,9 @@ export function LoginPage() {
                 aria-label={`Войти через ${p.label}`}
                 title={p.label}
                 data-testid={`login-oauth-${p.id}`}
-                disabled={p.disabled}
                 onClick={() => {
-                  if (p.disabled) {
-                    notify.info(`Вход через ${p.label} скоро будет доступен`);
+                  if (p.id === 'telegram') {
+                    setTelegramOpen(true);
                     return;
                   }
                   const next = params.get('next');
@@ -253,12 +251,7 @@ export function LoginPage() {
                       : window.location.origin + '/',
                   );
                 }}
-                className={
-                  'flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ' +
-                  (p.disabled
-                    ? 'cursor-not-allowed opacity-40'
-                    : 'hover:border-foreground hover:bg-foreground hover:text-background')
-                }
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:border-foreground hover:bg-foreground hover:text-background"
               >
                 <OAuthGlyph provider={p.id} />
               </button>
@@ -383,6 +376,11 @@ export function LoginPage() {
           </Link>
         </div>
       </main>
+
+      <TelegramLoginDialog
+        open={telegramOpen}
+        onOpenChange={setTelegramOpen}
+      />
     </div>
   );
 }

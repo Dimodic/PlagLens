@@ -279,6 +279,41 @@ class GitHubProvider(_ProviderBase):
 
 
 # --------------------------------------------------------------------------- #
+# Telegram (Login Widget — NOT real OAuth2)
+# --------------------------------------------------------------------------- #
+class TelegramProvider(_ProviderBase):
+    """Telegram Login Widget.
+
+    Telegram doesn't speak OAuth2 — sign-in is driven from
+    :mod:`identity_service.api.v1.auth_telegram` (HMAC-verified callback
+    from ``t.me/<bot>?domain=...``). This class exists only so that
+    ``assert_provider("telegram")`` succeeds for shared code-paths that
+    treat every identity provider uniformly (admin OAuth list, unlink,
+    ``OAuthIdentity`` foreign keys).
+
+    Calling the OAuth2 helpers raises — :func:`assert_provider_enabled`
+    refuses Telegram via ``settings.oauth_providers_enabled``, so we
+    should never get here in practice.
+    """
+
+    name: ClassVar[str] = "telegram"
+    authorize_url: ClassVar[str] = ""
+    token_url: ClassVar[str] = ""
+    userinfo_url: ClassVar[str] = ""
+    default_scopes: ClassVar[list[str]] = []
+
+    async def fetch_userinfo(self, access_token: str) -> OAuthProfile:  # pragma: no cover
+        raise NotImplementedError(
+            "Telegram uses Login Widget — see auth_telegram.py instead."
+        )
+
+    def parse_userinfo(self, raw: dict[str, Any]) -> OAuthProfile:  # pragma: no cover
+        raise NotImplementedError(
+            "Telegram uses Login Widget — see auth_telegram.py instead."
+        )
+
+
+# --------------------------------------------------------------------------- #
 # Registry
 # --------------------------------------------------------------------------- #
 _PROVIDER_CLASSES: dict[str, type[_ProviderBase]] = {
@@ -286,6 +321,7 @@ _PROVIDER_CLASSES: dict[str, type[_ProviderBase]] = {
     YandexProvider.name: YandexProvider,
     StepikProvider.name: StepikProvider,
     GitHubProvider.name: GitHubProvider,
+    TelegramProvider.name: TelegramProvider,
 }
 
 

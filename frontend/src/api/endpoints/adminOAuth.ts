@@ -9,7 +9,7 @@
 import api from '../client';
 
 export interface OAuthProviderInfo {
-  provider: 'google' | 'yandex' | 'stepik' | 'github' | string;
+  provider: 'google' | 'yandex' | 'stepik' | 'github' | 'telegram' | string;
   title: string;
   enabled: boolean;
   client_id_preview: string;

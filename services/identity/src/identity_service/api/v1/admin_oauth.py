@@ -29,6 +29,7 @@ _PROVIDER_TITLES: dict[str, str] = {
     "yandex": "Яндекс ID",
     "stepik": "Stepik",
     "github": "GitHub",
+    "telegram": "Telegram",
 }
 
 _PROVIDER_DOCS: dict[str, str] = {
@@ -36,6 +37,10 @@ _PROVIDER_DOCS: dict[str, str] = {
     "yandex": "https://oauth.yandex.ru/",
     "stepik": "https://stepik.org/oauth2/applications/",
     "github": "https://github.com/settings/developers",
+    # Telegram uses @BotFather instead of an OAuth console: the admin
+    # types /newbot, gets a bot_token, then /setdomain to whitelist this
+    # deployment's host so the Login Widget can redirect back.
+    "telegram": "https://t.me/BotFather",
 }
 
 
@@ -81,11 +86,18 @@ def _build_info(provider: str) -> OAuthProviderInfo:
     cid, csec = settings.oauth_credentials(provider)
     source = "override" if oauth_overrides.get_override(provider) else "env"
     base = settings.oauth_callback_base_url.rstrip("/")
+    # For Telegram we expose the bot username (client_id) directly — it's
+    # public information and the admin needs to copy it into @BotFather's
+    # /setdomain step. Masking it would only confuse them.
+    if provider == "telegram":
+        client_id_preview = cid
+    else:
+        client_id_preview = _mask(cid)
     return OAuthProviderInfo(
         provider=provider,
         title=_PROVIDER_TITLES.get(provider, provider.capitalize()),
         enabled=bool(cid and csec),
-        client_id_preview=_mask(cid),
+        client_id_preview=client_id_preview,
         has_secret=bool(csec),
         redirect_uri=f"{base}/api/v1/auth/oauth/{provider}/callback",
         docs_url=_PROVIDER_DOCS.get(provider),

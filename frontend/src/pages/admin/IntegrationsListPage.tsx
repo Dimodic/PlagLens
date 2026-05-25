@@ -786,19 +786,40 @@ function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
     }
   };
 
+  // Telegram uses @BotFather, not OAuth2 — surface the field names the
+  // admin actually sees in BotFather so they don't have to translate
+  // "client_id → bot_username" in their head.
+  const isTelegram = provider.provider === 'telegram';
+  const idLabel = isTelegram ? 'bot username' : 'client_id';
+  const secretLabel = isTelegram ? 'bot token' : 'client_secret';
+  const idHint = isTelegram
+    ? 'Имя бота из @BotFather, например @plaglens_login_bot'
+    : null;
+  const secretHint = isTelegram
+    ? 'Длинная строка вида 123456:ABC-DEF... из @BotFather'
+    : null;
+  const setupHint = isTelegram ? (
+    <span>
+      Не забудьте выполнить <code className="font-mono">/setdomain</code> в
+      @BotFather и указать хост этого стенда — иначе Telegram не пустит
+      виджет на страницу входа.
+    </span>
+  ) : null;
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{provider.title}</DialogTitle>
           <DialogDescription>
-            Введите новые client_id и client_secret. Поля, оставленные
-            пустыми, не изменятся.
+            {isTelegram
+              ? 'Введите данные бота из @BotFather. Поля, оставленные пустыми, не изменятся.'
+              : 'Введите новые client_id и client_secret. Поля, оставленные пустыми, не изменятся.'}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="oauth-edit-client-id">client_id</Label>
+            <Label htmlFor="oauth-edit-client-id">{idLabel}</Label>
             <Input
               id="oauth-edit-client-id"
               value={clientId}
@@ -807,9 +828,12 @@ function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
               autoComplete="off"
               data-testid="oauth-edit-client-id"
             />
+            {idHint && (
+              <p className="text-xs text-muted-foreground">{idHint}</p>
+            )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="oauth-edit-client-secret">client_secret</Label>
+            <Label htmlFor="oauth-edit-client-secret">{secretLabel}</Label>
             <Input
               id="oauth-edit-client-secret"
               value={clientSecret}
@@ -819,12 +843,18 @@ function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
               autoComplete="new-password"
               data-testid="oauth-edit-client-secret"
             />
+            {secretHint && (
+              <p className="text-xs text-muted-foreground">{secretHint}</p>
+            )}
           </div>
           <div className="space-y-1 pt-1">
             <Label className="text-muted-foreground">redirect_uri</Label>
             <code className="block break-all font-mono text-xs text-muted-foreground">
               {provider.redirect_uri}
             </code>
+            {setupHint && (
+              <p className="text-xs text-muted-foreground">{setupHint}</p>
+            )}
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
