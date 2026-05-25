@@ -140,7 +140,10 @@ function buildSections(
       label: t('nav.tools'),
       items: [
         { id: 'integrations', screenId: 'integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/integrations' },
-        { id: 'settings', screenId: 'settings', label: t('nav.settings'), icon: ic(Settings2), to: '/settings' },
+        // «Настройки» rolled into the avatar dropdown → Профиль. Keeping a
+        // sidebar entry would create three doorways to the same surface
+        // (sidebar / avatar menu / direct URL) and add visual noise to a
+        // page that's already mostly settings.
       ],
     },
   ];

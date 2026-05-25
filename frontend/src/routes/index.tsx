@@ -54,7 +54,6 @@ const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
 const MyExternalBindingsPage = lazy(() => import('@/pages/me/MyExternalBindingsPage'));
 const MyAssignmentDetailPage = lazy(() => import('@/pages/me/MyAssignmentDetailPage'));
 const MySubmissionDetailPage = lazy(() => import('@/pages/me/MySubmissionDetailPage'));
-const UserSettingsLanding = lazy(() => import('@/pages/me/UserSettingsLandingPage'));
 
 // Teacher / admin shortcuts.
 const GradingQueuePage = lazy(() => import('@/pages/teacher/GradingQueuePage'));
@@ -448,7 +447,9 @@ const protectedRoutes: RouteObject[] = [
           </RoleGuard>
         ),
       },
-      { path: 'settings', element: <UserSettingsLanding /> },
+      // /settings was a dedicated landing page; consolidated into /me/profile
+      // (one «настройки = профиль» surface). Bookmarks still work.
+      { path: 'settings', element: <Navigate to="/me/profile" replace /> },
 
       // ----- Imports — consolidated into «Интеграции». Submission-import
       // no longer has its own nav item or page: the integration cards run

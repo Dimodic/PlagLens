@@ -1,7 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom';
 import {
-  Check,
-  Globe,
   LogOut,
   Menu,
   Search,
@@ -18,16 +16,11 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/auth/useAuth';
 import { useTranslation } from '@/i18n';
-import { useUpdateMe } from '@/hooks/api/useUsers';
-import type { Locale } from '@/i18n';
 import { NotificationsBellDropdown } from '@/components/notifications/NotificationsBellDropdown';
 import { Wordmark } from './Wordmark';
 
@@ -46,9 +39,8 @@ function initials(name: string): string {
 }
 
 export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
-  const { user, logout, reloadMe } = useAuth();
-  const { t, locale, setLocale } = useTranslation();
-  const updateMe = useUpdateMe();
+  const { user, logout } = useAuth();
+  const { t } = useTranslation();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
@@ -56,19 +48,10 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
     try { await logout(); } finally { navigate('/login'); }
   };
 
-  // Locale: flip the UI immediately for snappy feedback, then persist on the
-  // server so the choice survives the next login. We swallow the persistence
-  // error — the UI already switched, the worst case is a re-pick after login.
-  const onLocaleChange = async (next: Locale) => {
-    if (next === locale) return;
-    setLocale(next);
-    try {
-      await updateMe.mutateAsync({ locale: next });
-      await reloadMe();
-    } catch {
-      /* non-fatal — locale was applied locally */
-    }
-  };
+  // Language picker moved into the Profile page — keeping the avatar
+  // dropdown to the bare minimum (Profile + Logout) so the header stays
+  // calm. The Profile section "Предпочтения" owns locale + notification
+  // channels now.
 
   const displayName = user?.display_name || user?.email || 'User';
 
@@ -176,31 +159,6 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
                 {t('user_menu.profile')}
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuSub>
-              <DropdownMenuSubTrigger data-testid="header-user-menu-locale">
-                <Globe className="mr-2 h-4 w-4" />
-                <span className="flex-1">{t('user_menu.language')}</span>
-                <span className="ml-2 text-xs text-muted-foreground">
-                  {locale === 'ru' ? 'RU' : 'EN'}
-                </span>
-              </DropdownMenuSubTrigger>
-              <DropdownMenuSubContent>
-                <DropdownMenuItem
-                  onClick={() => onLocaleChange('ru')}
-                  data-testid="header-user-menu-locale-ru"
-                >
-                  {locale === 'ru' && <Check className="mr-2 h-4 w-4" />}
-                  <span className={locale === 'ru' ? '' : 'ml-6'}>Русский</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => onLocaleChange('en')}
-                  data-testid="header-user-menu-locale-en"
-                >
-                  {locale === 'en' && <Check className="mr-2 h-4 w-4" />}
-                  <span className={locale === 'en' ? '' : 'ml-6'}>English</span>
-                </DropdownMenuItem>
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={onLogout}
