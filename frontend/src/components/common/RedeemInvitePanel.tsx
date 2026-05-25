@@ -1,26 +1,35 @@
 /**
  * "Have an invitation code?" panel for /me/profile.
  *
- * Single input + button. Successful redeem reloads /me so the new role or
- * course membership is reflected immediately; if global_role was bumped the
- * server sets `requires_relogin` and we show a hint to re-login (so the new
- * role makes it into the JWT — refresh-rotate alone isn't enough because the
- * access token claims are stable until the next /refresh).
+ * Single input + button. After a successful redeem we:
+ *
+ *   1. ``refresh()`` the access token — auth_service.refresh re-issues
+ *      it from ``users.global_role`` in the DB, so the new role lands
+ *      in the JWT without forcing the user to log out manually.
+ *   2. ``invalidateQueries()`` so role-gated lists (My courses, Admin
+ *      sidebar, etc.) re-fetch with the fresh permissions.
+ *
+ * The backend still flags ``requires_relogin: true`` for global-role
+ * bumps — we handle it silently now; the user just sees the toast and
+ * the new sections show up. No "please log out" dialog.
  */
 import { useState } from 'react';
 import { CheckCircle2, KeyRound, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useRedeemInvitation } from '@/hooks/api/useInvitations';
 import { useAuth } from '@/auth/useAuth';
-import type { Problem } from '@/api/types';
+import { roleLabel } from '@/lib/roles';
+import type { GlobalRole, Problem } from '@/api/types';
 import type { RedeemResult } from '@/api/endpoints/invitations';
 
 export function RedeemInvitePanel() {
   const notify = useNotifications();
-  const { reloadMe, logout } = useAuth();
+  const { refresh } = useAuth();
+  const queryClient = useQueryClient();
   const redeem = useRedeemInvitation();
   const [code, setCode] = useState('');
   const [result, setResult] = useState<RedeemResult | null>(null);
@@ -32,9 +41,19 @@ export function RedeemInvitePanel() {
       const r = await redeem.mutateAsync(code.trim());
       setResult(r);
       setCode('');
-      await reloadMe();
+
+      // Always pull a fresh access token after a redeem:
+      //   • If a global-role was bumped, the new JWT picks it up
+      //     (auth_service.refresh reads from users.global_role).
+      //   • If only course membership changed, the access token claims
+      //     don't change but we still want fresh /me + invalidated
+      //     query caches so course lists re-render.
+      await refresh();
+      await queryClient.invalidateQueries();
+
       if (r.role_applied) {
-        notify.success(`Роль обновлена: ${r.role_applied}`);
+        const human = roleLabel(r.role_applied as GlobalRole);
+        notify.success(`Роль обновлена: ${human}`);
       } else if (r.course_id) {
         notify.success('Вы добавлены в курс');
       } else {
@@ -80,28 +99,20 @@ export function RedeemInvitePanel() {
       {result && (
         <div className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-          <div className="space-y-1">
+          <div className="space-y-0.5">
             {result.role_applied && (
-              <div>Глобальная роль: <strong>{result.role_applied}</strong></div>
+              <div>
+                Глобальная роль:{' '}
+                <strong>{roleLabel(result.role_applied as GlobalRole)}</strong>
+              </div>
             )}
             {result.course_id && (
               <div>
-                Добавлены в курс <code className="rounded bg-muted px-1">{result.course_id}</code>
+                Добавлены в курс{' '}
+                <code className="rounded bg-muted px-1">{result.course_id}</code>
                 {result.course_role && (
-                  <> с ролью <strong>{result.course_role}</strong></>
+                  <> · <strong>{roleLabel(result.course_role as GlobalRole)}</strong></>
                 )}
-              </div>
-            )}
-            {result.requires_relogin && (
-              <div className="pt-1 text-xs text-muted-foreground">
-                Чтобы новая роль применилась во всех разделах, перезайдите.{' '}
-                <button
-                  type="button"
-                  onClick={() => logout()}
-                  className="underline hover:text-foreground"
-                >
-                  Выйти
-                </button>
               </div>
             )}
           </div>
