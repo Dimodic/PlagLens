@@ -35,8 +35,12 @@ api_v1.include_router(auth_2fa_router)
 api_v1.include_router(auth_telegram_router)
 api_v1.include_router(auth_oauth_router)
 api_v1.include_router(tenants_router)
-api_v1.include_router(users_router)
+# me_router MUST register before users_router — both share /users prefix
+# and FastAPI dispatches the first matching route. /users/me would
+# otherwise be eaten by /users/{target_user_id} (with target='me'),
+# which is exactly the 404 'User not found' regression we kept hitting.
 api_v1.include_router(me_router)
+api_v1.include_router(users_router)
 api_v1.include_router(external_bindings_router)
 api_v1.include_router(roles_router)
 api_v1.include_router(invitations_router)
