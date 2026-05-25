@@ -18,25 +18,28 @@
  *
  * Same testids preserved so Playwright specs don't break.
  */
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { useQueries } from '@tanstack/react-query';
 import {
   AlertCircle,
   CheckCircle2,
+  Archive as ArchiveIcon,
   ChevronRight,
+  Code2,
   Copy,
   ExternalLink,
   FileSpreadsheet,
+  GraduationCap,
   Loader2,
   MoreHorizontal,
   PlayCircle,
   Plus,
   Power,
   RefreshCw,
-  Sparkles,
   Trash2,
+  Trophy,
   XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
@@ -84,6 +87,7 @@ import {
   type IntegrationStatus,
 } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
+import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
 
 const KIND_TITLES: Record<IntegrationKind, string> = {
   yandex_contest: 'Yandex.Contest',
@@ -426,7 +430,6 @@ function pluralImports(n: number): string {
 
 export function IntegrationsListPage() {
   useDocumentTitle('Интеграции');
-  const navigate = useNavigate();
   const notify = useNotifications();
   const { user } = useAuth();
   const isAdmin = user?.global_role === 'admin';
@@ -434,21 +437,32 @@ export function IntegrationsListPage() {
   const items = data?.data ?? [];
 
   const createMut = useCreateIntegration();
-  const connectGoogle = () => {
+
+  // Which kind the inline token dialog is currently editing. ``null`` →
+  // dialog closed. Set from the dropdown click on eJudge / Manual.
+  const [tokenDialogKind, setTokenDialogKind] = useState<IntegrationKind | null>(
+    null,
+  );
+
+  // OAuth-redirect helper used by Y.Contest / Stepik / Google Sheets.
+  // Server returns oauth_authorize_url when the provider is configured
+  // (client_id+secret saved on /admin/integrations → Авторизация). If
+  // it's null we surface a soft toast and bail — no half-baked
+  // integration row is left behind.
+  const startOAuthIntegration = (
+    kind: IntegrationKind,
+    displayName: string,
+  ) => {
     createMut.mutate(
-      {
-        kind: 'google_sheets',
-        display_name: 'Google Sheets',
-        settings: { auth_mode: 'oauth' },
-      },
+      { kind, display_name: displayName, settings: {} },
       {
         onSuccess: (res) => {
           if (res.oauth_authorize_url) {
             window.location.assign(res.oauth_authorize_url);
             return;
           }
-          notify.error(
-            'OAuth-клиент Google не настроен — обратитесь к админу',
+          notify.info(
+            'OAuth для этого провайдера не настроен. Попросите администратора заполнить ключи в «Интеграции → Авторизация».',
           );
           refetch();
         },
@@ -462,8 +476,11 @@ export function IntegrationsListPage() {
     );
   };
 
-  // Header action — single primary "+ Подключить" button. All quick
-  // create-flows hidden in a dropdown so the header stays calm.
+  // Header action — single primary "+ Подключить" button. All concrete
+  // providers live behind a 5-item dropdown:
+  //   • Y.Contest / Stepik / Google Sheets — OAuth, redirect to provider
+  //   • eJudge / Manual ZIP — token-modal (inline TokenIntegrationDialog)
+  // The previous "Через мастер настройки" 4-step wizard is gone.
   const connectAction = (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -473,37 +490,43 @@ export function IntegrationsListPage() {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuItem onClick={() => navigate('/integrations/wizard')}>
-          <Sparkles className="mr-2 h-4 w-4" />
-          Через мастер настройки
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        {!isAdmin && (
-          <DropdownMenuItem
-            onClick={connectGoogle}
-            disabled={createMut.isPending}
-            data-testid="integrations-sheets-connect"
-          >
-            <FileSpreadsheet className="mr-2 h-4 w-4" />
-            Google Sheets · войти через Google
-          </DropdownMenuItem>
-        )}
         <DropdownMenuItem
-          onClick={() =>
-            navigate(
-              isAdmin
-                ? '/integrations/google-sheets/setup'
-                : '/integrations/google-sheets/personal-setup',
-            )
-          }
-          data-testid={
-            isAdmin
-              ? 'integrations-sheets-setup'
-              : 'integrations-sheets-personal'
-          }
+          onClick={() => startOAuthIntegration('yandex_contest', 'Yandex.Contest')}
+          disabled={createMut.isPending}
+          data-testid="integrations-connect-yandex-contest"
+        >
+          <Trophy className="mr-2 h-4 w-4" />
+          Yandex.Contest
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => startOAuthIntegration('stepik', 'Stepik')}
+          disabled={createMut.isPending}
+          data-testid="integrations-connect-stepik"
+        >
+          <GraduationCap className="mr-2 h-4 w-4" />
+          Stepik
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => startOAuthIntegration('google_sheets', 'Google Sheets')}
+          disabled={createMut.isPending}
+          data-testid="integrations-connect-google-sheets"
         >
           <FileSpreadsheet className="mr-2 h-4 w-4" />
-          Google Sheets · {isAdmin ? 'service account' : 'свой Service Account'}
+          Google Sheets
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setTokenDialogKind('ejudge')}
+          data-testid="integrations-connect-ejudge"
+        >
+          <Code2 className="mr-2 h-4 w-4" />
+          eJudge · по токену
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          onClick={() => setTokenDialogKind('manual')}
+          data-testid="integrations-connect-manual"
+        >
+          <ArchiveIcon className="mr-2 h-4 w-4" />
+          Ручная загрузка (ZIP)
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -578,6 +601,14 @@ export function IntegrationsListPage() {
       ) : (
         sourcesPanel
       )}
+
+      <TokenIntegrationDialog
+        open={tokenDialogKind !== null}
+        kind={tokenDialogKind}
+        onOpenChange={(o) => {
+          if (!o) setTokenDialogKind(null);
+        }}
+      />
     </Page>
   );
 }

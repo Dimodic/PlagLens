@@ -158,7 +158,6 @@ const IntegrationsListPage = lazy(() => import('@/pages/admin/IntegrationsListPa
 const OAuthProvidersPage = lazy(() => import('@/pages/admin/OAuthProvidersPage'));
 const IntegrationCreatePage = lazy(() => import('@/pages/admin/IntegrationCreatePage'));
 const IntegrationDetailPage = lazy(() => import('@/pages/admin/IntegrationDetailPage'));
-const ImportWizardPage = lazy(() => import('@/pages/integrations/ImportWizardPage'));
 const YandexContestSetupPage = lazy(() => import('@/pages/integrations/YandexContestSetupPage'));
 const StepikSetupPage = lazy(() => import('@/pages/integrations/StepikSetupPage'));
 const EjudgeSetupPage = lazy(() => import('@/pages/integrations/EjudgeSetupPage'));
@@ -437,18 +436,14 @@ const protectedRoutes: RouteObject[] = [
         path: 'integrations/oauth/callback',
         element: <IntegrationOAuthCallbackPage />,
       },
-      // 4-step guided wizard (was /imports until we split that surface into
-      // "run-import" vs "set up integration"). Same component, new route.
+      // /integrations/wizard removed — replaced by an inline dropdown
+      // on /integrations that either redirects to the provider's OAuth
+      // page or opens a token-modal (TokenIntegrationDialog) for the
+      // non-OAuth providers (eJudge / Manual ZIP). Old bookmarks land
+      // on the list page.
       {
         path: 'integrations/wizard',
-        element: (
-          <RoleGuard
-            global={['teacher', 'admin']}
-            fallback={<NotFoundPage />}
-          >
-            <ImportWizardPage />
-          </RoleGuard>
-        ),
+        element: <Navigate to="/integrations" replace />,
       },
       // Teacher-friendly aliases for the generic create wizard so the URL
       // doesn't carry the misleading `/admin/` prefix when a regular teacher
