@@ -19,7 +19,7 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { Link, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import dayjs from 'dayjs';
 import { useQueries } from '@tanstack/react-query';
 import {
@@ -56,8 +56,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/components/ui/utils';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useOAuthProviders } from '@/hooks/api/useAdminOAuth';
+import { useOAuthProviders, useUpdateOAuthProvider } from '@/hooks/api/useAdminOAuth';
 import type { OAuthProviderInfo } from '@/api/endpoints/adminOAuth';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   useCreateIntegration,
   useDeleteIntegration,
@@ -579,6 +589,7 @@ function OAuthProvidersPanel() {
   const { data, isLoading, error } = useOAuthProviders();
   const notify = useNotifications();
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<OAuthProviderInfo | null>(null);
 
   const onCopy = async (p: OAuthProviderInfo) => {
     try {
@@ -608,8 +619,7 @@ function OAuthProvidersPanel() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Через эти провайдеры пользователи могут входить в платформу одной
-        кнопкой. На странице входа отображаются только те, у которых задан
-        client_id и client_secret.
+        кнопкой. На странице входа отображаются только настроенные.
       </p>
 
       <div className="divide-y divide-border/50 border-y border-border/50">
@@ -639,6 +649,14 @@ function OAuthProvidersPanel() {
                 >
                   {p.enabled ? 'настроено' : 'не настроено'}
                 </span>
+                {p.source === 'override' && (
+                  <span
+                    className="text-xs text-muted-foreground"
+                    title="Значение задано через админ-UI, перекрывает env"
+                  >
+                    · из БД
+                  </span>
+                )}
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
                 <span className="text-muted-foreground">client_id</span>
@@ -679,20 +697,161 @@ function OAuthProvidersPanel() {
                   </a>
                 </Button>
               )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setEditing(p)}
+                data-testid={`oauth-provider-edit-${p.provider}`}
+              >
+                Изменить
+              </Button>
             </div>
           </div>
         ))}
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Чтобы изменить ключи: задайте переменные{' '}
-        <code className="font-mono">GOOGLE_CLIENT_ID</code>,{' '}
-        <code className="font-mono">GOOGLE_CLIENT_SECRET</code> (и аналогичные
-        для других провайдеров) в <code className="font-mono">infra/.env</code>{' '}
-        на сервере и перезапустите identity-сервис. Редактирование через
-        интерфейс — в дорожной карте.
+        Изменения, сохранённые здесь, перекрывают переменные{' '}
+        <code className="font-mono">GOOGLE_CLIENT_ID</code> /{' '}
+        <code className="font-mono">..._CLIENT_SECRET</code> из{' '}
+        <code className="font-mono">infra/.env</code> и применяются сразу — без перезапуска identity.
       </p>
+
+      <OAuthProviderEditDialog
+        provider={editing}
+        onClose={() => setEditing(null)}
+      />
     </div>
+  );
+}
+
+interface EditDialogProps {
+  provider: OAuthProviderInfo | null;
+  onClose: () => void;
+}
+
+function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
+  const notify = useNotifications();
+  const update = useUpdateOAuthProvider();
+  const [clientId, setClientId] = useState('');
+  const [clientSecret, setClientSecret] = useState('');
+
+  // Reset form fields when a different provider is opened.
+  const open = !!provider;
+  // useState's lazy init isn't enough — we need to reset every open.
+  // A tiny effect-equivalent: track the current provider in a ref.
+  const lastProvider = useRef<string | null>(null);
+  useEffect(() => {
+    if (provider && lastProvider.current !== provider.provider) {
+      lastProvider.current = provider.provider;
+      // Pre-fill client_id only if there's already an override (the field is
+      // an opaque preview otherwise — we never round-trip it).
+      setClientId(provider.source === 'override' ? '' : '');
+      setClientSecret('');
+    }
+    if (!provider) lastProvider.current = null;
+  }, [provider]);
+
+  if (!provider) return null;
+
+  const onSave = async () => {
+    try {
+      await update.mutateAsync({
+        provider: provider.provider,
+        payload: {
+          client_id: clientId.trim() || null,
+          client_secret: clientSecret.trim() || null,
+        },
+      });
+      notify.success(`${provider.title}: ключи обновлены`);
+      onClose();
+    } catch (e) {
+      notify.error((e as Problem)?.detail ?? 'Не удалось сохранить');
+    }
+  };
+
+  const onClear = async () => {
+    if (!confirm(`Сбросить override и вернуться к env для ${provider.title}?`)) {
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        provider: provider.provider,
+        payload: { client_id: '', client_secret: '' },
+      });
+      notify.success(`${provider.title}: возврат к env`);
+      onClose();
+    } catch (e) {
+      notify.error((e as Problem)?.detail ?? 'Не удалось сбросить');
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{provider.title}</DialogTitle>
+          <DialogDescription>
+            Введите новые client_id и client_secret. Поля, оставленные
+            пустыми, не изменятся.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="oauth-edit-client-id">client_id</Label>
+            <Input
+              id="oauth-edit-client-id"
+              value={clientId}
+              onChange={(e) => setClientId(e.currentTarget.value)}
+              placeholder={provider.client_id_preview || 'не задан'}
+              autoComplete="off"
+              data-testid="oauth-edit-client-id"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="oauth-edit-client-secret">client_secret</Label>
+            <Input
+              id="oauth-edit-client-secret"
+              value={clientSecret}
+              onChange={(e) => setClientSecret(e.currentTarget.value)}
+              type="password"
+              placeholder={provider.has_secret ? '••••••••' : 'не задан'}
+              autoComplete="new-password"
+              data-testid="oauth-edit-client-secret"
+            />
+          </div>
+          <div className="space-y-1 pt-1">
+            <Label className="text-muted-foreground">redirect_uri</Label>
+            <code className="block break-all font-mono text-xs text-muted-foreground">
+              {provider.redirect_uri}
+            </code>
+          </div>
+        </div>
+        <DialogFooter className="gap-2 sm:gap-2">
+          {provider.source === 'override' && (
+            <Button
+              variant="ghost"
+              onClick={onClear}
+              disabled={update.isPending}
+              className="text-destructive hover:text-destructive sm:mr-auto"
+            >
+              Сбросить к env
+            </Button>
+          )}
+          <Button variant="outline" onClick={onClose} disabled={update.isPending}>
+            Отмена
+          </Button>
+          <Button
+            onClick={onSave}
+            disabled={update.isPending || (!clientId.trim() && !clientSecret.trim())}
+            data-testid="oauth-edit-save"
+          >
+            {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Сохранить
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

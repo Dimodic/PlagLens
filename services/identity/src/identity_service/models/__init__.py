@@ -333,6 +333,34 @@ class RolePermission(Base):
     granted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
+# --------------------------------------------------------------------------- #
+# OAuth provider credential overrides (admin-editable)
+# --------------------------------------------------------------------------- #
+class OAuthProviderOverride(Base):
+    """Per-installation override for an OAuth provider's client credentials.
+
+    A row's presence (with non-empty values) replaces the corresponding env
+    var pair (``<PROVIDER>_CLIENT_ID`` / ``<PROVIDER>_CLIENT_SECRET``) at
+    runtime — env is the boot-time fallback used when no override exists
+    or when the override row leaves the field NULL.
+
+    Secrets are stored as plain text for now (the env vars they replace are
+    already plaintext on the host). Encrypting them at rest is a roadmap
+    item that pairs with the Vault integration.
+    """
+
+    __tablename__ = "oauth_provider_overrides"
+
+    # One row per provider name (google / yandex / stepik / github).
+    provider: Mapped[str] = mapped_column(String(32), primary_key=True)
+    client_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    client_secret: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+    updated_by: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
+
+
 __all__ = [
     "Base",
     "Tenant",
@@ -346,4 +374,5 @@ __all__ = [
     "TwoFactorSecret",
     "Invitation",
     "RolePermission",
+    "OAuthProviderOverride",
 ]

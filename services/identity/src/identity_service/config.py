@@ -154,10 +154,23 @@ class Settings(BaseSettings):
     def oauth_credentials(self, provider: str) -> tuple[str, str]:
         """Return ``(client_id, client_secret)`` for the given provider.
 
-        Reads the modern ``GOOGLE_CLIENT_ID``-style env vars first, falls back
-        to the legacy ``OAUTH_GOOGLE_CLIENT_ID``-style vars (kept for backward
-        compatibility). Returns ``("", "")`` if neither is set.
+        Resolution order:
+
+        1. Admin-edited override held in the in-process cache
+           (``oauth.overrides``) — populated from the
+           ``oauth_provider_overrides`` table at startup and on PATCH.
+        2. Modern ``GOOGLE_CLIENT_ID``-style env vars.
+        3. Legacy ``OAUTH_GOOGLE_CLIENT_ID``-style env vars.
+
+        Returns ``("", "")`` when nothing is set.
         """
+        # Local import to avoid a circular dependency at module import time
+        # (overrides → models → Base; settings is imported early).
+        from .oauth import overrides as _overrides
+
+        override = _overrides.get_override(provider)
+        if override is not None:
+            return override
         modern_cid = getattr(self, f"{provider}_client_id", None)
         modern_csec = getattr(self, f"{provider}_client_secret", None)
         legacy_cid = getattr(self, f"oauth_{provider}_client_id", "")

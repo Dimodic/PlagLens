@@ -112,6 +112,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # DB engine
     app.state.engine = get_engine()
 
+    # Warm the OAuth provider override cache from the DB so the very first
+    # /auth/oauth/<provider>/authorize call uses admin-edited credentials,
+    # not the env fallback.
+    try:
+        from .db import get_session_factory
+        from .oauth import overrides as oauth_overrides
+
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            loaded = await oauth_overrides.reload_from_db(session)
+        if loaded:
+            logger.info("OAuth overrides loaded for %d provider(s)", loaded)
+    except Exception as exc:  # pragma: no cover (depends on DB)
+        logger.warning("Failed to load OAuth overrides from DB: %s", exc)
+
     try:
         yield
     finally:

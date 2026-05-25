@@ -1,8 +1,8 @@
 /**
- * React Query hook for the admin OAuth provider directory.
+ * React Query hooks for the admin OAuth provider directory.
  */
-import { useQuery } from '@tanstack/react-query';
-import { adminOAuthApi } from '@/api/endpoints/adminOAuth';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { adminOAuthApi, type OAuthProviderUpdate } from '@/api/endpoints/adminOAuth';
 
 export const adminOAuthKeys = {
   providers: ['admin', 'oauth', 'providers'] as const,
@@ -13,5 +13,21 @@ export function useOAuthProviders() {
     queryKey: adminOAuthKeys.providers,
     queryFn: () => adminOAuthApi.listProviders(),
     staleTime: 30_000,
+  });
+}
+
+export function useUpdateOAuthProvider() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      provider,
+      payload,
+    }: {
+      provider: string;
+      payload: OAuthProviderUpdate;
+    }) => adminOAuthApi.update(provider, payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: adminOAuthKeys.providers });
+    },
   });
 }

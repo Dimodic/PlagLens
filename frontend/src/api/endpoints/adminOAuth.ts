@@ -16,12 +16,25 @@ export interface OAuthProviderInfo {
   has_secret: boolean;
   redirect_uri: string;
   docs_url?: string | null;
+  /** 'env' — falls back to env vars, 'override' — uses DB-stored override. */
+  source: 'env' | 'override';
   editable: boolean;
+}
+
+export interface OAuthProviderUpdate {
+  /** ``null``/undefined = leave unchanged, ``""`` = clear override, value = set. */
+  client_id?: string | null;
+  client_secret?: string | null;
 }
 
 export const adminOAuthApi = {
   listProviders: () =>
     api
       .get<OAuthProviderInfo[]>('/admin/oauth/providers')
+      .then((r) => r.data),
+
+  update: (provider: string, payload: OAuthProviderUpdate) =>
+    api
+      .patch<OAuthProviderInfo>(`/admin/oauth/providers/${provider}`, payload)
       .then((r) => r.data),
 };
