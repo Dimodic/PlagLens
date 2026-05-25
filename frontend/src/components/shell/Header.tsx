@@ -6,7 +6,6 @@ import {
   Menu,
   Search,
   User as UserIcon,
-  Settings,
   Moon,
   Sun,
 } from 'lucide-react';
@@ -177,16 +176,13 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
                 {t('user_menu.profile')}
               </Link>
             </DropdownMenuItem>
-            <DropdownMenuItem asChild data-testid="header-user-menu-settings">
-              <Link to="/me/settings" className="cursor-pointer">
-                <Settings className="mr-2 h-4 w-4" />
-                {t('user_menu.preferences')}
-              </Link>
-            </DropdownMenuItem>
             <DropdownMenuSub>
               <DropdownMenuSubTrigger data-testid="header-user-menu-locale">
                 <Globe className="mr-2 h-4 w-4" />
-                {locale === 'ru' ? 'Язык · Русский' : 'Language · English'}
+                <span className="flex-1">{t('user_menu.language')}</span>
+                <span className="ml-2 text-xs text-muted-foreground">
+                  {locale === 'ru' ? 'RU' : 'EN'}
+                </span>
               </DropdownMenuSubTrigger>
               <DropdownMenuSubContent>
                 <DropdownMenuItem

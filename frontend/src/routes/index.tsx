@@ -48,7 +48,6 @@ const DemoLoginPage = lazy(() => import('@/pages/auth/DemoLoginPage'));
 // Self pages.
 const MyAssignmentsPage = lazy(() => import('@/pages/me/MyAssignmentsPage'));
 const MyGradesPage = lazy(() => import('@/pages/me/MyGradesPage'));
-const MySettingsPage = lazy(() => import('@/pages/me/MySettingsPage'));
 const ProfilePage = lazy(() => import('@/pages/me/ProfilePage'));
 const SecurityPage = lazy(() => import('@/pages/me/SecurityPage'));
 const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
@@ -180,7 +179,8 @@ const protectedRoutes: RouteObject[] = [
       // /me/inbox → /notifications (canonical inbox URL is shared across roles).
       { path: 'me/inbox', element: <Navigate to="/notifications" replace /> },
       { path: 'me/grades', element: <MyGradesPage /> },
-      { path: 'me/settings', element: <MySettingsPage /> },
+      // /me/settings rolled into /me/profile (one «настройки = профиль» surface).
+      { path: 'me/settings', element: <Navigate to="/me/profile" replace /> },
       { path: 'me/2fa', element: <TwoFactorEnrollPage /> },
       { path: 'me/exports', element: <ExportsListPage mode="student" /> },
       {

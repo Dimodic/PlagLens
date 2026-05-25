@@ -226,6 +226,7 @@
 
   "user_menu.profile": "Профиль",
   "user_menu.preferences": "Настройки",
+  "user_menu.language": "Язык",
   "user_menu.help": "Помощь и горячие клавиши",
   "user_menu.logout": "Выйти",
   "user_menu.theme.toggle": "Переключить тему",

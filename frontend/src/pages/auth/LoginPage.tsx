@@ -19,11 +19,44 @@ import { startOAuth, OAUTH_PROVIDERS } from '@/api/endpoints/oauth';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useTranslation } from '@/i18n';
-import type { Problem } from '@/api/types';
+import type { OAuthProvider, Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+
+// Inline brand glyphs — small enough to ship without a dependency.
+function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
+  if (provider === 'google') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path
+          fill="#EA4335"
+          d="M12 10.2v3.8h5.4c-.24 1.4-1.74 4.1-5.4 4.1-3.24 0-5.9-2.7-5.9-6s2.66-6 5.9-6c1.86 0 3.1.8 3.8 1.5l2.6-2.5C16.7 3.6 14.6 2.6 12 2.6 6.8 2.6 2.6 6.8 2.6 12s4.2 9.4 9.4 9.4c5.4 0 9-3.8 9-9.2 0-.6-.06-1.1-.16-1.6H12z"
+        />
+      </svg>
+    );
+  }
+  if (provider === 'yandex') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <circle cx="12" cy="12" r="11" fill="#FC3F1D" />
+        <path fill="#fff" d="M13.32 6.36h-1.06c-1.94 0-2.96 1-2.96 2.46 0 1.66.72 2.44 2.18 3.44l1.2.82-3.46 5.16h2.32l3.86-5.78V6.36h-2.08zm-.04 1.5v4.6l-.94-.66c-1.18-.82-1.56-1.32-1.56-2.36 0-.94.58-1.58 1.62-1.58h.88z" />
+      </svg>
+    );
+  }
+  if (provider === 'github') {
+    return (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path
+          fill="currentColor"
+          d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.02-.02-2-3.2.69-3.88-1.54-3.88-1.54-.52-1.34-1.28-1.69-1.28-1.69-1.05-.72.08-.71.08-.71 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.71 1.26 3.37.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.1-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.18 1.18a11 11 0 015.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.58.23 2.75.11 3.04.74.81 1.18 1.84 1.18 3.1 0 4.42-2.7 5.4-5.27 5.68.41.36.78 1.06.78 2.14 0 1.55-.01 2.8-.01 3.18 0 .31.21.68.8.56C20.21 21.38 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"
+        />
+      </svg>
+    );
+  }
+  return null;
+}
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -269,9 +302,10 @@ export function LoginPage() {
           </Button>
         </form>
 
-        {/* OAuth row — separator line with text label inside, then a
-            4-up grid of outline buttons. Buttons are same height as
-            the inputs above so the page feels balanced. */}
+        {/* OAuth row — a thin separator and a row of round icon buttons.
+            Compared with the previous 4-up grid of text buttons this reads
+            as a single calm row, brand glyphs do the work of labels, and
+            the title attribute carries the name for hover/a11y. */}
         <div className="space-y-4">
           <div className="relative flex items-center">
             <span className="flex-1 border-t border-border" aria-hidden />
@@ -280,13 +314,13 @@ export function LoginPage() {
             </span>
             <span className="flex-1 border-t border-border" aria-hidden />
           </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="flex justify-center gap-3">
             {OAUTH_PROVIDERS.map((p) => (
-              <Button
+              <button
                 key={p.id}
                 type="button"
-                variant="outline"
-                size="sm"
+                aria-label={`Войти через ${p.label}`}
+                title={p.label}
                 data-testid={`login-oauth-${p.id}`}
                 onClick={() => {
                   const next = params.get('next');
@@ -297,10 +331,10 @@ export function LoginPage() {
                       : window.location.origin + '/',
                   );
                 }}
-                className="h-10"
+                className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors hover:border-foreground/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                {p.label}
-              </Button>
+                <OAuthGlyph provider={p.id} />
+              </button>
             ))}
           </div>
         </div>

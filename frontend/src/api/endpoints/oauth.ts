@@ -23,9 +23,13 @@ export function startOAuth(provider: OAuthProvider, return_url?: string, tenant_
   window.location.href = buildOAuthAuthorizeUrl(provider, { return_url, tenant_slug });
 }
 
+// Order matters: this is the order in which the icon row renders on /login.
+// Stepik is intentionally NOT here — admins can still wire Stepik OAuth via
+// the admin "Интеграции → Авторизация" tab (used for grade-sync / import
+// flows), but the login page only surfaces the providers a regular user
+// would expect to sign in with.
 export const OAUTH_PROVIDERS: { id: OAuthProvider; label: string }[] = [
   { id: 'google', label: 'Google' },
   { id: 'yandex', label: 'Яндекс' },
-  { id: 'stepik', label: 'Stepik' },
   { id: 'github', label: 'GitHub' },
 ];

@@ -226,6 +226,7 @@
 
   "user_menu.profile": "Profile",
   "user_menu.preferences": "Preferences",
+  "user_menu.language": "Language",
   "user_menu.help": "Help & shortcuts",
   "user_menu.logout": "Log out",
   "user_menu.theme.toggle": "Toggle theme",
