@@ -1,8 +1,15 @@
 /**
- * /admin/users/:id — admin user detail with tabs.
+ * /admin/users/:id — admin user detail page.
+ *
+ * Seven tabs, all rendered in open layout (no card chrome — see
+ * .claude/UI_RULES.md):
+ *   Профиль · Привязки · OAuth · Сессии · API-ключи · Аудит · Действия
+ *
+ * The audit tab embeds the same per-actor feed as the dedicated audit
+ * route — admins don't have to jump around just to see what a user did.
  */
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
   Ban,
@@ -13,12 +20,12 @@ import {
   Loader2,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusPill } from '@/components/common/StatusPill';
+import { EmptyState } from '@/components/common/EmptyState';
 import { Page } from '@/components/layout/Page';
 import {
   Select,
@@ -39,8 +46,10 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { SessionsTable } from '@/components/me/SessionsTable';
+import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useAuditByActor } from '@/hooks/api/useAudit';
 import {
   useAnonymizeUser,
   useDisableUser,
@@ -55,7 +64,15 @@ import {
   useUserOAuthIdentities,
   useUserSessions,
 } from '@/hooks/api/useUsers';
+import { roleLabel } from '@/lib/roles';
 import type { GlobalRole, Problem } from '@/api/types';
+
+const ROLE_LABEL_RU: Record<GlobalRole, string> = {
+  admin: 'Админ',
+  teacher: 'Преподаватель',
+  assistant: 'Ассистент',
+  student: 'Студент',
+};
 
 export function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -66,6 +83,7 @@ export function UserDetailPage() {
   const bindingsQ = useUserExternalBindings(id);
   const oauthQ = useUserOAuthIdentities(id);
   const apiKeysQ = useUserApiKeys(id);
+  const auditQ = useAuditByActor(id, { limit: 50 });
   const update = useUpdateUser(id ?? '');
   const revokeKey = useRevokeApiKey(id ?? '');
   const disable = useDisableUser();
@@ -128,7 +146,6 @@ export function UserDetailPage() {
   };
 
   const handleDisable = async () => {
-    if (!u) return;
     try {
       await disable.mutateAsync(u.id);
       notify.success('Пользователь заблокирован');
@@ -139,7 +156,6 @@ export function UserDetailPage() {
   };
 
   const handleEnable = async () => {
-    if (!u) return;
     try {
       await enable.mutateAsync(u.id);
       notify.success('Разблокирован');
@@ -149,7 +165,6 @@ export function UserDetailPage() {
   };
 
   const handleAnonymize = async () => {
-    if (!u) return;
     try {
       await anonymize.mutateAsync(u.id);
       notify.success('Анонимизирован');
@@ -160,17 +175,15 @@ export function UserDetailPage() {
   };
 
   const handleResetPassword = async () => {
-    if (!u) return;
     try {
       await resetPassword.mutateAsync(u.id);
-      notify.success('Reset link отправлен');
+      notify.success('Ссылка для сброса отправлена');
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось');
     }
   };
 
   const handleForceLogout = async () => {
-    if (!u) return;
     try {
       await forceLogout.mutateAsync(u.id);
       notify.success('Сессии завершены');
@@ -185,374 +198,364 @@ export function UserDetailPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{u.display_name}</h1>
         <div className="mt-2 flex items-center gap-2">
-          <StatusPill tone="neutral">{u.global_role}</StatusPill>
+          <StatusPill tone="neutral">{roleLabel(u.global_role)}</StatusPill>
           <StatusPill tone={u.status === 'active' ? 'success' : 'neutral'}>
-            {u.status}
+            {u.status === 'active' ? 'активен' : 'отключён'}
           </StatusPill>
-          <span className="text-xs font-mono text-muted-foreground">{u.id}</span>
+          <span className="font-mono text-xs text-muted-foreground">{u.id}</span>
         </div>
       </div>
 
       <Tabs defaultValue="profile">
         <TabsList>
-          <TabsTrigger value="profile" data-testid="user-tab-profile">Profile</TabsTrigger>
-          <TabsTrigger value="bindings" data-testid="user-tab-bindings">External</TabsTrigger>
+          <TabsTrigger value="profile" data-testid="user-tab-profile">Профиль</TabsTrigger>
+          <TabsTrigger value="bindings" data-testid="user-tab-bindings">Привязки</TabsTrigger>
           <TabsTrigger value="oauth" data-testid="user-tab-oauth">OAuth</TabsTrigger>
-          <TabsTrigger value="sessions" data-testid="user-tab-sessions">Sessions</TabsTrigger>
-          <TabsTrigger value="api-keys" data-testid="user-tab-api-keys">API keys</TabsTrigger>
-          <TabsTrigger value="audit" data-testid="user-tab-audit">Audit</TabsTrigger>
+          <TabsTrigger value="sessions" data-testid="user-tab-sessions">Сессии</TabsTrigger>
+          <TabsTrigger value="api-keys" data-testid="user-tab-api-keys">API-ключи</TabsTrigger>
+          <TabsTrigger value="audit" data-testid="user-tab-audit">Аудит</TabsTrigger>
           <TabsTrigger value="actions" data-testid="user-tab-actions">Действия</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="profile" className="pt-4">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="user-detail-email">Email</Label>
-                <Input id="user-detail-email" value={u.email} disabled />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="user-detail-name">Display name</Label>
-                <Input
-                  id="user-detail-name"
-                  value={name}
-                  onChange={(e) => setName(e.currentTarget.value)}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="user-detail-role">Роль</Label>
-                <Select
-                  value={role}
-                  onValueChange={(v) => setRole((v as GlobalRole) ?? 'student')}
-                >
-                  <SelectTrigger id="user-detail-role">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="student">Студент</SelectItem>
-                    <SelectItem value="assistant">Ассистент</SelectItem>
-                    <SelectItem value="teacher">Преподаватель</SelectItem>
-                    <SelectItem value="admin">Админ</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="user-detail-locale">Locale</Label>
-                <Select value={locale} onValueChange={(v) => setLocale(v ?? 'ru')}>
-                  <SelectTrigger id="user-detail-locale">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ru">ru</SelectItem>
-                    <SelectItem value="en">en</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center justify-end">
-                <Button
-                  onClick={handleSave}
-                  disabled={update.isPending}
-                  data-testid="user-detail-save"
-                >
-                  {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Сохранить
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        {/* ===== Профиль ===== */}
+        <TabsContent value="profile" className="space-y-4 pt-6">
+          <div className="space-y-1.5">
+            <Label htmlFor="user-detail-email">Email</Label>
+            <Input id="user-detail-email" value={u.email} disabled />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="user-detail-name">Имя</Label>
+            <Input
+              id="user-detail-name"
+              value={name}
+              onChange={(e) => setName(e.currentTarget.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="user-detail-role">Роль</Label>
+            <Select
+              value={role}
+              onValueChange={(v) => setRole((v as GlobalRole) ?? 'student')}
+            >
+              <SelectTrigger id="user-detail-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="student">{ROLE_LABEL_RU.student}</SelectItem>
+                <SelectItem value="assistant">{ROLE_LABEL_RU.assistant}</SelectItem>
+                <SelectItem value="teacher">{ROLE_LABEL_RU.teacher}</SelectItem>
+                <SelectItem value="admin">{ROLE_LABEL_RU.admin}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="user-detail-locale">Язык интерфейса</Label>
+            <Select value={locale} onValueChange={(v) => setLocale(v ?? 'ru')}>
+              <SelectTrigger id="user-detail-locale">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ru">Русский</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex items-center justify-end">
+            <Button
+              onClick={handleSave}
+              disabled={update.isPending}
+              data-testid="user-detail-save"
+            >
+              {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Сохранить
+            </Button>
+          </div>
         </TabsContent>
 
-        <TabsContent value="bindings" className="pt-4">
+        {/* ===== Привязки (external_bindings) ===== */}
+        <TabsContent value="bindings" className="pt-6">
           {bindingsQ.isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          ) : (
-            <Card>
-              <CardContent className="p-6">
-                {bindingsQ.data && bindingsQ.data.length > 0 ? (
-                  <div className="space-y-3">
-                    {bindingsQ.data.map((b) => (
-                      <div key={b.id} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <StatusPill tone="neutral">{b.system}</StatusPill>
-                          <span className="text-sm font-mono">{b.external_id}</span>
-                          <span className="text-sm text-muted-foreground">
-                            {b.display_name}
-                          </span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {dayjs(b.linked_at).format('DD.MM.YYYY')}
-                        </span>
-                      </div>
-                    ))}
+          ) : bindingsQ.data && bindingsQ.data.length > 0 ? (
+            <div className="divide-y divide-border/50 border-y border-border/50">
+              {bindingsQ.data.map((b) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-3 py-3"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <StatusPill tone="neutral">{b.system}</StatusPill>
+                    <span className="truncate font-mono text-sm">{b.external_id}</span>
+                    {b.display_name && (
+                      <span className="truncate text-sm text-muted-foreground">
+                        {b.display_name}
+                      </span>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Привязок нет</p>
-                )}
-              </CardContent>
-            </Card>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {dayjs(b.linked_at).format('DD.MM.YYYY')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Привязок к внешним системам нет" />
           )}
         </TabsContent>
 
-        <TabsContent value="oauth" className="pt-4">
+        {/* ===== OAuth ===== */}
+        <TabsContent value="oauth" className="pt-6">
           {oauthQ.isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          ) : (
-            <Card>
-              <CardContent className="p-6">
-                {oauthQ.data && oauthQ.data.length > 0 ? (
-                  <div className="space-y-3">
-                    {oauthQ.data.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <StatusPill tone="neutral">{o.provider}</StatusPill>
-                          <span className="text-sm">{o.email}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {dayjs(o.linked_at).format('DD.MM.YYYY')}
-                        </span>
-                      </div>
-                    ))}
+          ) : oauthQ.data && oauthQ.data.length > 0 ? (
+            <div className="divide-y divide-border/50 border-y border-border/50">
+              {oauthQ.data.map((o) => (
+                <div
+                  key={o.id}
+                  className="flex items-center justify-between gap-3 py-3"
+                >
+                  <div className="flex min-w-0 items-center gap-3">
+                    <StatusPill tone="neutral">{o.provider}</StatusPill>
+                    <span className="truncate text-sm">{o.email}</span>
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Нет привязанных OAuth-провайдеров
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+                  <span className="shrink-0 text-xs text-muted-foreground">
+                    {dayjs(o.linked_at).format('DD.MM.YYYY')}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="OAuth-провайдеры не привязаны" />
           )}
         </TabsContent>
 
-        <TabsContent value="sessions" className="pt-4">
+        {/* ===== Сессии ===== */}
+        <TabsContent value="sessions" className="pt-6">
           {sessionsQ.isLoading ? (
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           ) : (
-            <Card>
-              <CardContent className="p-6">
-                <SessionsTable sessions={sessionsQ.data ?? []} showCurrent={false} />
-              </CardContent>
-            </Card>
+            <SessionsTable sessions={sessionsQ.data ?? []} showCurrent={false} />
           )}
         </TabsContent>
 
-        <TabsContent value="api-keys" className="pt-4">
-          <Card>
-            <CardContent className="p-6">
-              {apiKeysQ.isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-                </div>
-              ) : apiKeysQ.error ? (
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">
-                    Не удалось загрузить ключи. Возможно, endpoint ещё не подключён
-                    на backend.
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    GET /admin/users/:id/api-keys — TODO
-                  </p>
-                </div>
-              ) : apiKeysQ.data && apiKeysQ.data.length > 0 ? (
-                <Table data-testid="user-api-keys-table">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Имя</TableHead>
-                      <TableHead>Prefix</TableHead>
-                      <TableHead>Last used</TableHead>
-                      <TableHead>Expires</TableHead>
-                      <TableHead className="w-14" />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {apiKeysQ.data.map((k) => {
-                      const revoked = !!k.revoked_at;
-                      return (
-                        <TableRow key={k.id} data-testid={`user-api-key-row-${k.id}`}>
-                          <TableCell>
-                            <div className="flex flex-col gap-1">
-                              <span className="text-sm font-medium">{k.name}</span>
-                              {revoked && (
-                                <StatusPill tone="neutral">revoked</StatusPill>
-                              )}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs font-mono text-muted-foreground">
-                              {k.id.slice(0, 8)}…
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {k.last_used_at
-                                ? dayjs(k.last_used_at).fromNow()
-                                : '—'}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {k.expires_at
-                                ? dayjs(k.expires_at).format('DD.MM.YYYY')
-                                : 'без срока'}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            {!revoked && (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => handleRevokeKey(k.id)}
-                                disabled={revokeKey.isPending}
-                                aria-label="Revoke key"
-                                data-testid={`user-api-key-revoke-${k.id}`}
-                                className="text-destructive hover:text-destructive"
-                              >
-                                {revokeKey.isPending ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <Ban className="h-4 w-4" />
-                                )}
-                              </Button>
+        {/* ===== API-ключи ===== */}
+        <TabsContent value="api-keys" className="pt-6">
+          {apiKeysQ.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : apiKeysQ.error ? (
+            <ProblemAlert problem={apiKeysQ.error as unknown as Problem} />
+          ) : apiKeysQ.data && apiKeysQ.data.length > 0 ? (
+            <Table data-testid="user-api-keys-table">
+              <TableHeader>
+                <TableRow className="border-y">
+                  <TableHead>Имя</TableHead>
+                  <TableHead>Префикс</TableHead>
+                  <TableHead>Последнее использование</TableHead>
+                  <TableHead>Истекает</TableHead>
+                  <TableHead className="w-14" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {apiKeysQ.data.map((k) => {
+                  const revoked = !!k.revoked_at;
+                  return (
+                    <TableRow key={k.id} data-testid={`user-api-key-row-${k.id}`}>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-sm font-medium">{k.name}</span>
+                          {revoked && (
+                            <StatusPill tone="neutral">отозван</StatusPill>
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <span className="font-mono text-xs text-muted-foreground">
+                          {k.id.slice(0, 8)}…
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {k.last_used_at
+                            ? dayjs(k.last_used_at).fromNow()
+                            : '—'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">
+                          {k.expires_at
+                            ? dayjs(k.expires_at).format('DD.MM.YYYY')
+                            : 'без срока'}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {!revoked && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleRevokeKey(k.id)}
+                            disabled={revokeKey.isPending}
+                            aria-label="Отозвать ключ"
+                            data-testid={`user-api-key-revoke-${k.id}`}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            {revokeKey.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Ban className="h-4 w-4" />
                             )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  У пользователя нет API-ключей.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="audit" className="pt-4">
-          <Card>
-            <CardContent className="p-6">
-              <Button asChild variant="outline">
-                <Link to={`/admin/audit/actors/${u.id}`}>Открыть аудит пользователя</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="actions" className="pt-4">
-          <Card>
-            <CardContent className="p-6">
-              <div className="space-y-4" data-testid="user-actions-panel">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Сбросить пароль</p>
-                  <p className="text-xs text-muted-foreground">
-                    На email пользователя будет отправлена ссылка для сброса.
-                  </p>
-                  <div className="pt-1">
-                    <Button
-                      variant="outline"
-                      onClick={handleResetPassword}
-                      disabled={resetPassword.isPending}
-                      data-testid="user-action-reset-password"
-                    >
-                      {resetPassword.isPending ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Key className="mr-2 h-4 w-4" />
-                      )}
-                      Отправить reset link
-                    </Button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                <div className="space-y-1">
-                  <p className="text-sm font-medium">Завершить все сессии</p>
-                  <p className="text-xs text-muted-foreground">
-                    Пользователь будет принудительно разлогинен на всех устройствах.
-                  </p>
-                  <div className="pt-1">
-                    <Button
-                      variant="outline"
-                      onClick={() => setConfirmForceLogout(true)}
-                      data-testid="user-action-force-logout"
-                      className="text-amber-600 border-amber-600 hover:text-amber-600"
-                    >
-                      <LogOut className="mr-2 h-4 w-4" />
-                      Force logout
-                    </Button>
-                  </div>
-                </div>
-
-                <Separator />
-
-                {u.status === 'active' ? (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Заблокировать</p>
-                    <p className="text-xs text-muted-foreground">
-                      Пользователь не сможет войти. Данные сохраняются.
-                    </p>
-                    <div className="pt-1">
-                      <Button
-                        variant="outline"
-                        onClick={() => setConfirmDisable(true)}
-                        data-testid="user-action-disable"
-                        className="text-destructive border-destructive hover:text-destructive"
-                      >
-                        <Ban className="mr-2 h-4 w-4" />
-                        Заблокировать
-                      </Button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-1">
-                    <p className="text-sm font-medium">Разблокировать</p>
-                    <p className="text-xs text-muted-foreground">
-                      Восстановит доступ пользователя.
-                    </p>
-                    <div className="pt-1">
-                      <Button
-                        variant="outline"
-                        onClick={handleEnable}
-                        disabled={enable.isPending}
-                        data-testid="user-action-enable"
-                        className="text-emerald-600 border-emerald-600 hover:text-emerald-600"
-                      >
-                        {enable.isPending ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <UserCheck className="mr-2 h-4 w-4" />
+                          </Button>
                         )}
-                        Разблокировать
-                      </Button>
-                    </div>
-                  </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          ) : (
+            <EmptyState title="У пользователя нет API-ключей" />
+          )}
+        </TabsContent>
+
+        {/* ===== Аудит ===== */}
+        <TabsContent value="audit" className="space-y-4 pt-6">
+          <div className="flex items-baseline justify-between gap-3">
+            <p className="text-sm text-muted-foreground">
+              Последние 50 действий, инициированных пользователем.
+            </p>
+            {auditQ.data && auditQ.data.data.length > 0 && (
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {auditQ.data.data.length} событий
+              </span>
+            )}
+          </div>
+          {auditQ.error && <ProblemAlert problem={auditQ.error as unknown as Problem} />}
+          {auditQ.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : auditQ.data && auditQ.data.data.length > 0 ? (
+            <div className="space-y-3">
+              {auditQ.data.data.map((e) => (
+                <AuditEventCard key={e.id} event={e} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState title="Этот пользователь ещё ничего не делал" />
+          )}
+        </TabsContent>
+
+        {/* ===== Действия ===== */}
+        <TabsContent value="actions" className="space-y-4 pt-6" data-testid="user-actions-panel">
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Сбросить пароль</p>
+            <p className="text-xs text-muted-foreground">
+              На email пользователя будет отправлена ссылка для сброса.
+            </p>
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                onClick={handleResetPassword}
+                disabled={resetPassword.isPending}
+                data-testid="user-action-reset-password"
+              >
+                {resetPassword.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Key className="mr-2 h-4 w-4" />
                 )}
+                Отправить ссылку
+              </Button>
+            </div>
+          </div>
 
-                <Separator />
+          <Separator />
 
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-destructive">
-                    Анонимизировать (GDPR)
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Необратимо. Персональные данные удаляются, audit-события сохраняются.
-                  </p>
-                  <div className="pt-1">
-                    <Button
-                      variant="outline"
-                      onClick={() => setConfirmAnonymize(true)}
-                      data-testid="user-action-anonymize"
-                      className="text-destructive border-destructive hover:text-destructive"
-                    >
-                      <ShieldOff className="mr-2 h-4 w-4" />
-                      Анонимизировать
-                    </Button>
-                  </div>
-                </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Завершить все сессии</p>
+            <p className="text-xs text-muted-foreground">
+              Пользователь будет принудительно разлогинен на всех устройствах.
+            </p>
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmForceLogout(true)}
+                data-testid="user-action-force-logout"
+                className="border-amber-600 text-amber-600 hover:text-amber-600"
+              >
+                <LogOut className="mr-2 h-4 w-4" />
+                Завершить все
+              </Button>
+            </div>
+          </div>
+
+          <Separator />
+
+          {u.status === 'active' ? (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Заблокировать</p>
+              <p className="text-xs text-muted-foreground">
+                Пользователь не сможет войти. Данные сохраняются.
+              </p>
+              <div className="pt-1">
+                <Button
+                  variant="outline"
+                  onClick={() => setConfirmDisable(true)}
+                  data-testid="user-action-disable"
+                  className="border-destructive text-destructive hover:text-destructive"
+                >
+                  <Ban className="mr-2 h-4 w-4" />
+                  Заблокировать
+                </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <p className="text-sm font-medium">Разблокировать</p>
+              <p className="text-xs text-muted-foreground">
+                Восстановит доступ пользователя.
+              </p>
+              <div className="pt-1">
+                <Button
+                  variant="outline"
+                  onClick={handleEnable}
+                  disabled={enable.isPending}
+                  data-testid="user-action-enable"
+                  className="border-emerald-600 text-emerald-600 hover:text-emerald-600"
+                >
+                  {enable.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserCheck className="mr-2 h-4 w-4" />
+                  )}
+                  Разблокировать
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <Separator />
+
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-destructive">
+              Анонимизировать (GDPR)
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Необратимо. Персональные данные удаляются, audit-события сохраняются.
+            </p>
+            <div className="pt-1">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmAnonymize(true)}
+                data-testid="user-action-anonymize"
+                className="border-destructive text-destructive hover:text-destructive"
+              >
+                <ShieldOff className="mr-2 h-4 w-4" />
+                Анонимизировать
+              </Button>
+            </div>
+          </div>
         </TabsContent>
       </Tabs>
 
