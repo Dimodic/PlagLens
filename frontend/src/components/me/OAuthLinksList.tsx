@@ -14,6 +14,7 @@ const LABELS: Record<OAuthProvider, string> = {
   yandex: 'Яндекс',
   stepik: 'Stepik',
   github: 'GitHub',
+  telegram: 'Telegram',
 };
 
 interface Props {

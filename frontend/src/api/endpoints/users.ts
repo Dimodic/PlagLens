@@ -235,7 +235,7 @@ export const usersApi = {
       .get<{ data: OAuthIdentity[] }>(`/users/${id}/oauth-identities`)
       .then((r) => r.data.data),
 
-  unlinkOAuth: (provider: 'google' | 'yandex' | 'stepik' | 'github') =>
+  unlinkOAuth: (provider: 'google' | 'yandex' | 'stepik' | 'github' | 'telegram') =>
     api.delete<void>(`/auth/oauth/${provider}/unlink`).then((r) => r.data),
 
   // -------- Admin: API keys for a specific user --------

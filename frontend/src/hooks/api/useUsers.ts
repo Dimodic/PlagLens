@@ -287,7 +287,7 @@ export function useDeleteAvatar() {
 
 export function useUnlinkOAuth() {
   return useMutation({
-    mutationFn: (provider: 'google' | 'yandex' | 'stepik' | 'github') =>
+    mutationFn: (provider: 'google' | 'yandex' | 'stepik' | 'github' | 'telegram') =>
       usersApi.unlinkOAuth(provider),
   });
 }

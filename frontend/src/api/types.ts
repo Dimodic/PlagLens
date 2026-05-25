@@ -120,4 +120,4 @@ export interface MfaRequiredProblem extends Problem {
   mfa_token?: string;
 }
 
-export type OAuthProvider = 'google' | 'yandex' | 'stepik' | 'github';
+export type OAuthProvider = 'google' | 'yandex' | 'stepik' | 'github' | 'telegram';
