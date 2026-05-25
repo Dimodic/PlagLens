@@ -50,12 +50,18 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/components/ui/utils';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
-import { useOAuthProviders, useUpdateOAuthProvider } from '@/hooks/api/useAdminOAuth';
-import type { OAuthProviderInfo } from '@/api/endpoints/adminOAuth';
+import {
+  useDeleteIntegrationOAuthProvider,
+  useIntegrationOAuthProviders,
+  useUpsertIntegrationOAuthProvider,
+} from '@/hooks/api/useAdminIntegrationsOauth';
+import type {
+  IntegrationOAuthKind,
+  IntegrationOAuthProviderInfo,
+} from '@/api/endpoints/adminIntegrationsOauth';
 import {
   Dialog,
   DialogContent,
@@ -571,29 +577,20 @@ export function IntegrationsListPage() {
       <PageHeader
         title={
           <span data-testid="integrations-title">
-            {isAdmin ? 'Интеграции' : 'Интеграции курса'}
+            {isAdmin ? 'Авторизация интеграций' : 'Интеграции курса'}
           </span>
         }
-        action={connectAction}
+        // Admin never creates concrete integrations — those are per-course
+        // and belong to the teacher. The "+ Подключить" CTA is hidden for
+        // admin; they only manage OAuth app credentials on this page.
+        action={isAdmin ? null : connectAction}
       />
 
       {isAdmin ? (
-        <Tabs defaultValue="sources">
-          <TabsList>
-            <TabsTrigger value="sources" data-testid="integrations-tab-sources">
-              Источники
-            </TabsTrigger>
-            <TabsTrigger value="auth" data-testid="integrations-tab-auth">
-              Авторизация
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="sources" className="pt-6">
-            {sourcesPanel}
-          </TabsContent>
-          <TabsContent value="auth" className="pt-6">
-            <OAuthProvidersPanel />
-          </TabsContent>
-        </Tabs>
+        // Admin sees only the OAuth-apps directory — no "Источники" tab.
+        // Per UX call: admin sets up credentials; teachers create the
+        // actual integration rows in their courses.
+        <OAuthProvidersPanel />
       ) : (
         sourcesPanel
       )}
@@ -613,17 +610,24 @@ export function IntegrationsListPage() {
 /* OAuth providers tab — read-only directory of login providers.    */
 
 function OAuthProvidersPanel() {
-  const { data, isLoading, error } = useOAuthProviders();
+  const { data, isLoading, error } = useIntegrationOAuthProviders();
   const notify = useNotifications();
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<OAuthProviderInfo | null>(null);
+  const [editing, setEditing] = useState<IntegrationOAuthProviderInfo | null>(
+    null,
+  );
 
-  const onCopy = async (p: OAuthProviderInfo) => {
+  const onCopy = async (p: IntegrationOAuthProviderInfo) => {
+    const uri = p.redirect_uri || p.default_redirect_uri || '';
+    if (!uri) return;
     try {
-      await navigator.clipboard.writeText(p.redirect_uri);
-      setCopiedId(p.provider);
+      await navigator.clipboard.writeText(uri);
+      setCopiedId(p.provider_kind);
       notify.success('Redirect URI скопирован');
-      setTimeout(() => setCopiedId((cur) => (cur === p.provider ? null : cur)), 1500);
+      setTimeout(
+        () => setCopiedId((cur) => (cur === p.provider_kind ? null : cur)),
+        1500,
+      );
     } catch {
       notify.error('Не удалось скопировать');
     }
@@ -645,20 +649,23 @@ function OAuthProvidersPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Через эти провайдеры пользователи могут входить в платформу одной
-        кнопкой. На странице входа отображаются только настроенные.
+        Здесь админ выдаёт платформе доступ к провайдерам импорта (Yandex.Contest,
+        Stepik, Google Sheets). Заполните <code className="font-mono">client_id</code>{' '}
+        и <code className="font-mono">client_secret</code> приложения, скопируйте{' '}
+        <code className="font-mono">redirect_uri</code> в настройки на стороне
+        провайдера — и преподаватели смогут подключать свои аккаунты в один клик.
       </p>
 
       <div className="divide-y divide-border/50 border-y border-border/50">
         {providers.map((p) => (
           <div
-            key={p.provider}
+            key={p.provider_kind}
             className="grid grid-cols-[1fr_auto] items-center gap-4 py-4"
-            data-testid={`oauth-provider-${p.provider}`}
+            data-testid={`integration-oauth-provider-${p.provider_kind}`}
           >
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2">
-                {p.enabled ? (
+                {p.configured ? (
                   <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                 ) : (
                   <XCircle className="h-4 w-4 text-muted-foreground/60" />
@@ -669,31 +676,31 @@ function OAuthProvidersPanel() {
                 <span
                   className={cn(
                     'text-xs',
-                    p.enabled
+                    p.configured
                       ? 'text-emerald-600 dark:text-emerald-400'
                       : 'text-muted-foreground/70',
                   )}
                 >
-                  {p.enabled ? 'настроено' : 'не настроено'}
+                  {p.configured ? 'настроено' : 'не настроено'}
                 </span>
-                {p.source === 'override' && (
-                  <span
-                    className="text-xs text-muted-foreground"
-                    title="Значение задано через админ-UI, перекрывает env"
-                  >
-                    · из БД
-                  </span>
-                )}
               </div>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
                 <span className="text-muted-foreground">client_id</span>
-                <span className="font-mono text-foreground/80">
-                  {p.client_id_preview || '—'}
+                <span className="font-mono text-foreground/80 truncate">
+                  {p.client_id || '—'}
                 </span>
                 <span className="text-muted-foreground">redirect_uri</span>
                 <span className="font-mono text-foreground/80 truncate">
-                  {p.redirect_uri}
+                  {p.redirect_uri || p.default_redirect_uri || '—'}
                 </span>
+                {p.scope && (
+                  <>
+                    <span className="text-muted-foreground">scope</span>
+                    <span className="font-mono text-foreground/80 truncate">
+                      {p.scope}
+                    </span>
+                  </>
+                )}
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -703,23 +710,27 @@ function OAuthProvidersPanel() {
                 onClick={() => onCopy(p)}
                 aria-label="Скопировать redirect URI"
                 title="Скопировать redirect URI"
-                data-testid={`oauth-provider-copy-${p.provider}`}
+                data-testid={`integration-oauth-copy-${p.provider_kind}`}
               >
-                {copiedId === p.provider ? (
+                {copiedId === p.provider_kind ? (
                   <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 ) : (
                   <Copy className="h-4 w-4" />
                 )}
               </Button>
-              {p.docs_url && (
+              {p.register_url && (
                 <Button
                   variant="ghost"
                   size="icon"
                   asChild
-                  aria-label="Открыть консоль провайдера"
-                  title="Консоль провайдера"
+                  aria-label="Зарегистрировать приложение у провайдера"
+                  title="Зарегистрировать приложение у провайдера"
                 >
-                  <a href={p.docs_url} target="_blank" rel="noopener noreferrer">
+                  <a
+                    href={p.register_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     <ExternalLink className="h-4 w-4" />
                   </a>
                 </Button>
@@ -728,9 +739,9 @@ function OAuthProvidersPanel() {
                 variant="outline"
                 size="sm"
                 onClick={() => setEditing(p)}
-                data-testid={`oauth-provider-edit-${p.provider}`}
+                data-testid={`integration-oauth-edit-${p.provider_kind}`}
               >
-                Изменить
+                {p.configured ? 'Изменить' : 'Настроить'}
               </Button>
             </div>
           </div>
@@ -738,13 +749,13 @@ function OAuthProvidersPanel() {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Изменения, сохранённые здесь, перекрывают переменные{' '}
-        <code className="font-mono">GOOGLE_CLIENT_ID</code> /{' '}
-        <code className="font-mono">..._CLIENT_SECRET</code> из{' '}
-        <code className="font-mono">infra/.env</code> и применяются сразу — без перезапуска identity.
+        Совет: у Yandex.Contest и Stepik укажите <em>широкий</em> scope один раз
+        (например <code className="font-mono">contest:manage</code>) — этого
+        хватит, чтобы преподаватель потом просто прошёл OAuth-подтверждение,
+        не запрашивая отдельных разрешений на каждое подключение.
       </p>
 
-      <OAuthProviderEditDialog
+      <IntegrationOAuthEditDialog
         provider={editing}
         onClose={() => setEditing(null)}
       />
@@ -753,85 +764,70 @@ function OAuthProvidersPanel() {
 }
 
 interface EditDialogProps {
-  provider: OAuthProviderInfo | null;
+  provider: IntegrationOAuthProviderInfo | null;
   onClose: () => void;
 }
 
-function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
+function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
   const notify = useNotifications();
-  const update = useUpdateOAuthProvider();
+  const upsert = useUpsertIntegrationOAuthProvider();
+  const remove = useDeleteIntegrationOAuthProvider();
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [redirectUri, setRedirectUri] = useState('');
+  const [scope, setScope] = useState('');
 
-  // Reset form fields when a different provider is opened.
   const open = !!provider;
-  // useState's lazy init isn't enough — we need to reset every open.
-  // A tiny effect-equivalent: track the current provider in a ref.
   const lastProvider = useRef<string | null>(null);
   useEffect(() => {
-    if (provider && lastProvider.current !== provider.provider) {
-      lastProvider.current = provider.provider;
-      // Pre-fill client_id only if there's already an override (the field is
-      // an opaque preview otherwise — we never round-trip it).
-      setClientId(provider.source === 'override' ? '' : '');
+    if (provider && lastProvider.current !== provider.provider_kind) {
+      lastProvider.current = provider.provider_kind;
+      setClientId(provider.client_id ?? '');
       setClientSecret('');
+      setRedirectUri(provider.redirect_uri ?? provider.default_redirect_uri ?? '');
+      setScope(provider.scope ?? provider.default_scope ?? '');
     }
     if (!provider) lastProvider.current = null;
   }, [provider]);
 
   if (!provider) return null;
 
+  // The backend requires client_id + client_secret + redirect_uri on every
+  // PUT. We can't PATCH only the secret, so on edit-existing we still
+  // demand the user re-enter the secret (good practice anyway — no
+  // accidental save when they wanted to read the current value).
+  const canSave =
+    !!clientId.trim() && !!clientSecret.trim() && !!redirectUri.trim();
+
   const onSave = async () => {
+    if (!canSave) return;
     try {
-      await update.mutateAsync({
-        provider: provider.provider,
+      await upsert.mutateAsync({
+        kind: provider.provider_kind as IntegrationOAuthKind,
         payload: {
-          client_id: clientId.trim() || null,
-          client_secret: clientSecret.trim() || null,
+          client_id: clientId.trim(),
+          client_secret: clientSecret.trim(),
+          redirect_uri: redirectUri.trim(),
+          scope: scope.trim() || null,
         },
       });
-      notify.success(`${provider.title}: ключи обновлены`);
+      notify.success(`${provider.title}: ключи сохранены`);
       onClose();
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось сохранить');
     }
   };
 
-  const onClear = async () => {
-    if (!confirm(`Сбросить override и вернуться к env для ${provider.title}?`)) {
-      return;
-    }
+  const onRemove = async () => {
+    if (!confirm(`Удалить OAuth-приложение «${provider.title}»?`)) return;
     try {
-      await update.mutateAsync({
-        provider: provider.provider,
-        payload: { client_id: '', client_secret: '' },
-      });
-      notify.success(`${provider.title}: возврат к env`);
+      await remove.mutateAsync(provider.provider_kind as IntegrationOAuthKind);
+      notify.success(`${provider.title}: приложение удалено`);
       onClose();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось сбросить');
+      notify.error((e as Problem)?.detail ?? 'Не удалось удалить');
     }
   };
-
-  // Telegram uses @BotFather, not OAuth2 — surface the field names the
-  // admin actually sees in BotFather so they don't have to translate
-  // "client_id → bot_username" in their head.
-  const isTelegram = provider.provider === 'telegram';
-  const idLabel = isTelegram ? 'bot username' : 'client_id';
-  const secretLabel = isTelegram ? 'bot token' : 'client_secret';
-  const idHint = isTelegram
-    ? 'Имя бота из @BotFather, например @plaglens_login_bot'
-    : null;
-  const secretHint = isTelegram
-    ? 'Длинная строка вида 123456:ABC-DEF... из @BotFather'
-    : null;
-  const setupHint = isTelegram ? (
-    <span>
-      Не забудьте выполнить <code className="font-mono">/setdomain</code> в
-      @BotFather и указать хост этого стенда — иначе Telegram не пустит
-      виджет на страницу входа.
-    </span>
-  ) : null;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -839,71 +835,99 @@ function OAuthProviderEditDialog({ provider, onClose }: EditDialogProps) {
         <DialogHeader>
           <DialogTitle>{provider.title}</DialogTitle>
           <DialogDescription>
-            {isTelegram
-              ? 'Введите данные бота из @BotFather. Поля, оставленные пустыми, не изменятся.'
-              : 'Введите новые client_id и client_secret. Поля, оставленные пустыми, не изменятся.'}
+            Зарегистрируйте приложение у провайдера, вставьте client_id и
+            client_secret. После сохранения преподаватели смогут подключать
+            свои аккаунты одним кликом.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="oauth-edit-client-id">{idLabel}</Label>
+            <Label htmlFor="iov-client-id">client_id</Label>
             <Input
-              id="oauth-edit-client-id"
+              id="iov-client-id"
               value={clientId}
               onChange={(e) => setClientId(e.currentTarget.value)}
-              placeholder={provider.client_id_preview || 'не задан'}
               autoComplete="off"
-              data-testid="oauth-edit-client-id"
+              data-testid="integration-oauth-edit-client-id"
             />
-            {idHint && (
-              <p className="text-xs text-muted-foreground">{idHint}</p>
-            )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="oauth-edit-client-secret">{secretLabel}</Label>
+            <Label htmlFor="iov-client-secret">client_secret</Label>
             <Input
-              id="oauth-edit-client-secret"
+              id="iov-client-secret"
               value={clientSecret}
               onChange={(e) => setClientSecret(e.currentTarget.value)}
               type="password"
-              placeholder={provider.has_secret ? '••••••••' : 'не задан'}
+              placeholder={
+                provider.client_secret_set ? '••••• (введите заново)' : ''
+              }
               autoComplete="new-password"
-              data-testid="oauth-edit-client-secret"
+              data-testid="integration-oauth-edit-client-secret"
             />
-            {secretHint && (
-              <p className="text-xs text-muted-foreground">{secretHint}</p>
+            {provider.client_secret_set && (
+              <p className="text-xs text-muted-foreground">
+                Секрет уже сохранён — его нельзя посмотреть, можно только
+                заменить новым значением.
+              </p>
             )}
           </div>
-          <div className="space-y-1 pt-1">
-            <Label className="text-muted-foreground">redirect_uri</Label>
-            <code className="block break-all font-mono text-xs text-muted-foreground">
-              {provider.redirect_uri}
-            </code>
-            {setupHint && (
-              <p className="text-xs text-muted-foreground">{setupHint}</p>
-            )}
+          <div className="space-y-1.5">
+            <Label htmlFor="iov-redirect-uri">redirect_uri</Label>
+            <Input
+              id="iov-redirect-uri"
+              value={redirectUri}
+              onChange={(e) => setRedirectUri(e.currentTarget.value)}
+              autoComplete="off"
+              data-testid="integration-oauth-edit-redirect-uri"
+            />
+            <p className="text-xs text-muted-foreground">
+              Скопируйте этот же URL в настройки приложения у провайдера —
+              иначе он отклонит OAuth-запрос.
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="iov-scope">scope (опционально)</Label>
+            <Input
+              id="iov-scope"
+              value={scope}
+              onChange={(e) => setScope(e.currentTarget.value)}
+              autoComplete="off"
+              placeholder={provider.default_scope ?? ''}
+              data-testid="integration-oauth-edit-scope"
+            />
+            <p className="text-xs text-muted-foreground">
+              По умолчанию — <code className="font-mono">{provider.default_scope ?? '—'}</code>.
+              Если выдадите широкий scope здесь, преподавателю не придётся
+              подтверждать дополнительные разрешения при каждом подключении.
+            </p>
           </div>
         </div>
         <DialogFooter className="gap-2 sm:gap-2">
-          {provider.source === 'override' && (
+          {provider.configured && (
             <Button
               variant="ghost"
-              onClick={onClear}
-              disabled={update.isPending}
+              onClick={onRemove}
+              disabled={upsert.isPending || remove.isPending}
               className="text-destructive hover:text-destructive sm:mr-auto"
             >
-              Сбросить к env
+              Удалить приложение
             </Button>
           )}
-          <Button variant="outline" onClick={onClose} disabled={update.isPending}>
+          <Button
+            variant="outline"
+            onClick={onClose}
+            disabled={upsert.isPending}
+          >
             Отмена
           </Button>
           <Button
             onClick={onSave}
-            disabled={update.isPending || (!clientId.trim() && !clientSecret.trim())}
-            data-testid="oauth-edit-save"
+            disabled={!canSave || upsert.isPending}
+            data-testid="integration-oauth-edit-save"
           >
-            {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            {upsert.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
             Сохранить
           </Button>
         </DialogFooter>

@@ -40,11 +40,13 @@ export function ProviderIcon({ kind, className = 'h-4 w-4' }: Props) {
   }
 
   if (kind === 'stepik') {
-    // simple-icons/stepik — the rounded S-on-grid mark, trimmed to the
-    // outermost path so it reads at 16px without becoming a blob.
+    // simple-icons/stepik — the "wing" mark Stepik actually uses in
+    // their docs / favicon. The previous path I shipped was a stray
+    // chunk that rendered as three disconnected bars; this is the
+    // canonical full glyph from simple-icons.org.
     return (
       <svg {...common}>
-        <path d="M9.594 5.578v3.61l5.812 3.452-5.812 3.452v3.61l9-5.295V10.85l-9-5.272zM0 12.04l2.953 1.752V10.27L0 12.04zm5.484-3.247v6.484l3 1.78V7.011l-3 1.782z" />
+        <path d="M3.92 17.55h5.013l1.81-2.875-2.49-1.59c-1.95-1.323-2.49-2.464-2.49-4.397 0-2.45 2.066-4.265 4.785-4.265h.948c.46 0 1.137.41 1.137.998v9.94c0 1.36-1.117 2.479-2.477 2.479h1.79c1.36 0 2.477-1.118 2.477-2.478V4.7c0-.587.677-.997 1.138-.997h2.99c2.72 0 4.79 1.815 4.79 4.265 0 1.933-.54 3.074-2.49 4.398l-2.49 1.589 1.812 2.875h5.014L12 21.7l-8.08-4.15z" />
       </svg>
     );
   }

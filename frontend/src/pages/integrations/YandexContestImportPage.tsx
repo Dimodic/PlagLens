@@ -32,6 +32,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Page } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import { useIntegration } from '@/hooks/api/useIntegrations';
@@ -178,7 +179,7 @@ export default function YandexContestImportPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <Page width="regular">
       <div className="space-y-1">
         <h1 className="text-3xl font-bold tracking-tight">
           Импорт из Yandex.Contest
@@ -336,7 +337,7 @@ export default function YandexContestImportPage() {
           )}
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }
 

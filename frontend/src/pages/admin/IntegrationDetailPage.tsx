@@ -149,7 +149,7 @@ export function IntegrationDetailPage() {
   };
 
   return (
-    <Page width="wide">
+    <Page width="regular">
       <PageHeader
         title={
           <span className="flex items-center gap-3">
