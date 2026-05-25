@@ -86,6 +86,12 @@ export interface CurrentUser {
   two_factor_enabled: boolean;
   linked_oauth: string[];
   last_login_at: string | null;
+  /** True when ``email`` is the synthetic ``tg-<id>@telegram.plaglens.local``
+   *  stub minted for Telegram-only sign-ins. UI should hide the address. */
+  email_is_placeholder?: boolean;
+  /** External identity handle (e.g. Telegram ``@username`` without ``@``).
+   *  ``null`` when no such provider is linked. */
+  external_handle?: string | null;
 }
 
 export interface UserSummary {

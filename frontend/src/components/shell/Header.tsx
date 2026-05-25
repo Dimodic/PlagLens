@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/auth/useAuth';
+import { userSecondaryLabel } from '@/auth/userIdentity';
 import { useTranslation } from '@/i18n';
 import { NotificationsBellDropdown } from '@/components/notifications/NotificationsBellDropdown';
 import { Wordmark } from './Wordmark';
@@ -147,9 +148,17 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
             <DropdownMenuLabel>
               <div className="flex flex-col">
                 <span className="text-sm font-medium">{displayName}</span>
-                <span data-testid="header-user-email" className="text-xs text-muted-foreground truncate">
-                  {user?.email}
-                </span>
+                {(() => {
+                  const sub = userSecondaryLabel(user);
+                  return sub ? (
+                    <span
+                      data-testid="header-user-email"
+                      className="text-xs text-muted-foreground truncate"
+                    >
+                      {sub}
+                    </span>
+                  ) : null;
+                })()}
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

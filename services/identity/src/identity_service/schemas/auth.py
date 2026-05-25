@@ -93,6 +93,16 @@ class MeResponse(BaseModel):
     two_factor_enabled: bool = False
     linked_oauth: list[str] = Field(default_factory=list)
     last_login_at: datetime | None = None
+    # ``true`` when ``email`` is the auto-generated ``tg-<id>@telegram.plaglens.local``
+    # stub we mint for Telegram-only users (no real mailbox). UI hides the
+    # technical address and surfaces the Telegram handle instead.
+    email_is_placeholder: bool = False
+    # Optional public-facing handle from an external identity provider.
+    # Currently populated from Telegram OAuth (``@username`` if set,
+    # otherwise the Telegram first/last name). Stored WITHOUT the leading
+    # ``@``; UI is free to prepend it. ``None`` when no such provider is
+    # linked.
+    external_handle: str | None = None
 
 
 class PasswordForgotRequest(BaseModel):

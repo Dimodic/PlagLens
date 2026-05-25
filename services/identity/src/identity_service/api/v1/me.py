@@ -69,7 +69,28 @@ async def me(
     if tenant is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
     two_fa = await two_fa_repo.get(user.id)
-    linked = [oid.provider for oid in await oauth_repo.list_for_user(user.id)]
+    oauth_links = await oauth_repo.list_for_user(user.id)
+    linked = [oid.provider for oid in oauth_links]
+
+    # External handle: prefer Telegram, since it's the only provider that
+    # mints a placeholder email — for Google/Yandex/GitHub the user's real
+    # email is already the natural identifier.
+    external_handle: str | None = None
+    tg = next((o for o in oauth_links if o.provider == "telegram"), None)
+    if tg is not None:
+        raw = tg.raw_profile or {}
+        # Telegram payload fields: username (without @), first_name, last_name.
+        username = (raw.get("username") or "").strip()
+        if username:
+            external_handle = username
+        else:
+            first = (raw.get("first_name") or "").strip()
+            last = (raw.get("last_name") or "").strip()
+            full = f"{first} {last}".strip()
+            external_handle = full or None
+
+    email_is_placeholder = db_user.email.endswith("@telegram.plaglens.local")
+
     return MeResponse(
         id=db_user.id,
         email=db_user.email,
@@ -84,6 +105,8 @@ async def me(
         two_factor_enabled=bool(two_fa and two_fa.enabled_at),
         linked_oauth=linked,
         last_login_at=db_user.last_login_at,
+        email_is_placeholder=email_is_placeholder,
+        external_handle=external_handle,
     )
 
 

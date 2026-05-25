@@ -38,6 +38,10 @@ import {
   useUpdatePreferences,
 } from '@/hooks/api/useNotificationsApi';
 import { useAuth } from '@/auth/useAuth';
+import {
+  emailChannelHint,
+  profileEmailDisplay,
+} from '@/auth/userIdentity';
 import { useTranslation, type Locale } from '@/i18n';
 import type { Problem } from '@/api/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -263,10 +267,20 @@ export function ProfilePage() {
           <Label htmlFor="profile-email">Email</Label>
           <Input
             id="profile-email"
-            value={user?.email ?? ''}
+            value={profileEmailDisplay(user)}
+            placeholder={
+              user?.email_is_placeholder
+                ? 'Email не указан — войдено через Telegram'
+                : undefined
+            }
             disabled
             data-testid="profile-email-readonly"
           />
+          {user?.email_is_placeholder && user?.external_handle && (
+            <p className="text-xs text-muted-foreground">
+              Вход через Telegram: <span className="font-mono">@{user.external_handle}</span>
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="profile-display-name">Имя</Label>
@@ -342,14 +356,20 @@ export function ProfilePage() {
             />
             <ChannelRow
               label="Email"
-              hint={user?.email ?? undefined}
+              hint={emailChannelHint(user)}
               value={channels.email}
               onChange={(v) => setChannel('email', v)}
               testId="profile-notif-email"
             />
             <ChannelRow
               label="Telegram"
-              hint="После привязки Telegram в разделе «Безопасность»"
+              hint={
+                user?.linked_oauth?.includes('telegram')
+                  ? user.external_handle
+                    ? `@${user.external_handle}`
+                    : 'Telegram привязан'
+                  : 'Привяжите Telegram в разделе «Безопасность»'
+              }
               value={channels.telegram}
               onChange={(v) => setChannel('telegram', v)}
               testId="profile-notif-telegram"
