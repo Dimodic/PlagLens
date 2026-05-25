@@ -194,88 +194,78 @@ export function UsersListPage() {
         />
 
         {/*
-         * One self-contained card holds the whole list: filter bar, optional
-         * error, then the table. No outer borders bleed into the page so the
-         * layout stays calm.
+         * Open layout — no card chrome wraps the page. A single hairline
+         * under the filter bar separates it from the table, and the table's
+         * own thead/row borders carry the rest of the structure.
          */}
-        <div className="overflow-hidden rounded-xl border bg-card">
-          {/* Filter bar */}
-          <div className="flex flex-col gap-3 border-b bg-card/50 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <div
-              role="tablist"
-              aria-label="Фильтр по роли"
-              className="flex flex-wrap items-center gap-1"
-            >
-              {FILTERS.map((f) => {
-                const active = f.id === filter;
-                return (
-                  <button
-                    key={f.id}
-                    role="tab"
-                    type="button"
-                    aria-selected={active}
-                    data-testid={`users-filter-${f.id}`}
-                    onClick={() => setFilter(f.id)}
+        <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-center sm:justify-between">
+          <div
+            role="tablist"
+            aria-label="Фильтр по роли"
+            className="flex flex-wrap items-center gap-1"
+          >
+            {FILTERS.map((f) => {
+              const active = f.id === filter;
+              return (
+                <button
+                  key={f.id}
+                  role="tab"
+                  type="button"
+                  aria-selected={active}
+                  data-testid={`users-filter-${f.id}`}
+                  onClick={() => setFilter(f.id)}
+                  className={cn(
+                    'inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
+                    active
+                      ? 'bg-foreground text-background'
+                      : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  {f.label}
+                  <span
                     className={cn(
-                      'inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors',
-                      active
-                        ? 'bg-foreground text-background'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
+                      'rounded-full px-1.5 text-xs tabular-nums',
+                      active ? 'bg-background/15 text-background' : 'text-muted-foreground/80',
                     )}
                   >
-                    {f.label}
-                    <span
-                      className={cn(
-                        'rounded-full px-1.5 text-xs tabular-nums',
-                        active ? 'bg-background/15 text-background' : 'text-muted-foreground/80',
-                      )}
-                    >
-                      {counts[f.id]}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="relative w-full sm:max-w-xs">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.currentTarget.value)}
-                placeholder="Найти по email или имени"
-                className="h-9 pl-9"
-                data-testid="users-search-input"
-              />
-            </div>
+                    {counts[f.id]}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          {error && (
-            <div className="p-4">
-              <ProblemAlert problem={error as unknown as Problem} />
-            </div>
-          )}
+          <div className="relative w-full sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.currentTarget.value)}
+              placeholder="Найти по email или имени"
+              className="h-9 pl-9"
+              data-testid="users-search-input"
+            />
+          </div>
+        </div>
 
-          {isPending && !data ? (
-            <div className="p-4">
-              <SkeletonList rows={5} rowHeight={56} />
-            </div>
-          ) : rows.length === 0 ? (
-            <div className="p-10">
-              <EmptyState title="Никого не нашли" />
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="border-b">
-                  <TableHead>Пользователь</TableHead>
-                  <TableHead className="w-40">Роль</TableHead>
-                  <TableHead className="w-28">Статус</TableHead>
-                  <TableHead className="w-40">Последний вход</TableHead>
-                  <TableHead className="w-12 text-right" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.map((u) => {
+        {error && <ProblemAlert problem={error as unknown as Problem} />}
+
+        {isPending && !data ? (
+          <SkeletonList rows={5} rowHeight={56} />
+        ) : rows.length === 0 ? (
+          <EmptyState title="Никого не нашли" />
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow className="border-y">
+                <TableHead>Пользователь</TableHead>
+                <TableHead className="w-40">Роль</TableHead>
+                <TableHead className="w-28">Статус</TableHead>
+                <TableHead className="w-40">Последний вход</TableHead>
+                <TableHead className="w-12 text-right" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((u) => {
                   const lastSeen = u.last_login_at
                     ? dayjs(u.last_login_at).fromNow()
                     : '—';
@@ -340,8 +330,7 @@ export function UsersListPage() {
                 })}
               </TableBody>
             </Table>
-          )}
-        </div>
+        )}
       </Page>
 
       <ConfirmDialog
