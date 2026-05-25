@@ -76,8 +76,6 @@ export default function CoursesListPage() {
     return (list.data?.data ?? []).filter((c) => c.status !== 'archived');
   }, [debouncedQ, showArchived, list.data, myList.data]);
 
-  const filtering = !!debouncedQ || showArchived;
-
   return (
     <Page width="regular" data-testid="courses-list-page">
       <PageHeader
@@ -166,7 +164,9 @@ export default function CoursesListPage() {
         }
       />
 
-      {/* List */}
+      {/* List. The header already owns the single primary CTA («+ Создать»
+          / «Присоединиться»). Repeating the same button inside the empty
+          state produced two doorways to the same action — removed. */}
       {courses.length === 0 ? (
         <EmptyState
           data-testid="courses-list-empty"
@@ -178,17 +178,6 @@ export default function CoursesListPage() {
                 : canCreate
                   ? 'У вас пока нет курсов.'
                   : 'Используйте код приглашения.'
-          }
-          action={
-            !filtering && canCreate ? (
-              <Button asChild>
-                <Link to="/courses/new">Создать курс</Link>
-              </Button>
-            ) : !filtering && !canCreate ? (
-              <Button asChild>
-                <Link to="/courses/join">Присоединиться</Link>
-              </Button>
-            ) : undefined
           }
         />
       ) : (
