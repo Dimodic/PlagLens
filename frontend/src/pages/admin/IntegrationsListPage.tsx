@@ -19,13 +19,17 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import dayjs from 'dayjs';
 import { useQueries } from '@tanstack/react-query';
 import {
   AlertCircle,
+  CheckCircle2,
   ChevronRight,
+  Copy,
+  ExternalLink,
   FileSpreadsheet,
-  KeyRound,
+  Loader2,
   MoreHorizontal,
   PlayCircle,
   Plus,
@@ -33,6 +37,7 @@ import {
   RefreshCw,
   Sparkles,
   Trash2,
+  XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { Button } from '@/components/ui/button';
@@ -47,9 +52,12 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/components/ui/utils';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useOAuthProviders } from '@/hooks/api/useAdminOAuth';
+import type { OAuthProviderInfo } from '@/api/endpoints/adminOAuth';
 import {
   useCreateIntegration,
   useDeleteIntegration,
@@ -487,57 +495,23 @@ export function IntegrationsListPage() {
           <FileSpreadsheet className="mr-2 h-4 w-4" />
           Google Sheets · {isAdmin ? 'service account' : 'свой Service Account'}
         </DropdownMenuItem>
-        {isAdmin && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                navigate('/admin/integrations/oauth-providers')
-              }
-              data-testid="integrations-oauth-providers"
-            >
-              <KeyRound className="mr-2 h-4 w-4" />
-              OAuth-провайдеры
-            </DropdownMenuItem>
-          </>
-        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 
-  return (
-    <Page width="regular">
-      <PageHeader
-        title={
-          <span data-testid="integrations-title">
-            {isAdmin ? 'Интеграции' : 'Интеграции курса'}
-          </span>
-        }
-        action={connectAction}
-      />
-
+  // The "Sources" tab is what teachers and admins both see; "Авторизация"
+  // (the OAuth-providers directory) is admin-only.
+  const sourcesPanel = (
+    <>
       {error && <ProblemAlert problem={error as unknown as Problem} />}
-
       {isPending && !data ? (
         <SkeletonList rows={3} rowHeight={48} />
       ) : items.length === 0 ? (
-        <EmptyState
-          title="Интеграций нет"
-          action={
-            <Button onClick={() => navigate('/integrations/wizard')}>
-              Подключить
-            </Button>
-          }
-        />
+        // Empty state intentionally has no action — the page header already
+        // owns the single primary "+ Подключить" button.
+        <EmptyState title="Интеграций пока нет" />
       ) : (
         <>
-          {/* Integrations — chunked into rows of 2 with thin horizontal
-              dividers between each row. Pure 2-col grid (the previous
-              approach) had no structural separation: tiles "floated"
-              without delimitation, the user read it as "будто нет
-              разделения". Drawing each row of the grid as its own flex
-              container with `divide-y` on the outer gives the table-
-              like rhythm without dragging in card chrome. */}
           <div
             className="flex flex-col divide-y divide-border/40"
             data-testid="integrations-list"
@@ -557,13 +531,168 @@ export function IntegrationsListPage() {
               </div>
             ))}
           </div>
-
-          {/* Cross-integration activity — one summary line per source,
-              not a chronological wall of identical entries. */}
           <ActivitySummary integrations={items} />
         </>
       )}
+    </>
+  );
+
+  return (
+    <Page width="regular">
+      <PageHeader
+        title={
+          <span data-testid="integrations-title">
+            {isAdmin ? 'Интеграции' : 'Интеграции курса'}
+          </span>
+        }
+        action={connectAction}
+      />
+
+      {isAdmin ? (
+        <Tabs defaultValue="sources">
+          <TabsList>
+            <TabsTrigger value="sources" data-testid="integrations-tab-sources">
+              Источники
+            </TabsTrigger>
+            <TabsTrigger value="auth" data-testid="integrations-tab-auth">
+              Авторизация
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="sources" className="pt-6">
+            {sourcesPanel}
+          </TabsContent>
+          <TabsContent value="auth" className="pt-6">
+            <OAuthProvidersPanel />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        sourcesPanel
+      )}
     </Page>
+  );
+}
+
+/* ----------------------------------------------------------------- */
+/* OAuth providers tab — read-only directory of login providers.    */
+
+function OAuthProvidersPanel() {
+  const { data, isLoading, error } = useOAuthProviders();
+  const notify = useNotifications();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const onCopy = async (p: OAuthProviderInfo) => {
+    try {
+      await navigator.clipboard.writeText(p.redirect_uri);
+      setCopiedId(p.provider);
+      notify.success('Redirect URI скопирован');
+      setTimeout(() => setCopiedId((cur) => (cur === p.provider ? null : cur)), 1500);
+    } catch {
+      notify.error('Не удалось скопировать');
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return <ProblemAlert problem={error as unknown as Problem} />;
+  }
+
+  const providers = data ?? [];
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        Через эти провайдеры пользователи могут входить в платформу одной
+        кнопкой. На странице входа отображаются только те, у которых задан
+        client_id и client_secret.
+      </p>
+
+      <div className="divide-y divide-border/50 border-y border-border/50">
+        {providers.map((p) => (
+          <div
+            key={p.provider}
+            className="grid grid-cols-[1fr_auto] items-center gap-4 py-4"
+            data-testid={`oauth-provider-${p.provider}`}
+          >
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2">
+                {p.enabled ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <XCircle className="h-4 w-4 text-muted-foreground/60" />
+                )}
+                <span className="text-sm font-medium text-foreground">
+                  {p.title}
+                </span>
+                <span
+                  className={cn(
+                    'text-xs',
+                    p.enabled
+                      ? 'text-emerald-600 dark:text-emerald-400'
+                      : 'text-muted-foreground/70',
+                  )}
+                >
+                  {p.enabled ? 'настроено' : 'не настроено'}
+                </span>
+              </div>
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+                <span className="text-muted-foreground">client_id</span>
+                <span className="font-mono text-foreground/80">
+                  {p.client_id_preview || '—'}
+                </span>
+                <span className="text-muted-foreground">redirect_uri</span>
+                <span className="font-mono text-foreground/80 truncate">
+                  {p.redirect_uri}
+                </span>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onCopy(p)}
+                aria-label="Скопировать redirect URI"
+                title="Скопировать redirect URI"
+                data-testid={`oauth-provider-copy-${p.provider}`}
+              >
+                {copiedId === p.provider ? (
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+              {p.docs_url && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  asChild
+                  aria-label="Открыть консоль провайдера"
+                  title="Консоль провайдера"
+                >
+                  <a href={p.docs_url} target="_blank" rel="noopener noreferrer">
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </Button>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="text-xs text-muted-foreground">
+        Чтобы изменить ключи: задайте переменные{' '}
+        <code className="font-mono">GOOGLE_CLIENT_ID</code>,{' '}
+        <code className="font-mono">GOOGLE_CLIENT_SECRET</code> (и аналогичные
+        для других провайдеров) в <code className="font-mono">infra/.env</code>{' '}
+        на сервере и перезапустите identity-сервис. Редактирование через
+        интерфейс — в дорожной карте.
+      </p>
+    </div>
   );
 }
 

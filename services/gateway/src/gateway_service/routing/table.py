@@ -121,6 +121,7 @@ ROUTING_TABLE: tuple[Route, ...] = (
     # Admin (delegated by sub-path) — fall-through to identity by default
     Route("/api/v1/admin/users", "identity", "default"),
     Route("/api/v1/admin/tenants", "identity", "default"),
+    Route("/api/v1/admin/oauth", "identity", "default"),
     Route("/api/v1/admin/templates", "notification", "default"),
     # Notification admin: templates / dlq / deliveries / email-config /
     # telegram-config / web-push live in notification service.

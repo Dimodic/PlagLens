@@ -43,6 +43,13 @@ interface NavLeaf {
   label: string;
   icon: ReactNode;
   to: string;
+  /**
+   * Extra path prefixes that should also activate the item.
+   * Lets one sidebar entry stay highlighted on routes that don't share
+   * a single root — e.g. admin "Интеграции" must own both
+   * `/admin/integrations/*` and the shared `/integrations/wizard` route.
+   */
+  matches?: string[];
 }
 
 interface NavSection {
@@ -88,7 +95,7 @@ function buildSections(
       { id: 'a_users', screenId: 'a_users', label: t('nav.users'), icon: ic(Users), to: '/admin/users' },
       { id: 'a_roles', label: t('nav.admin.roles'), icon: ic(ShieldCheck), to: '/admin/roles' },
       { id: 'a_ai', label: t('nav.admin.ai'), icon: ic(Sparkles), to: '/admin/ai/providers' },
-      { id: 'a_integrations', screenId: 'a_integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/admin/integrations' },
+      { id: 'a_integrations', screenId: 'a_integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/admin/integrations', matches: ['/integrations'] },
       { id: 'a_notifications', label: t('nav.admin.notifications'), icon: ic(Bell), to: '/admin/notifications/email' },
       { id: 'a_audit', screenId: 'a_audit', label: t('nav.audit'), icon: ic(FileClock), to: '/admin/audit' },
       { id: 'a_system', label: t('nav.system'), icon: ic(Settings2), to: '/admin/system/settings' },
@@ -359,7 +366,11 @@ function DrawerContents({ sections, activeScreen, pathname }: ContentsProps) {
 function isLeafActive(leaf: NavLeaf, activeScreen: Screen, pathname: string): boolean {
   if (leaf.screenId && leaf.screenId === activeScreen) return true;
   const norm = pathname.replace(/\/+$/, '') || '/';
-  return norm === leaf.to;
+  if (norm === leaf.to) return true;
+  if (leaf.matches && leaf.matches.some((p) => norm === p || norm.startsWith(p + '/'))) {
+    return true;
+  }
+  return false;
 }
 
 interface ItemProps {

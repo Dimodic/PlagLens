@@ -93,7 +93,6 @@ export function UserDetailPage() {
   const forceLogout = useForceLogout();
 
   const [name, setName] = useState('');
-  const [locale, setLocale] = useState('ru');
   const [role, setRole] = useState<GlobalRole>('student');
   const [confirmAnonymize, setConfirmAnonymize] = useState(false);
   const [confirmDisable, setConfirmDisable] = useState(false);
@@ -102,7 +101,6 @@ export function UserDetailPage() {
   useEffect(() => {
     if (userQ.data) {
       setName(userQ.data.display_name);
-      setLocale(userQ.data.locale);
       setRole(userQ.data.global_role);
     }
   }, [userQ.data]);
@@ -122,10 +120,11 @@ export function UserDetailPage() {
   if (!u) return null;
 
   const handleSave = async () => {
+    // Locale isn't editable from admin — it's the user's own preference,
+    // managed under /me/profile. Admin only touches identity + role.
     try {
       await update.mutateAsync({
         display_name: name,
-        locale,
         global_role: role,
       });
       notify.success('Сохранено');
@@ -245,18 +244,6 @@ export function UserDetailPage() {
                 <SelectItem value="assistant">{ROLE_LABEL_RU.assistant}</SelectItem>
                 <SelectItem value="teacher">{ROLE_LABEL_RU.teacher}</SelectItem>
                 <SelectItem value="admin">{ROLE_LABEL_RU.admin}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="user-detail-locale">Язык интерфейса</Label>
-            <Select value={locale} onValueChange={(v) => setLocale(v ?? 'ru')}>
-              <SelectTrigger id="user-detail-locale">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="ru">Русский</SelectItem>
-                <SelectItem value="en">English</SelectItem>
               </SelectContent>
             </Select>
           </div>

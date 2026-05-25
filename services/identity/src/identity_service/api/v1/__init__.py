@@ -4,6 +4,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from .admin import router as admin_router
+from .admin_oauth import router as admin_oauth_router
 from .api_keys import admin_router as api_keys_admin_router
 from .api_keys import router as api_keys_router
 from .auth import router as auth_router
@@ -35,6 +36,7 @@ api_v1.include_router(roles_router)
 api_v1.include_router(invitations_router)
 api_v1.include_router(api_keys_router)
 api_v1.include_router(api_keys_admin_router)
+api_v1.include_router(admin_oauth_router)
 api_v1.include_router(admin_router)
 api_v1.include_router(jwks_router)
 api_v1.include_router(operations_router)
