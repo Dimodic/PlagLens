@@ -28,8 +28,12 @@ api_v1.include_router(auth_router)
 api_v1.include_router(auth_password_router)
 api_v1.include_router(auth_email_router)
 api_v1.include_router(auth_2fa_router)
-api_v1.include_router(auth_oauth_router)
+# Telegram MUST register before the generic OAuth router — both share the
+# /auth/oauth prefix, and FastAPI dispatches the first matching route. Without
+# this ordering ``/auth/oauth/telegram/callback`` would be eaten by the
+# generic ``/auth/oauth/{provider}/callback`` and treated as OAuth2.
 api_v1.include_router(auth_telegram_router)
+api_v1.include_router(auth_oauth_router)
 api_v1.include_router(tenants_router)
 api_v1.include_router(users_router)
 api_v1.include_router(me_router)
