@@ -243,12 +243,22 @@ export function LoginPage() {
                     setTelegramOpen(true);
                     return;
                   }
-                  const next = params.get('next');
+                  // ``next`` carries the protected path the user was
+                  // headed to before the redirect to /login. We bring
+                  // them back there post-OAuth — but only when the path
+                  // is a real protected destination. A ``next`` that
+                  // points into /auth/* (password-reset, verify-email,
+                  // oauth-callback) is nonsense as a landing target and
+                  // would short-circuit AuthProvider's refresh on
+                  // bootstrap (path.startsWith('/auth/') is treated as
+                  // anonymous). Fall back to the SPA root in that case.
+                  const rawNext = params.get('next');
+                  const next = rawNext ? decodeURIComponent(rawNext) : null;
+                  const safeNext =
+                    next && !next.startsWith('/auth/') ? next : null;
                   startOAuth(
                     p.id,
-                    next
-                      ? decodeURIComponent(next)
-                      : window.location.origin + '/',
+                    safeNext ?? window.location.origin + '/',
                   );
                 }}
                 className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:border-foreground hover:bg-foreground hover:text-background"

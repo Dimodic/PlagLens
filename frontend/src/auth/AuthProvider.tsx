@@ -110,14 +110,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // viewport before /login or /demo can render its form. Short-circuit
   // to 'anonymous' immediately for those paths and only attempt refresh
   // when the URL actually points into the protected shell.
+  //
+  // Exception: if the URL carries ``?login=success`` we just landed
+  // from an OAuth callback that set the refresh cookie. We MUST call
+  // refresh, even on a "public" path, otherwise the cookie sits unused
+  // and the user sees the login screen again after authenticating.
   useEffect(() => {
     const path = window.location.pathname;
+    const isOAuthLanding =
+      new URLSearchParams(window.location.search).get('login') === 'success';
     const isPublic =
       path === '/login' ||
       path === '/register' ||
       path === '/demo' ||
       path.startsWith('/auth/');
-    if (isPublic) {
+    if (isPublic && !isOAuthLanding) {
       setStatus('anonymous');
       return;
     }
