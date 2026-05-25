@@ -49,7 +49,6 @@ const DemoLoginPage = lazy(() => import('@/pages/auth/DemoLoginPage'));
 const MyAssignmentsPage = lazy(() => import('@/pages/me/MyAssignmentsPage'));
 const MyGradesPage = lazy(() => import('@/pages/me/MyGradesPage'));
 const ProfilePage = lazy(() => import('@/pages/me/ProfilePage'));
-const SecurityPage = lazy(() => import('@/pages/me/SecurityPage'));
 const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
 const MyExternalBindingsPage = lazy(() => import('@/pages/me/MyExternalBindingsPage'));
 const MyAssignmentDetailPage = lazy(() => import('@/pages/me/MyAssignmentDetailPage'));
@@ -168,7 +167,9 @@ const protectedRoutes: RouteObject[] = [
 
       { path: 'me', element: <MyDashboardPage /> },
       { path: 'me/profile', element: <ProfilePage /> },
-      { path: 'me/security', element: <SecurityPage /> },
+      // /me/security folded into /me/profile (one open document with
+      // inline Безопасность). Old links / bookmarks redirect.
+      { path: 'me/security', element: <Navigate to="/me/profile" replace /> },
       { path: 'me/api-keys', element: <MyApiKeysPage /> },
       { path: 'me/external-bindings', element: <MyExternalBindingsPage /> },
       { path: 'me/assignments', element: <MyAssignmentsPage /> },

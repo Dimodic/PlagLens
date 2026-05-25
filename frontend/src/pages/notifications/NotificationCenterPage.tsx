@@ -1,23 +1,25 @@
 /**
- * NotificationCenterPage — full inbox: tabs Unread / All / Archived.
+ * /notifications — flat feed.
  *
- * Filters by event_type, severity, period (since).
- * Bulk actions: Mark all read.
+ * Previous iteration had unread/all/archived tabs, severity dropdown,
+ * event_type / since(ISO) filters and a "Web Push" link in the header.
+ * The user called it out as ops-tooling masquerading as a user page —
+ * "это же для пользователя сделано". So:
+ *
+ *   - No tabs, no filters. One scrollable list of everything.
+ *   - Unread rows are bolder, read rows fade. A small dot on the left
+ *     marks unread visually; no severity badges either (the in-app
+ *     events we surface to end users are all "info").
+ *   - Single header action: "Прочитать все".
+ *   - Click row → mark read + navigate to action_url if any.
+ *   - Per-row archive button hidden in hover (kept so the user can
+ *     prune the list without exposing yet another tab for it).
  */
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { Check, Loader2 } from 'lucide-react';
+import { useEffect, useMemo, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import dayjs from 'dayjs';
+import { Archive, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { NotificationItem } from '@/components/notifications/NotificationItem';
 import { EmptyState } from '@/components/common/EmptyState';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
@@ -28,37 +30,20 @@ import {
   useNotifications,
 } from '@/hooks/api/useNotificationsApi';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { cn } from '@/components/ui/utils';
 import type {
   NotificationFilter,
   NotificationItem as NotificationModel,
-  NotificationSeverity,
 } from '@/api/endpoints/notifications';
-
-type Tab = 'unread' | 'all' | 'archived';
-
-const SEVERITY_ALL = '__all__';
 
 export default function NotificationCenterPage() {
   useDocumentTitle('Уведомления');
   const navigate = useNavigate();
-  const [tab, setTab] = useState<Tab>('unread');
-  const [severity, setSeverity] = useState<NotificationSeverity | undefined>();
-  const [eventType, setEventType] = useState('');
-  const [since, setSince] = useState('');
 
+  // No filters — just "everything that's not archived", newest first.
   const filter = useMemo<NotificationFilter>(
-    () => ({
-      limit: 50,
-      ...(tab === 'unread'
-        ? { unread: true, archived: false }
-        : tab === 'archived'
-          ? { archived: true }
-          : { archived: false }),
-      ...(severity ? { severity } : {}),
-      ...(eventType ? { event_type: eventType } : {}),
-      ...(since ? { since } : {}),
-    }),
-    [tab, severity, eventType, since],
+    () => ({ limit: 100, archived: false }),
+    [],
   );
 
   const { data, isPending } = useNotifications(filter);
@@ -66,32 +51,40 @@ export default function NotificationCenterPage() {
   const markAll = useMarkAllRead();
   const archive = useArchiveNotification();
 
+  const items = data?.data ?? [];
+
+  // Auto-mark every unread row as read when the feed mounts. Coming to
+  // /notifications is the user's explicit "I've seen this list" gesture,
+  // so we don't need a separate button for the common case. The bulk
+  // call only fires once per mount.
+  const autoReadRef = useRef(false);
+  useEffect(() => {
+    if (autoReadRef.current) return;
+    if (isPending) return;
+    const unreadIds = items.filter((n) => !n.read).map((n) => n.id);
+    if (unreadIds.length === 0) {
+      autoReadRef.current = true;
+      return;
+    }
+    autoReadRef.current = true;
+    markRead.mutate(unreadIds);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending, items.length]);
+
   const onClick = (n: NotificationModel) => {
-    markRead.mutate([n.id]);
+    if (!n.read) markRead.mutate([n.id]);
     if (n.action_url) navigate(n.action_url);
   };
-
-  const items = data?.data ?? [];
 
   return (
     <Page>
       <PageHeader
         title="Уведомления"
         action={
-          <>
-            <Link
-              to="/me/notifications/preferences"
-              className="text-sm text-primary hover:underline"
-            >
-              Настройки
-            </Link>
-            <Link
-              to="/me/notifications/web-push"
-              className="text-sm text-primary hover:underline"
-            >
-              Web Push
-            </Link>
+          items.some((n) => !n.read) ? (
             <Button
+              variant="outline"
+              size="sm"
               onClick={() => markAll.mutate()}
               disabled={markAll.isPending}
               data-testid="mark-all-btn"
@@ -103,84 +96,101 @@ export default function NotificationCenterPage() {
               )}
               Прочитать все
             </Button>
-          </>
+          ) : null
         }
       />
 
-      <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
-        <TabsList>
-          <TabsTrigger value="unread" data-testid="tab-unread">
-            Непрочитанные
-          </TabsTrigger>
-          <TabsTrigger value="all" data-testid="tab-all">
-            Все
-          </TabsTrigger>
-          <TabsTrigger value="archived" data-testid="tab-archived">
-            Архив
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <Select
-          value={severity ?? SEVERITY_ALL}
-          onValueChange={(v) =>
-            setSeverity(v === SEVERITY_ALL ? undefined : (v as NotificationSeverity))
-          }
-        >
-          <SelectTrigger
-            className="w-48"
-            data-testid="severity-filter"
-            aria-label="Важность"
-          >
-            <SelectValue placeholder="Любая важность" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={SEVERITY_ALL}>Любая важность</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
-            <SelectItem value="success">Success</SelectItem>
-            <SelectItem value="warning">Warning</SelectItem>
-            <SelectItem value="error">Error</SelectItem>
-          </SelectContent>
-        </Select>
-        <Input
-          placeholder="Тип события (event_type)"
-          value={eventType}
-          onChange={(e) => setEventType(e.currentTarget.value)}
-          data-testid="event-type-filter"
-          className="w-64"
-        />
-        <Input
-          placeholder="С даты (ISO)"
-          value={since}
-          onChange={(e) => setSince(e.currentTarget.value)}
-          data-testid="since-filter"
-          className="w-56"
-        />
-      </div>
-
       {isPending && items.length === 0 ? (
-        <SkeletonList rows={4} rowHeight={56} />
+        <SkeletonList rows={5} rowHeight={56} />
       ) : items.length === 0 ? (
-        <EmptyState title="Нет уведомлений" />
+        <EmptyState title="Уведомлений пока нет" />
       ) : (
-        <div className="space-y-0" data-testid="notifications-list">
+        <ul
+          className="-mx-2 divide-y divide-border/40"
+          data-testid="notifications-list"
+        >
           {items.map((n) => (
-            <NotificationItem
+            <FeedRow
               key={n.id}
               notification={n}
-              onClick={onClick}
-              onMarkRead={(id) => markRead.mutate([id])}
-              onArchive={(id) => archive.mutate(id)}
+              onClick={() => onClick(n)}
+              onArchive={() => archive.mutate(n.id)}
             />
           ))}
           {data?.pagination?.has_more && (
-            <p className="mt-4 text-xs text-muted-foreground">
-              Есть ещё. Загрузка следующих будет добавлена позже.
-            </p>
+            <li className="px-2 pt-4 text-xs text-muted-foreground">
+              Показаны последние 100. Старые архивируются автоматически.
+            </li>
           )}
-        </div>
+        </ul>
       )}
     </Page>
+  );
+}
+
+interface FeedRowProps {
+  notification: NotificationModel;
+  onClick: () => void;
+  onArchive: () => void;
+}
+
+function FeedRow({ notification: n, onClick, onArchive }: FeedRowProps) {
+  return (
+    <li
+      data-testid={`notification-item-${n.id}`}
+      data-notification-id={n.id}
+      data-read={n.read ? 'true' : 'false'}
+      className="group relative"
+    >
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-start gap-3 px-2 py-3 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:bg-muted/50"
+      >
+        {/* Unread marker — 6px dot. Slot kept even when read so titles
+            align cleanly down the column. */}
+        <span
+          aria-hidden
+          className={cn(
+            'mt-1.5 h-1.5 w-1.5 flex-none rounded-full',
+            n.read ? 'bg-transparent' : 'bg-primary',
+          )}
+        />
+        <div className="min-w-0 flex-1">
+          <div
+            className={cn(
+              'truncate text-sm',
+              n.read ? 'font-normal text-muted-foreground' : 'font-medium text-foreground',
+            )}
+          >
+            {n.title}
+          </div>
+          {n.body && n.body !== 'У вас новое уведомление.' && (
+            <div
+              className={cn(
+                'truncate text-xs',
+                n.read ? 'text-muted-foreground/70' : 'text-muted-foreground',
+              )}
+            >
+              {n.body}
+            </div>
+          )}
+          <div className="mt-0.5 text-[11px] text-muted-foreground/70">
+            {dayjs(n.created_at).format('D MMMM, HH:mm')}
+          </div>
+        </div>
+      </button>
+      <Button
+        variant="ghost"
+        size="icon"
+        onClick={onArchive}
+        aria-label="Скрыть"
+        title="Скрыть"
+        data-testid={`archive-${n.id}`}
+        className="absolute right-1 top-2 size-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <Archive className="h-3.5 w-3.5" />
+      </Button>
+    </li>
   );
 }

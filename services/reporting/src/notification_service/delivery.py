@@ -224,6 +224,30 @@ async def deliver_notification(
     return out
 
 
+# Event types that must NEVER hit the in-app feed.
+#
+# These are session-lifecycle and email-relay events that the identity service
+# fires for audit / Kafka bookkeeping — every login, logout, registration, and
+# every email-channel handoff. Without a dedicated template they fall through
+# to "Уведомление PlagLens / У вас новое уведомление" and feel like spam to
+# the actual end user.
+#
+# We don't drop the event entirely: other channels (email/telegram) are still
+# free to handle it. We just strip ``inapp`` from the recipient's channel list
+# below. If that leaves the recipient with nothing to deliver we skip them.
+_INAPP_BLACKLIST_PREFIXES: tuple[str, ...] = (
+    "identity.session.",        # session.created / session.revoked
+    "identity.user.registered", # the user is staring at the screen already
+    # Generic "email" event family — these are *email payloads*, not in-app
+    # messages. Anything matching ``*.email.*`` was meant for the SMTP relay.
+    "identity.email.",
+)
+
+
+def _allows_inapp(event_type: str) -> bool:
+    return not any(event_type.startswith(p) for p in _INAPP_BLACKLIST_PREFIXES)
+
+
 async def fanout_event(
     session: AsyncSession,
     event: dict[str, Any],
@@ -238,10 +262,30 @@ async def fanout_event(
     )
     if not recipients:
         return []
+    # Strip ``inapp`` from channels for blacklisted events; drop recipients
+    # that end up with an empty channel list entirely.
+    if not _allows_inapp(event_type):
+        filtered: list[Recipient] = []
+        for rec in recipients:
+            remaining = [c for c in rec.channels if c != "inapp"]
+            if remaining:
+                rec.channels = remaining
+                filtered.append(rec)
+        recipients = filtered
+        if not recipients:
+            return []
     created: list[Notification] = []
     data = event.get("data") or {}
     metadata = {k: v for k, v in data.items() if not isinstance(v, dict | list) or k == "metadata"}
     for rec in recipients:
+        # If the recipient ends up with no in-app channel we don't create a
+        # Notification row at all — that table doubles as the user-facing
+        # feed (read by GET /notifications), so an audit-only / email-only
+        # event must not leave a "У вас новое уведомление" stub behind.
+        # Email/Telegram-only deliveries are still attempted, but their
+        # provenance lives in NotificationDelivery, not Notification.
+        if "inapp" not in rec.channels:
+            continue
         locale = (rec.pref.locale if rec.pref else "ru") or "ru"
         subject, body = await render(
             session,

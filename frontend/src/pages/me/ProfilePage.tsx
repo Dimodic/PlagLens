@@ -19,10 +19,13 @@
  */
 import { Image as ImageIcon, Loader2, Trash2, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { RedeemInvitePanel } from '@/components/common/RedeemInvitePanel';
+import { PasswordSection } from '@/components/me/security/PasswordSection';
+import { TwoFactorSection } from '@/components/me/security/TwoFactorSection';
+import { OAuthLinksSection } from '@/components/me/security/OAuthLinksSection';
+import { SessionsSection } from '@/components/me/security/SessionsSection';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
@@ -355,16 +358,15 @@ export function ProfilePage() {
         </div>
       </section>
 
-      {/* Безопасность — single link, no extra paragraph noise. */}
-      <section className="space-y-3 border-t border-border/50 pt-6">
+      {/* Безопасность — 4 inline subsections, no separate page. */}
+      <section className="space-y-6 border-t border-border/50 pt-6">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
           Безопасность
         </h2>
-        <Button asChild variant="outline" data-testid="profile-security-link">
-          <Link to="/me/security">
-            Пароль, 2FA, OAuth-провайдеры, сессии →
-          </Link>
-        </Button>
+        <PasswordSection />
+        <TwoFactorSection />
+        <OAuthLinksSection />
+        <SessionsSection />
       </section>
 
       {/* Код приглашения */}

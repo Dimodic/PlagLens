@@ -28,6 +28,7 @@ import { homeworkKeys } from '@/hooks/api/useHomeworks';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Page, PageHeader } from '@/components/layout/Page';
+import { RedeemInvitePanel } from '@/components/common/RedeemInvitePanel';
 
 const fmt = (iso?: string | null) =>
   iso
@@ -97,6 +98,7 @@ export default function MyAssignmentsPage() {
   const allAssignmentsQ = useMyAssignments();
   const [tab, setTab] = useState<Tab>('active');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [redeemOpen, setRedeemOpen] = useState(false);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const courses: any[] = Array.isArray(myCoursesQ.data)
@@ -233,18 +235,35 @@ export default function MyAssignmentsPage() {
         // Neutral empty state — same view for student / teacher / assistant
         // before they're attached to any course. No 'попросите преподавателя'
         // line because the visitor might *be* the teacher.
-        <div className="space-y-3 border-t border-border/50 py-6">
+        <div className="space-y-4 border-t border-border/50 py-6">
           <p className="text-sm text-muted-foreground">
             {user
               ? 'Здесь будут ваши курсы. Чтобы начать — введите код приглашения.'
               : 'Войдите, чтобы увидеть свои курсы.'}
           </p>
-          <Link
-            to="/courses/join"
-            className="text-sm font-medium text-primary hover:underline"
-          >
-            Вступить по коду →
-          </Link>
+          {user && (
+            redeemOpen ? (
+              <div className="max-w-md" data-testid="my-courses-redeem-inline">
+                <RedeemInvitePanel />
+                <button
+                  type="button"
+                  onClick={() => setRedeemOpen(false)}
+                  className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Скрыть
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setRedeemOpen(true)}
+                data-testid="my-courses-redeem-open"
+                className="text-sm font-medium text-foreground hover:underline"
+              >
+                Вступить по коду →
+              </button>
+            )
+          )}
         </div>
       ) : (
         <>
