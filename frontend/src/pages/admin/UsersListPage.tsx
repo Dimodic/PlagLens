@@ -101,11 +101,14 @@ export function UsersListPage() {
   // the per-role counters in the tabs would collapse to zero as soon as the
   // user picked any tab other than "Все", because the main `list` is then
   // narrowed to a single role.
+  // ``limit`` MUST stay within the backend's GET /users cap (≤ 200) — we
+  // used to pass 500 and the endpoint 422'd, which silently zeroed every
+  // tab counter even when the main list rendered fine.
   const counterFilters = useMemo(
     () => ({
       q: q || undefined,
       tenant_id: tenantIdFilter,
-      limit: 500,
+      limit: 200,
     }),
     [q, tenantIdFilter],
   );

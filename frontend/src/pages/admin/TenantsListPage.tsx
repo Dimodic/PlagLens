@@ -41,14 +41,10 @@ export function TenantsListPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : data && data.data.length === 0 ? (
-          <EmptyState
-            title="Учреждений пока нет"
-            action={
-              <Button asChild>
-                <Link to="/admin/tenants/new">Создать учреждение</Link>
-              </Button>
-            }
-          />
+          // Empty state is text-only: the header already owns the single
+          // primary «+ Новое учреждение» button, repeating it inside the
+          // empty state was the dup the user flagged.
+          <EmptyState title="Учреждений пока нет" />
         ) : (
           <div className="divide-y divide-border/50">
             {data?.data.map((t) => (
