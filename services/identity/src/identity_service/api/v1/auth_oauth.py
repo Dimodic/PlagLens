@@ -126,7 +126,10 @@ async def oauth_callback(
 
     response: Response
     if result.link_required:
-        # User must confirm the link on the frontend.
+        # An account with this email already exists but isn't linked to the
+        # provider yet. We don't auto-link silently (would let anyone with
+        # the same email hijack the account) — we ask the user to sign in
+        # via password first and then attach the provider from /me/profile.
         if format == "json":
             response = Response(
                 content=OAuthCallbackResponse(
@@ -141,12 +144,15 @@ async def oauth_callback(
                 media_type="application/json",
             )
             return response
+        # Send the browser to /login with a structured error the SPA can
+        # translate into a readable message; include the email so the form
+        # can prefill it.
         target = _build_redirect(
-            result.redirect_url,
+            "/login",
             params={
-                "login": "link_required",
-                "link_token": result.link_token or "",
+                "error": "oauth_email_exists",
                 "provider": provider,
+                "email": result.user.email if result.user else "",
             },
         )
         return RedirectResponse(target, status_code=status.HTTP_302_FOUND)

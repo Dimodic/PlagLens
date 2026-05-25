@@ -9,7 +9,7 @@
  * separator line above it. Same document-style minimalism the rest of
  * the app uses.
  */
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
@@ -44,6 +44,33 @@ export function LoginPage() {
   const [totpError, setTotpError] = useState<string | null>(null);
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // Informational message (e.g. ?error=oauth_email_exists) — shown above the
+  // form, NOT a destructive alert, because it explains a next step rather
+  // than reporting a failure.
+  const [hint, setHint] = useState<string | null>(null);
+
+  // Translate query-string errors coming from the OAuth callback into a
+  // readable hint and prefill the email field so the user only has to type
+  // their password.
+  useEffect(() => {
+    const err = params.get('error');
+    if (err !== 'oauth_email_exists') return;
+    const providerName = params.get('provider') ?? 'этот провайдер';
+    const providerLabel: Record<string, string> = {
+      google: 'Google',
+      yandex: 'Яндекс',
+      stepik: 'Stepik',
+      github: 'GitHub',
+    };
+    const niceProvider = providerLabel[providerName] ?? providerName;
+    const emailFromQuery = params.get('email');
+    if (emailFromQuery) setEmail(emailFromQuery);
+    setHint(
+      `Аккаунт с этим email уже существует, но к нему не привязан ${niceProvider}. ` +
+        `Войдите паролем, затем привяжите ${niceProvider} в разделе «Профиль → Безопасность».`,
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const goNext = () => {
     const next = params.get('next');
@@ -217,6 +244,12 @@ export function LoginPage() {
                 </p>
               )}
             </div>
+          )}
+
+          {hint && !inlineErrorMessage && (
+            <Alert data-testid="login-hint">
+              <AlertDescription>{hint}</AlertDescription>
+            </Alert>
           )}
 
           {(problem || inlineErrorMessage) && (
