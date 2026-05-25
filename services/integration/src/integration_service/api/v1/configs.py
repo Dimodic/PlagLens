@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, Header, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration_service.adapters import get_adapter
-from integration_service.common.auth import Principal, ensure_role
+from integration_service.common.auth import Principal
 from integration_service.common.ids import new_config_id
 from integration_service.common.kafka_bus import KafkaBus
 from integration_service.common.problems import ProblemException, not_found
@@ -43,8 +43,18 @@ def _ensure_owner_or_admin(p: Principal, course_id: Optional[str]) -> None:
     if p.is_admin or p.is_super_admin:
         return
     if course_id is None:
-        ensure_role(p, "admin")
-        return
+        # Tenant-wide integration (no course attached yet). Teachers
+        # routinely set up shared providers (Y.Contest creds, Stepik
+        # OAuth, Sheets) up front and link courses to them later from
+        # the integration's detail page, so the global "teacher" role
+        # is enough — there's no course-level owner check we could
+        # apply here anyway. The previous code required full admin and
+        # surfaced as a confusing 403 right after "+ Подключить".
+        if getattr(p, "global_role", None) in ("teacher", "admin"):
+            return
+        raise ProblemException(
+            403, "FORBIDDEN", "Forbidden", "teacher / admin required"
+        )
     # JWT carries `course_roles` only when the identity service actively
     # populates it; right now those are empty by default, so we fall back to
     # the global role: any teacher can create/manage integrations and the

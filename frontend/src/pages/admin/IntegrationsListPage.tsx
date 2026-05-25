@@ -25,13 +25,9 @@ import { useQueries } from '@tanstack/react-query';
 import {
   AlertCircle,
   CheckCircle2,
-  Archive as ArchiveIcon,
   ChevronRight,
-  Code2,
   Copy,
   ExternalLink,
-  FileSpreadsheet,
-  GraduationCap,
   Loader2,
   MoreHorizontal,
   PlayCircle,
@@ -39,7 +35,6 @@ import {
   Power,
   RefreshCw,
   Trash2,
-  Trophy,
   XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
@@ -88,6 +83,7 @@ import {
 } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
+import { ProviderIcon } from '@/components/integrations/ProviderIcon';
 
 const KIND_TITLES: Record<IntegrationKind, string> = {
   yandex_contest: 'Yandex.Contest',
@@ -495,7 +491,7 @@ export function IntegrationsListPage() {
           disabled={createMut.isPending}
           data-testid="integrations-connect-yandex-contest"
         >
-          <Trophy className="mr-2 h-4 w-4" />
+          <ProviderIcon kind="yandex_contest" className="mr-2 h-4 w-4" />
           Yandex.Contest
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -503,7 +499,7 @@ export function IntegrationsListPage() {
           disabled={createMut.isPending}
           data-testid="integrations-connect-stepik"
         >
-          <GraduationCap className="mr-2 h-4 w-4" />
+          <ProviderIcon kind="stepik" className="mr-2 h-4 w-4" />
           Stepik
         </DropdownMenuItem>
         <DropdownMenuItem
@@ -511,21 +507,21 @@ export function IntegrationsListPage() {
           disabled={createMut.isPending}
           data-testid="integrations-connect-google-sheets"
         >
-          <FileSpreadsheet className="mr-2 h-4 w-4" />
+          <ProviderIcon kind="google_sheets" className="mr-2 h-4 w-4" />
           Google Sheets
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTokenDialogKind('ejudge')}
           data-testid="integrations-connect-ejudge"
         >
-          <Code2 className="mr-2 h-4 w-4" />
+          <ProviderIcon kind="ejudge" className="mr-2 h-4 w-4" />
           eJudge · по токену
         </DropdownMenuItem>
         <DropdownMenuItem
           onClick={() => setTokenDialogKind('manual')}
           data-testid="integrations-connect-manual"
         >
-          <ArchiveIcon className="mr-2 h-4 w-4" />
+          <ProviderIcon kind="manual" className="mr-2 h-4 w-4" />
           Ручная загрузка (ZIP)
         </DropdownMenuItem>
       </DropdownMenuContent>
