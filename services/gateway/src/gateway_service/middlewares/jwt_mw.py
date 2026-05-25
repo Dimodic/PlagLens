@@ -26,6 +26,30 @@ def _is_public(path: str) -> bool:
     return False
 
 
+# Paths that may carry the JWT as ``?access_token=`` query param.
+#
+# Browser EventSource() can't set custom headers, so SSE clients have to
+# resort to the URL query string. The risk surface is small: these paths
+# stream read-only events scoped to the authenticated principal, and the
+# token is short-lived (15 min) — so even if a token leaks via referer /
+# server logs the blast radius is bounded.
+_QUERY_TOKEN_PATHS: tuple[str, ...] = (
+    "/v1/notifications/stream",
+    "/api/v1/notifications/stream",
+)
+
+
+def _extract_token(request: Request) -> str | None:
+    auth = request.headers.get("authorization")
+    if auth and auth.lower().startswith("bearer "):
+        return auth[7:].strip()
+    if request.url.path in _QUERY_TOKEN_PATHS:
+        qp = request.query_params.get("access_token")
+        if qp:
+            return qp.strip()
+    return None
+
+
 class JWTMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):  # noqa: D401
         if request.method == "OPTIONS":
@@ -35,8 +59,8 @@ class JWTMiddleware(BaseHTTPMiddleware):
             request.state.principal = None
             return await call_next(request)
 
-        auth = request.headers.get("authorization")
-        if not auth or not auth.lower().startswith("bearer "):
+        token = _extract_token(request)
+        if not token:
             return problem_response(
                 status=401,
                 code="UNAUTHENTICATED",
@@ -44,7 +68,6 @@ class JWTMiddleware(BaseHTTPMiddleware):
                 detail="Missing bearer token",
                 request=request,
             )
-        token = auth[7:].strip()
         try:
             principal = await validate_token(token)
         except JWTError as e:
