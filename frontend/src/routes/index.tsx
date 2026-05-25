@@ -17,7 +17,54 @@
  * resolves. Public-route fallbacks are scoped at each `element` to
  * keep the page-level skeleton inside the auth shell consistent.
  */
-import { lazy, Suspense } from 'react';
+import { lazy as reactLazy, Suspense, type ComponentType } from 'react';
+
+// Reload-on-stale-chunk wrapper around React.lazy.
+//
+// Vite ships every route as a code-split chunk named with a content hash.
+// When we deploy a new build, the hashes change — and any browser still
+// holding an old index.html will try to fetch chunks that no longer exist
+// on the server (5xx / 404) the next time the user clicks a not-yet-loaded
+// route. The user lands on a generic 500 page even though all they needed
+// was to re-fetch the HTML.
+//
+// Catch that case once per session: on the first import failure we trip
+// a sessionStorage guard and force window.location.reload(), which pulls
+// the new index.html + manifest. The guard prevents an infinite reload
+// loop if a chunk is genuinely broken.
+// `ComponentType<any>` — pages have wildly different prop shapes, and
+// React.lazy preserves them when the factory return type isn't narrowed.
+// Using `unknown` here would have to push prop-checks down to every
+// site, which defeats the wrapper's "drop-in" purpose.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type LazyImport<T extends ComponentType<any>> = () => Promise<{
+  default: T;
+}>;
+
+const STALE_CHUNK_KEY = 'plaglens.stale_chunk_reloaded';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazy<T extends ComponentType<any>>(factory: LazyImport<T>) {
+  return reactLazy(async () => {
+    try {
+      return await factory();
+    } catch (err) {
+      if (
+        typeof window !== 'undefined' &&
+        typeof sessionStorage !== 'undefined' &&
+        !sessionStorage.getItem(STALE_CHUNK_KEY)
+      ) {
+        sessionStorage.setItem(STALE_CHUNK_KEY, '1');
+        window.location.reload();
+        // Return a never-resolving promise so React holds the Suspense
+        // boundary while the reload completes — instead of surfacing
+        // the chunk error to ErrorBoundary first.
+        return new Promise<{ default: T }>(() => {});
+      }
+      throw err;
+    }
+  });
+}
 import {
   createBrowserRouter,
   Navigate,
