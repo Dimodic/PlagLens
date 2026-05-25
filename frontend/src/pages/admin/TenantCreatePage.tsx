@@ -1,13 +1,20 @@
 /**
- * /admin/tenants/new — super_admin creates a new tenant.
+ * /admin/tenants/new — admin creates a new institution.
+ *
+ * Single-field minimal form. We used to expose ``Domain`` and
+ * ``CORS origins`` here too, but they confused the admins more than they
+ * helped — the slug is auto-derived from the name on the backend, the
+ * domain is a vanity field nobody actually used, and CORS origins
+ * leaked an implementation detail of the gateway's network policy. If
+ * either ever becomes necessary they can be set later from the tenant
+ * detail page (which has the full editor for the super-admin use case).
  */
-import { useState, KeyboardEvent } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Loader2, X } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { StatusPill } from '@/components/common/StatusPill';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -16,61 +23,36 @@ import { useCreateTenant } from '@/hooks/api/useTenants';
 import type { Problem } from '@/api/types';
 
 export function TenantCreatePage() {
-  useDocumentTitle('Новый тенант');
+  useDocumentTitle('Новое учреждение');
   const navigate = useNavigate();
   const notify = useNotifications();
   const create = useCreateTenant();
 
   const [name, setName] = useState('');
-  const [domain, setDomain] = useState('');
-  const [corsOrigins, setCorsOrigins] = useState<string[]>([]);
-  const [corsInput, setCorsInput] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
-
-  const addCorsOrigin = () => {
-    const v = corsInput.trim();
-    if (v && !corsOrigins.includes(v)) {
-      setCorsOrigins([...corsOrigins, v]);
-    }
-    setCorsInput('');
-  };
-
-  const removeCorsOrigin = (i: number) => {
-    setCorsOrigins(corsOrigins.filter((_, idx) => idx !== i));
-  };
-
-  const handleCorsKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      addCorsOrigin();
-    }
-  };
 
   const handleSubmit = async () => {
     setProblem(null);
+    const trimmed = name.trim();
+    if (!trimmed) return;
     try {
-      const result = await create.mutateAsync({
-        name: name.trim(),
-        domain: domain.trim() || null,
-        settings: { cors_origins: corsOrigins },
-      });
-      notify.success(`Тенант ${result.name} создан`);
+      const result = await create.mutateAsync({ name: trimmed });
+      notify.success(`Учреждение «${result.name}» создано`);
       navigate(`/admin/tenants/${result.id}`);
     } catch (e) {
       setProblem(e as Problem);
     }
   };
 
-  void navigate;
   return (
     <Page width="narrow">
       <Link
         to="/admin/tenants"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Тенанты
+        ← Учреждения
       </Link>
-      <PageHeader title="Новый тенант" />
+      <PageHeader title="Новое учреждение" />
 
       {problem && <ProblemAlert problem={problem} />}
 
@@ -81,53 +63,22 @@ export function TenantCreatePage() {
             id="tenant-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
+            placeholder="Например, ВШЭ ФКН"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void handleSubmit();
+            }}
             data-testid="tenant-create-name"
           />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-domain">Домен</Label>
-          <Input
-            id="tenant-domain"
-            value={domain}
-            onChange={(e) => setDomain(e.currentTarget.value)}
-            data-testid="tenant-create-domain"
-          />
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="tenant-cors">CORS origins</Label>
-          <Input
-            id="tenant-cors"
-            value={corsInput}
-            onChange={(e) => setCorsInput(e.currentTarget.value)}
-            onKeyDown={handleCorsKey}
-            onBlur={addCorsOrigin}
-            data-testid="tenant-create-cors"
-          />
-          {corsOrigins.length > 0 && (
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {corsOrigins.map((origin, i) => (
-                <StatusPill key={i} tone="neutral">
-                  {origin}
-                  <button
-                    type="button"
-                    onClick={() => removeCorsOrigin(i)}
-                    className="ml-1 hover:text-destructive"
-                    aria-label={`Удалить ${origin}`}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </StatusPill>
-              ))}
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground">
+            Короткий идентификатор и URL-слаг сгенерируются автоматически.
+          </p>
         </div>
 
         <div className="pt-2">
           <Button
             onClick={handleSubmit}
-            disabled={create.isPending}
+            disabled={create.isPending || !name.trim()}
             data-testid="tenant-create-submit"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
