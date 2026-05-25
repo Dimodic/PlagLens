@@ -24,7 +24,7 @@
  * landing page as Google/Yandex OAuth.
  */
 import { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
+import { Check, Copy, Loader2 } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -34,6 +34,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { useNotifications } from '@/hooks/useNotifications';
 import { telegramAuthApi, type TelegramBotInfo } from '@/api/endpoints/oauth';
 
 interface Props {
@@ -83,9 +84,11 @@ function TelegramWidget({ info }: { info: TelegramBotInfo }) {
 }
 
 export function TelegramLoginDialog({ open, onOpenChange }: Props) {
+  const notify = useNotifications();
   const [info, setInfo] = useState<TelegramBotInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
 
   // Defer the /info call to dialog-open time — there's no point in
   // sending a request from every visitor of /login if they never use
@@ -112,6 +115,33 @@ export function TelegramLoginDialog({ open, onOpenChange }: Props) {
       cancelled = true;
     };
   }, [open]);
+
+  // Telegram widget rejects every host that wasn't whitelisted with
+  // BotFather's /setdomain step — it renders the string "Bot domain
+  // invalid" inside its own iframe and there's no callback to detect
+  // it from JS. We show the required hostname here so the admin can
+  // copy it straight into BotFather without guessing.
+  const expectedDomain = (() => {
+    if (info?.redirect_uri) {
+      try {
+        return new URL(info.redirect_uri).host;
+      } catch {
+        /* fall through */
+      }
+    }
+    return window.location.host;
+  })();
+
+  const copyDomain = async () => {
+    try {
+      await navigator.clipboard.writeText(expectedDomain);
+      setCopied(true);
+      notify.success('Домен скопирован');
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      notify.error('Не удалось скопировать');
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -148,6 +178,52 @@ export function TelegramLoginDialog({ open, onOpenChange }: Props) {
           )}
           {!loading && !error && info?.enabled && <TelegramWidget info={info} />}
         </div>
+
+        {/* Setup hint. The widget itself prints "Bot domain invalid" in an
+            iframe we can't introspect, so we surface the actionable bit
+            (which domain to whitelist) up-front — every time the dialog
+            is open, since the failure mode is silent from our side. */}
+        {!loading && !error && info?.enabled && (
+          <div className="rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground space-y-1.5">
+            <p>
+              Видите{' '}
+              <span className="font-mono text-foreground">Bot domain invalid</span>{' '}
+              — значит в{' '}
+              <a
+                href="https://t.me/BotFather"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-medium text-foreground hover:underline"
+              >
+                @BotFather
+              </a>{' '}
+              не выполнен{' '}
+              <code className="font-mono">/setdomain</code> для этого стенда.
+              Введите там бота, затем домен:
+            </p>
+            <div className="flex items-center gap-2">
+              <code
+                className="flex-1 truncate rounded bg-background px-2 py-1 font-mono text-foreground"
+                data-testid="telegram-setdomain-hint"
+              >
+                {expectedDomain}
+              </code>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="size-7"
+                onClick={copyDomain}
+                aria-label="Скопировать домен"
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>

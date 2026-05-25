@@ -11,12 +11,15 @@ import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { OAuthProvider } from '@/api/types';
 
+// Providers a regular user can sign in with. Stepik is intentionally
+// NOT here: it's wired only as an *integration* (grade sync from Stepik
+// classrooms), the OAuth client_id/secret pair on /admin/integrations →
+// Авторизация has no business attached to a user's identity here.
 const ALL_PROVIDERS: OAuthProvider[] = [
   'google',
   'yandex',
   'github',
   'telegram',
-  'stepik',
 ];
 
 const LABELS: Record<OAuthProvider, string> = {
