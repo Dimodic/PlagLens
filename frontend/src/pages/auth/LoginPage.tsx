@@ -8,8 +8,10 @@
  *     and the form as the fallback.
  *   - All OAuth glyphs are monochrome (use currentColor) so the row feels
  *     like a single element of the page, not a brand carnival.
- *   - Telegram lives in the same icon row but opens a small modal
- *     hosting the official Login Widget — see TelegramLoginDialog.
+
+ *   - Telegram lives in the same icon row; clicking it programmatically
+ *     opens Telegram's native confirm popup via the JS API (no widget
+ *     button, no modal). See ``src/auth/telegramLogin.ts``.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -17,16 +19,17 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
 import { authApi } from '@/api/endpoints/auth';
 import { tokenStore } from '@/api/client';
-import { startOAuth, OAUTH_PROVIDERS } from '@/api/endpoints/oauth';
+import { startOAuth, OAUTH_PROVIDERS, telegramAuthApi } from '@/api/endpoints/oauth';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useTranslation } from '@/i18n';
 import type { OAuthProvider, Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { TelegramLoginDialog } from '@/components/auth/TelegramLoginDialog';
+import { openTelegramLogin } from '@/auth/telegramLogin';
 
 // Monochrome brand glyphs taken from simple-icons (CC0). All four use
 // `fill: currentColor` so the row stays in lockstep with the theme. The
@@ -92,6 +95,7 @@ export function LoginPage() {
   const [params] = useSearchParams();
   const queryClient = useQueryClient();
   const { login, reloadMe } = useAuth();
+  const notify = useNotifications();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -104,7 +108,30 @@ export function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
-  const [telegramOpen, setTelegramOpen] = useState(false);
+  const [tgBusy, setTgBusy] = useState(false);
+
+  const onTelegramClick = async () => {
+    if (tgBusy) return;
+    setTgBusy(true);
+    try {
+      const info = await telegramAuthApi.info();
+      if (!info.enabled || !info.bot_id) {
+        notify.info('Вход через Telegram пока не настроен администратором');
+        return;
+      }
+      const ok = await openTelegramLogin({
+        bot_id: info.bot_id,
+        redirect_uri: info.redirect_uri,
+      });
+      if (!ok) {
+        notify.error('Не удалось загрузить Telegram-виджет');
+      }
+    } catch {
+      notify.error('Не удалось открыть вход через Telegram');
+    } finally {
+      setTgBusy(false);
+    }
+  };
 
   useEffect(() => {
     const err = params.get('error');
@@ -196,8 +223,8 @@ export function LoginPage() {
     : null;
 
   // Display row: same order as OAUTH_PROVIDERS + Telegram appended.
-  // Telegram doesn't speak OAuth2 — its widget runs from a modal
-  // (TelegramLoginDialog), so the row item carries no startOAuth call.
+  // Telegram doesn't speak OAuth2 — its popup is opened via the JS
+  // ``Telegram.Login.auth`` helper from src/auth/telegramLogin.ts.
   const providerRow: { id: OAuthProvider; label: string }[] = [
     ...OAUTH_PROVIDERS,
     { id: 'telegram' as OAuthProvider, label: 'Telegram' },
@@ -231,41 +258,49 @@ export function LoginPage() {
             "fast path" before the email/password form. */}
         <section className="space-y-4">
           <div className="flex justify-center gap-3">
-            {providerRow.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                aria-label={`Войти через ${p.label}`}
-                title={p.label}
-                data-testid={`login-oauth-${p.id}`}
-                onClick={() => {
-                  if (p.id === 'telegram') {
-                    setTelegramOpen(true);
-                    return;
-                  }
-                  // ``next`` carries the protected path the user was
-                  // headed to before the redirect to /login. We bring
-                  // them back there post-OAuth — but only when the path
-                  // is a real protected destination. A ``next`` that
-                  // points into /auth/* (password-reset, verify-email,
-                  // oauth-callback) is nonsense as a landing target and
-                  // would short-circuit AuthProvider's refresh on
-                  // bootstrap (path.startsWith('/auth/') is treated as
-                  // anonymous). Fall back to the SPA root in that case.
-                  const rawNext = params.get('next');
-                  const next = rawNext ? decodeURIComponent(rawNext) : null;
-                  const safeNext =
-                    next && !next.startsWith('/auth/') ? next : null;
-                  startOAuth(
-                    p.id,
-                    safeNext ?? window.location.origin + '/',
-                  );
-                }}
-                className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:border-foreground hover:bg-foreground hover:text-background"
-              >
-                <OAuthGlyph provider={p.id} />
-              </button>
-            ))}
+            {providerRow.map((p) => {
+              const busy = p.id === 'telegram' && tgBusy;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  aria-label={`Войти через ${p.label}`}
+                  title={p.label}
+                  data-testid={`login-oauth-${p.id}`}
+                  disabled={busy}
+                  onClick={() => {
+                    if (p.id === 'telegram') {
+                      void onTelegramClick();
+                      return;
+                    }
+                    // ``next`` carries the protected path the user was
+                    // headed to before the redirect to /login. We bring
+                    // them back there post-OAuth — but only when the path
+                    // is a real protected destination. A ``next`` that
+                    // points into /auth/* (password-reset, verify-email,
+                    // oauth-callback) is nonsense as a landing target and
+                    // would short-circuit AuthProvider's refresh on
+                    // bootstrap (path.startsWith('/auth/') is treated as
+                    // anonymous). Fall back to the SPA root in that case.
+                    const rawNext = params.get('next');
+                    const next = rawNext ? decodeURIComponent(rawNext) : null;
+                    const safeNext =
+                      next && !next.startsWith('/auth/') ? next : null;
+                    startOAuth(
+                      p.id,
+                      safeNext ?? window.location.origin + '/',
+                    );
+                  }}
+                  className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-wait disabled:opacity-60"
+                >
+                  {busy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <OAuthGlyph provider={p.id} />
+                  )}
+                </button>
+              );
+            })}
           </div>
           <div className="relative flex items-center">
             <span className="flex-1 border-t border-border" aria-hidden />
@@ -386,11 +421,6 @@ export function LoginPage() {
           </Link>
         </div>
       </main>
-
-      <TelegramLoginDialog
-        open={telegramOpen}
-        onOpenChange={setTelegramOpen}
-      />
     </div>
   );
 }

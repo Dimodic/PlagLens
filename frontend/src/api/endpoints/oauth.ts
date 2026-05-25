@@ -11,6 +11,8 @@ export interface TelegramBotInfo {
   enabled: boolean;
   /** Bot's @-username (without @). Null when Telegram is not configured. */
   bot_username: string | null;
+  /** Numeric bot id — used by ``Telegram.Login.auth`` JS API. */
+  bot_id: number | null;
   /** Absolute URL of the backend callback — fed into widget's data-auth-url. */
   redirect_uri: string;
 }

@@ -73,6 +73,13 @@ class TelegramBotInfo(BaseModel):
 
     enabled: bool
     bot_username: str | None = None
+    # Numeric bot id used by the in-page ``Telegram.Login.auth`` JS API
+    # (``data-telegram-login`` widget mode also accepts it). It's the
+    # integer prefix of the bot token — Telegram tokens are formatted as
+    # ``<bot_id>:<hash>`` — so we don't need a network call to derive it.
+    # Safe to expose: the bot id is public (visible in any t.me/<bot>
+    # share link metadata).
+    bot_id: int | None = None
     redirect_uri: str
 
 
@@ -136,18 +143,37 @@ def _build_redirect(redirect_url: str | None, *, params: dict[str, str]) -> str:
     return f"{base}{sep}{qs}"
 
 
+def _extract_bot_id(bot_token: str) -> int | None:
+    """Telegram tokens are formatted ``<bot_id>:<hash>`` — pull the int.
+
+    Returns ``None`` for malformed tokens; callers fall back to the
+    widget mode (``data-telegram-login``) which only needs the username.
+    """
+    head, sep, _ = bot_token.partition(":")
+    if not sep:
+        return None
+    try:
+        return int(head)
+    except ValueError:
+        return None
+
+
 @router.get("/info", response_model=TelegramBotInfo)
 async def telegram_info() -> TelegramBotInfo:
-    """Public endpoint — the SPA needs to know the bot username to render
-    the Login Widget. We don't leak the token; only its presence."""
+    """Public endpoint — the SPA needs to know the bot username (and
+    numeric id, for the JS ``Telegram.Login.auth`` API) to render the
+    Login Widget. We don't leak the token; only its presence."""
     base = settings.oauth_callback_base_url.rstrip("/")
     redirect_uri = f"{base}/api/v1/auth/oauth/telegram/callback"
     creds = _get_bot_credentials()
     if not creds:
         return TelegramBotInfo(enabled=False, redirect_uri=redirect_uri)
-    bot_username, _ = creds
+    bot_username, bot_token = creds
     return TelegramBotInfo(
-        enabled=True, bot_username=bot_username, redirect_uri=redirect_uri
+        enabled=True,
+        bot_username=bot_username,
+        bot_id=_extract_bot_id(bot_token),
+        redirect_uri=redirect_uri,
     )
 
 
