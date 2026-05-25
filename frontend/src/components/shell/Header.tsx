@@ -1,5 +1,15 @@
 import { Link, useNavigate } from 'react-router-dom';
-import { LogOut, Menu, Search, User as UserIcon, Settings, Moon, Sun } from 'lucide-react';
+import {
+  Check,
+  Globe,
+  LogOut,
+  Menu,
+  Search,
+  User as UserIcon,
+  Settings,
+  Moon,
+  Sun,
+} from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,11 +19,16 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { useAuth } from '@/auth/useAuth';
 import { useTranslation } from '@/i18n';
+import { useUpdateMe } from '@/hooks/api/useUsers';
+import type { Locale } from '@/i18n';
 import { NotificationsBellDropdown } from '@/components/notifications/NotificationsBellDropdown';
 import { Wordmark } from './Wordmark';
 
@@ -32,13 +47,28 @@ function initials(name: string): string {
 }
 
 export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
-  const { user, logout } = useAuth();
-  const { t } = useTranslation();
+  const { user, logout, reloadMe } = useAuth();
+  const { t, locale, setLocale } = useTranslation();
+  const updateMe = useUpdateMe();
   const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
   const onLogout = async () => {
     try { await logout(); } finally { navigate('/login'); }
+  };
+
+  // Locale: flip the UI immediately for snappy feedback, then persist on the
+  // server so the choice survives the next login. We swallow the persistence
+  // error — the UI already switched, the worst case is a re-pick after login.
+  const onLocaleChange = async (next: Locale) => {
+    if (next === locale) return;
+    setLocale(next);
+    try {
+      await updateMe.mutateAsync({ locale: next });
+      await reloadMe();
+    } catch {
+      /* non-fatal — locale was applied locally */
+    }
   };
 
   const displayName = user?.display_name || user?.email || 'User';
@@ -153,6 +183,28 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
                 {t('user_menu.preferences')}
               </Link>
             </DropdownMenuItem>
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger data-testid="header-user-menu-locale">
+                <Globe className="mr-2 h-4 w-4" />
+                {locale === 'ru' ? 'Язык · Русский' : 'Language · English'}
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent>
+                <DropdownMenuItem
+                  onClick={() => onLocaleChange('ru')}
+                  data-testid="header-user-menu-locale-ru"
+                >
+                  {locale === 'ru' && <Check className="mr-2 h-4 w-4" />}
+                  <span className={locale === 'ru' ? '' : 'ml-6'}>Русский</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => onLocaleChange('en')}
+                  data-testid="header-user-menu-locale-en"
+                >
+                  {locale === 'en' && <Check className="mr-2 h-4 w-4" />}
+                  <span className={locale === 'en' ? '' : 'ml-6'}>English</span>
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={onLogout}

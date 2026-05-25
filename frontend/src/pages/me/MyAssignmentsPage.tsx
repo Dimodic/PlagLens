@@ -26,7 +26,6 @@ import { useMyAssignments } from '@/hooks/api/useAssignments';
 import { homeworksApi } from '@/api/endpoints/homeworks';
 import { homeworkKeys } from '@/hooks/api/useHomeworks';
 import { SkeletonList } from '@/components/common/Skeleton';
-import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Page, PageHeader } from '@/components/layout/Page';
 
@@ -92,7 +91,7 @@ const deadlineMs = (a: any): number => {
 };
 
 export default function MyAssignmentsPage() {
-  useDocumentTitle('Мои задания');
+  useDocumentTitle('Мои курсы');
   const { user } = useAuth();
   const myCoursesQ = useMyCourses();
   const allAssignmentsQ = useMyAssignments();
@@ -226,28 +225,27 @@ export default function MyAssignmentsPage() {
 
   return (
     <Page>
-      <PageHeader title="Мои задания" />
+      <PageHeader title="Мои курсы" />
 
       {hasNothingYet ? (
         <SkeletonList rows={4} rowHeight={64} />
       ) : courses.length === 0 ? (
-        <Card className="border-dashed border-border/70">
-          <CardContent className="p-8 text-sm text-muted-foreground">
-            <p>
-              {user
-                ? 'Вы ещё не подписаны ни на один курс. Попросите преподавателя добавить вас или вступите по приглашению.'
-                : 'Войдите, чтобы увидеть свои задания.'}
-            </p>
-            <div className="mt-4">
-              <Link
-                to="/courses/join"
-                className="text-sm font-medium text-primary hover:underline"
-              >
-                Вступить по коду →
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
+        // Neutral empty state — same view for student / teacher / assistant
+        // before they're attached to any course. No 'попросите преподавателя'
+        // line because the visitor might *be* the teacher.
+        <div className="space-y-3 border-t border-border/50 py-6">
+          <p className="text-sm text-muted-foreground">
+            {user
+              ? 'Здесь будут ваши курсы. Чтобы начать — введите код приглашения.'
+              : 'Войдите, чтобы увидеть свои курсы.'}
+          </p>
+          <Link
+            to="/courses/join"
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            Вступить по коду →
+          </Link>
+        </div>
       ) : (
         <>
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
@@ -274,11 +272,9 @@ export default function MyAssignmentsPage() {
           </Tabs>
 
           {sortedCourses.length === 0 ? (
-            <Card className="border-dashed border-border/70">
-              <CardContent className="p-10 text-center text-sm text-muted-foreground">
-                {emptyForTab}
-              </CardContent>
-            </Card>
+            <p className="border-t border-border/50 py-10 text-center text-sm text-muted-foreground">
+              {emptyForTab}
+            </p>
           ) : (
             <div className="space-y-8">
               {sortedCourses.map((c) => {
@@ -365,35 +361,29 @@ export default function MyAssignmentsPage() {
                     </div>
 
                     {rows.length === 0 ? (
-                      <Card className="border-dashed border-border/70">
-                        <CardContent className="p-6 text-center text-sm text-muted-foreground">
-                          В этом курсе нет заданий по выбранному фильтру.
-                        </CardContent>
-                      </Card>
+                      <p className="py-6 text-center text-sm text-muted-foreground">
+                        В этом курсе нет заданий по выбранному фильтру.
+                      </p>
                     ) : (
-                      <Card className="border-border/70">
-                        <CardContent className="p-0">
-                          {rows.map((row, idx) => (
-                            <div
-                              key={row.key}
-                              className={
-                                idx > 0 ? 'border-t border-border/70' : ''
-                              }
-                            >
-                              {row.kind === 'one' ? (
-                                <AssignmentRow item={row.item} />
-                              ) : (
-                                <HomeworkRow
-                                  hw={row.hw}
-                                  items={row.items}
-                                  isOpen={expanded.has(row.key)}
-                                  onToggle={() => toggleExpand(row.key)}
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </CardContent>
-                      </Card>
+                      <div className="border-y border-border/50">
+                        {rows.map((row, idx) => (
+                          <div
+                            key={row.key}
+                            className={idx > 0 ? 'border-t border-border/50' : ''}
+                          >
+                            {row.kind === 'one' ? (
+                              <AssignmentRow item={row.item} />
+                            ) : (
+                              <HomeworkRow
+                                hw={row.hw}
+                                items={row.items}
+                                isOpen={expanded.has(row.key)}
+                                onToggle={() => toggleExpand(row.key)}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </section>
                 );
