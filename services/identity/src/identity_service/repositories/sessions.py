@@ -24,9 +24,32 @@ class SessionRepository:
         return (await self.s.execute(stmt)).scalar_one_or_none()
 
     async def list_for_user(self, user_id: str) -> list[Session]:
+        """All sessions ever issued to a user, including revoked + expired.
+
+        Use this for admin/audit views (``GET /users/{id}/sessions``)
+        where the full history is the point. For the self-service
+        ``/users/me/sessions`` view that drives the Безопасность UI on
+        Profile use :meth:`list_active_for_user` — otherwise the user
+        clicks «Завершить», the row stays put, and they think nothing
+        happened.
+        """
         stmt = (
             select(Session)
             .where(Session.user_id == user_id)
+            .order_by(Session.last_used_at.desc())
+        )
+        return list((await self.s.execute(stmt)).scalars().all())
+
+    async def list_active_for_user(self, user_id: str) -> list[Session]:
+        """Sessions that are still usable: not revoked and not expired."""
+        now = datetime.now(timezone.utc)
+        stmt = (
+            select(Session)
+            .where(
+                Session.user_id == user_id,
+                Session.revoked_at.is_(None),
+                Session.expires_at > now,
+            )
             .order_by(Session.last_used_at.desc())
         )
         return list((await self.s.execute(stmt)).scalars().all())

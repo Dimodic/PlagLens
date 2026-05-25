@@ -229,7 +229,11 @@ async def my_sessions(
     session: AsyncSession = Depends(get_session),
 ) -> Page[SessionOut]:
     sessions = SessionRepository(session)
-    rows = await sessions.list_for_user(user.id)
+    # Self-service view: hide revoked + expired sessions. The Безопасность
+    # block on Profile is "what's currently logged in as me" — surfacing
+    # past sessions there confuses users (they revoke a row, the click
+    # succeeds, the row stays, they file a bug).
+    rows = await sessions.list_active_for_user(user.id)
     return Page[SessionOut](
         data=[
             SessionOut(
