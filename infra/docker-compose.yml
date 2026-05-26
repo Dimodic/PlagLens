@@ -300,9 +300,15 @@ services:
       DATABASE_URL: postgresql+asyncpg://plagiarism_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
       DATABASE_SCHEMA: plagiarism
       SUBMISSION_BASE_URL: http://course-submission:8000
+      # MOSS / Codequiry env left in place but unused — adapters were
+      # removed; provider registry only knows ``dolos`` now.
       MOSS_USER_ID: ${MOSS_USER_ID:-}
       CODEQUIRY_API_KEY: ${CODEQUIRY_API_KEY:-}
-      DOLOS_BIN_PATH: /usr/local/bin/dolos
+      # No DOLOS_BIN_PATH — Dockerfile installs the CLI to /usr/bin/dolos
+      # via NodeSource (npm -g), which is on $PATH, so the default
+      # ``dolos`` resolves correctly. Setting an absolute path here is a
+      # foot-gun: a wrong value (e.g. the historical /usr/local/bin)
+      # bypasses PATH and crashes the run with "No such file".
       MAX_CONCURRENT_RUNS: "3"
     volumes:
       - ./secrets:/run/secrets:ro
