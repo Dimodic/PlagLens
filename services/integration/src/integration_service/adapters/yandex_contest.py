@@ -387,6 +387,34 @@ class YandexContestAdapter(IntegrationAdapter):
                     logger.warning("yandex_contest.fetch_failed", contest_id=cid, error=str(exc))
         return out
 
+    async def fetch_contest_meta(
+        self, config: Any, contest_id: int | str
+    ) -> dict[str, Any] | None:
+        """Return raw metadata for one contest (``name``, ``startTime`` etc).
+
+        Used by /import-participants to auto-rename the linked homework
+        from its placeholder (``"Контест #NNNNN"``) to the real contest
+        name once we've completed the OAuth-authenticated fetch.
+
+        Returns ``None`` on any error — caller falls back to the existing
+        title rather than blocking the import on metadata.
+        """
+        token = await _token_for(config)
+        if not token:
+            return None
+        async with httpx.AsyncClient(
+            timeout=get_settings().httpx_timeout_seconds
+        ) as client:
+            try:
+                return await yc_get(client, token, f"contests/{contest_id}")
+            except (_YCError, httpx.HTTPError) as exc:
+                logger.warning(
+                    "yandex_contest.meta_failed",
+                    contest_id=contest_id,
+                    error=str(exc),
+                )
+                return None
+
     async def import_participants(
         self, config: Any, scope: Dict[str, Any]
     ) -> ImportResult:

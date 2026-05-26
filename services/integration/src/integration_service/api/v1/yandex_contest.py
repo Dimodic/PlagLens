@@ -1367,6 +1367,8 @@ async def import_participants(
     config_id: str,
     contest_id: int,
     request: Request,
+    course_id: str | None = None,
+    homework_id: str | None = None,
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
 ) -> dict[str, Any]:
@@ -1451,10 +1453,15 @@ async def import_participants(
             for it in identity_result.get("items", [])
         ]
         enrolled: dict[str, Any] = {"added": 0, "existing": 0, "failed": 0}
-        if cfg.course_id and members:
+        # The integration is tenant-wide (course_id may be None on cfg);
+        # the caller passes course_id explicitly when they click the import
+        # button next to a homework binding. Fall back to cfg.course_id
+        # only for the legacy per-course integration shape.
+        target_course_id = course_id or cfg.course_id
+        if target_course_id and members:
             course_url = (
                 settings.course_service_url.rstrip("/")
-                + f"/api/v1/courses/{cfg.course_id}/members:batchCreate"
+                + f"/api/v1/courses/{target_course_id}/members:batchCreate"
             )
             try:
                 resp2 = await client.post(
@@ -1481,12 +1488,42 @@ async def import_participants(
             except httpx.HTTPError as exc:
                 enrolled = {"added": 0, "existing": 0, "failed": len(members), "error": str(exc)}
 
+    # Auto-rename the linked homework to the real Y.C. contest name
+    # (best-effort; failure is silent — the placeholder "Контест #N"
+    # stays put). Only do this when the caller passed homework_id.
+    contest_name: str | None = None
+    if homework_id:
+        meta = await adapter.fetch_contest_meta(cfg, contest_id)
+        if meta and isinstance(meta.get("name"), str):
+            contest_name = meta["name"].strip() or None
+        if contest_name:
+            hw_url = (
+                settings.course_service_url.rstrip("/")
+                + f"/api/v1/homeworks/{homework_id}"
+            )
+            async with httpx.AsyncClient(
+                timeout=settings.httpx_timeout_seconds
+            ) as client:
+                try:
+                    await client.patch(
+                        hw_url,
+                        headers=fwd_headers,
+                        json={"title": contest_name},
+                    )
+                except httpx.HTTPError as exc:
+                    logger.warning(
+                        "course.rename_homework_failed",
+                        homework_id=homework_id,
+                        error=str(exc),
+                    )
+
     return {
         "data": [asdict(rp) for rp in result.participants],
         "imported": result.imported,
         "failed": result.failed,
         "errors": result.errors,
-        "course_id": cfg.course_id,
+        "course_id": target_course_id,
+        "contest_name": contest_name,
         "identity": {
             "created": identity_result.get("created", 0),
             "existing": identity_result.get("existing", 0),

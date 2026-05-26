@@ -30,7 +30,6 @@ import {
   CheckCircle2,
   Clock,
   ExternalLink,
-  FileText,
   Loader2,
   Plus,
   RefreshCw,
@@ -147,12 +146,28 @@ export default function YandexContestImportPage() {
     Record<string, SubmissionsSummary>
   >({});
 
-  const onImport = async (contestId: number, key: string) => {
+  const onImport = async (
+    contestId: number,
+    key: string,
+    courseId?: string,
+    homeworkId?: string,
+  ) => {
     if (!configId) return;
     setBusyId(key);
     try {
-      const res = await integrationsApi.ycImportParticipants(configId, contestId);
+      const res = await integrationsApi.ycImportParticipants(
+        configId,
+        contestId,
+        { course_id: courseId, homework_id: homeworkId },
+      );
       setResults((p) => ({ ...p, [key]: res }));
+      // Backend will rename the homework + add students to course; pull
+      // homework list so the UI catches the new title without manual reload.
+      if (courseId) {
+        queryClient.invalidateQueries({
+          queryKey: ['course-homeworks', courseId],
+        });
+      }
     } catch (raw) {
       const p = raw as Problem;
       setResults((prev) => ({
@@ -336,24 +351,30 @@ export default function YandexContestImportPage() {
                         size="sm"
                         variant="ghost"
                         className="h-7 px-2"
-                        onClick={() => onImport(contestId, key)}
+                        onClick={() =>
+                          onImport(
+                            contestId,
+                            key,
+                            String(course.id),
+                            String(hw.id),
+                          )
+                        }
                         disabled={busyId === key}
                         data-testid={`yc-import-hw-${hw.id}`}
                       >
                         <Users className="mr-1.5 h-3.5 w-3.5" />
                         {busyId === key ? 'Студенты…' : 'Студенты'}
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-7 px-2"
-                        onClick={() => onImportSubmissions(contestId, key)}
-                        disabled={busyId === `sub-${key}`}
-                        data-testid={`yc-sub-import-hw-${hw.id}`}
-                      >
-                        <FileText className="mr-1.5 h-3.5 w-3.5" />
-                        {busyId === `sub-${key}` ? 'Посылки…' : 'Посылки'}
-                      </Button>
+                      {/* Submission import requires a per-problem
+                          assignment binding (Y.Contest gives runs per
+                          contest+problem; submission-service needs an
+                          assignment_id target). The mapping UI for that
+                          isn't wired yet — temporarily hidden so the
+                          button doesn't surface a 400 to the user.
+                          Hidden via display:none rather than ripped out
+                          so re-enabling is a one-line revert when the
+                          mapping ships. */}
+                      <button hidden onClick={() => onImportSubmissions(contestId, key)} />
                       <Button
                         size="sm"
                         variant="ghost"

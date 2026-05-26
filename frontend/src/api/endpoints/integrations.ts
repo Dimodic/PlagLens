@@ -241,7 +241,11 @@ export const integrationsApi = {
       .delete<void>(`/admin/integrations/oauth-providers/${kind}`)
       .then((r) => r.data),
 
-  ycImportParticipants: (configId: string, contestId: number | string) =>
+  ycImportParticipants: (
+    configId: string,
+    contestId: number | string,
+    opts: { course_id?: string; homework_id?: string } = {},
+  ) =>
     api
       .post<{
         data: unknown[];
@@ -251,8 +255,16 @@ export const integrationsApi = {
         course_id: string | null;
         identity?: { created: number; existing: number };
         course?: { added: number; existing: number; failed: number; error?: string };
+        contest_name?: string | null;
       }>(
         `/integrations/yandex-contest/${configId}/contests/${contestId}/import-participants`,
+        null,
+        {
+          params: {
+            ...(opts.course_id ? { course_id: opts.course_id } : {}),
+            ...(opts.homework_id ? { homework_id: opts.homework_id } : {}),
+          },
+        },
       )
       .then((r) => r.data),
 
