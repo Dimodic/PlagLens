@@ -694,14 +694,13 @@ function IntegrationDetail(props: DetailProps) {
                   )}
                   {!isRunning && j.stats && (
                     <p className="pl-5 text-xs text-muted-foreground">
-                      {/* Show error count only when the run actually
-                         failed. Dolos / dedup noise during a successful
-                         resync would otherwise stamp a confusing
-                         «ошибок N» on a green check. */}
-                      импортировано {j.stats.imported}
-                      {j.status === 'failed' && (
-                        <> · ошибок {j.stats.failed}</>
-                      )}
+                      {/* "проверено N · новых M" — surface the dedup
+                         signal so a "0 imported" resync of an unchanged
+                         contest doesn't read as a silent failure. Falls
+                         back to the bare new-count when the backend
+                         didn't supply ``scanned`` (older rows). Errors
+                         only on actual failure. */}
+                      {summariseStats(j.stats, j.status)}
                     </p>
                   )}
                   {!isRunning && j.error && j.status === 'failed' && (
@@ -748,6 +747,41 @@ function triggerLabel(trigger: string): string {
     default:
       return trigger;
   }
+}
+
+function summariseStats(
+  stats: NonNullable<
+    NonNullable<ReturnType<typeof useImportJobs>['data']>['data']
+  >[number]['stats'],
+  status: string,
+): string {
+  if (!stats) return '';
+  // ``scanned``/``deduplicated`` are new fields — older rows won't
+  // have them. Fall back gracefully so the page doesn't blank out
+  // on historical jobs.
+  const s = stats as unknown as {
+    imported?: number;
+    deduplicated?: number;
+    skipped?: number;
+    failed?: number;
+    scanned?: number;
+  };
+  const imported = s.imported ?? 0;
+  const dedup = s.deduplicated ?? 0;
+  const scanned = s.scanned ?? imported + dedup + (s.skipped ?? 0) + (s.failed ?? 0);
+
+  const parts: string[] = [];
+  if (scanned > 0) {
+    parts.push(`проверено ${scanned}`);
+    parts.push(`новых ${imported}`);
+    if (dedup > 0) parts.push(`уже были ${dedup}`);
+  } else {
+    parts.push(`импортировано ${imported}`);
+  }
+  if (status === 'failed' && (s.failed ?? 0) > 0) {
+    parts.push(`ошибок ${s.failed}`);
+  }
+  return parts.join(' · ');
 }
 
 function formatProgress(p: JobProgress): string {

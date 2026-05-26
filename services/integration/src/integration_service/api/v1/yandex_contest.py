@@ -186,9 +186,16 @@ async def _finalize_import_job(
     imported: int = 0,
     skipped: int = 0,
     failed: int = 0,
+    deduplicated: int = 0,
     errors: list[str] | None = None,
 ) -> None:
     """Mark ``job_id`` finished and stamp ``last_sync_*`` on its config.
+
+    ``deduplicated`` is the submission-service "already exists" tally —
+    a re-sync of an unchanged contest comes back fully deduplicated and
+    ``imported=0``, which used to look (to the user) like the run silently
+    did nothing. We persist both so the UI can render
+    ``проверено N · новых M`` instead of bare ``импортировано 0``.
 
     Idempotent — a missing row (e.g. the request that created it was rolled
     back before commit) is silently ignored so a tail-end error in the
@@ -197,6 +204,7 @@ async def _finalize_import_job(
     sm = get_sessionmaker()
     now = datetime.now(UTC)
     err_list = list(errors or [])
+    scanned = imported + deduplicated + skipped + failed
     async with sm() as s:
         job = (
             await s.execute(select(ImportJob).where(ImportJob.id == job_id))
@@ -206,8 +214,10 @@ async def _finalize_import_job(
             job.finished_at = now
             job.stats = {
                 "imported": imported,
+                "deduplicated": deduplicated,
                 "skipped": skipped,
                 "failed": failed,
+                "scanned": scanned,
                 "errors": err_list[:20],
             }
             job.error = (
@@ -498,12 +508,20 @@ async def _import_submissions_for_aliases(
     fwd_headers: dict[str, str],
     settings: Any,
     op_id: str | None = None,
-) -> tuple[int, list[str]]:
+) -> tuple[dict[str, int], list[str]]:
     """Pull contest submissions once, group by problem alias, then bulk-import
     users and post a per-assignment batchImport.
 
-    Mirrors the single-assignment ``import-submissions`` endpoint but
-    handles the whole contest at once. Returns ``(total_ingested, errors)``.
+    Returns ``(stats, errors)`` where ``stats`` carries:
+      * ``created``       — fresh rows landed in submission-service
+      * ``deduplicated``  — already-imported (external_id hit existing)
+      * ``skipped``       — submission-service filtered out (no source etc.)
+      * ``failed``        — batchImport reported failure for that item
+
+    The split matters because a re-run of an already-imported contest
+    ends up with ``created=0, deduplicated=N`` — without surfacing the
+    dedup count the UI just shows "импортировано 0" and the teacher
+    reasonably suspects something is broken.
     """
     # Walk YC's submission list page-by-page. Each page costs ~PAGE_SIZE
     # × 0.1s on the /full GETs inside the adapter, so we bound the total
@@ -599,6 +617,9 @@ async def _import_submissions_for_aliases(
     # instead of opaque ``usr_…`` ids.
 
     total_ingested = 0
+    total_dedup = 0
+    total_skipped = 0
+    total_failed = 0
     for alias, subs in by_alias.items():
         aid = alias_to_aid.get(alias)
         if not aid:
@@ -723,6 +744,9 @@ async def _import_submissions_for_aliases(
             sk = int(body_json.get("skipped", 0))
             fl = int(body_json.get("failed", 0))
             total_ingested += cr
+            total_dedup += dd
+            total_skipped += sk
+            total_failed += fl
             if op_id is not None:
                 await _op_update(
                     op_id,
@@ -755,7 +779,13 @@ async def _import_submissions_for_aliases(
                 )
         except Exception as exc:  # noqa: BLE001
             errors.append(f"alias {alias}: parse response: {exc!s}")
-    return total_ingested, errors
+    stats = {
+        "created": total_ingested,
+        "deduplicated": total_dedup,
+        "skipped": total_skipped,
+        "failed": total_failed,
+    }
+    return stats, errors
 
 
 router = APIRouter(prefix="/integrations/yandex-contest", tags=["yandex-contest"])
@@ -1288,10 +1318,12 @@ async def _run_import_as_homework(
             # 4. Submissions — same client, same service token. This is the
             # slow stage (1000+ /full GETs); the op state ticks per page +
             # per batchImport so the modal can show live numbers.
-            sub_imported = 0
+            sub_stats: dict[str, int] = {
+                "created": 0, "deduplicated": 0, "skipped": 0, "failed": 0,
+            }
             sub_errors: list[str] = []
             if alias_to_aid:
-                sub_imported, sub_errors = await _import_submissions_for_aliases(
+                sub_stats, sub_errors = await _import_submissions_for_aliases(
                     adapter=adapter,
                     cfg=cfg,
                     contest_id=contest_id,
@@ -1309,7 +1341,7 @@ async def _run_import_as_homework(
             status="completed",
             stage="done",
             problems_done=created,
-            submissions_imported=sub_imported,
+            submissions_imported=sub_stats["created"],
             errors=combined_errors,
         )
         logger.info(
@@ -1318,15 +1350,18 @@ async def _run_import_as_homework(
             contest_id=contest_id,
             homework_id=homework_id,
             created=created,
-            sub_imported=sub_imported,
+            sub_created=sub_stats["created"],
+            sub_dedup=sub_stats["deduplicated"],
         )
         if job_id is not None:
             await _finalize_import_job(
                 job_id=job_id,
                 config_id=str(cfg.id),
                 status="completed",
-                imported=sub_imported,
-                failed=len(combined_errors),
+                imported=sub_stats["created"],
+                deduplicated=sub_stats["deduplicated"],
+                skipped=sub_stats["skipped"],
+                failed=sub_stats["failed"],
                 errors=combined_errors,
             )
     except Exception as exc:  # noqa: BLE001
@@ -1483,7 +1518,7 @@ async def _run_resync_submissions(
             # 3. Re-run the submission import against the existing
             #    assignments (also refreshes language_hint from the runs).
             adapter = YandexContestAdapter()
-            sub_imported, sub_errors = await _import_submissions_for_aliases(
+            sub_stats, sub_errors = await _import_submissions_for_aliases(
                 adapter=adapter,
                 cfg=cfg,
                 contest_id=contest_id,
@@ -1500,7 +1535,7 @@ async def _run_resync_submissions(
             status="completed",
             stage="done",
             problems_done=len(alias_to_aid),
-            submissions_imported=sub_imported,
+            submissions_imported=sub_stats["created"],
             errors=sub_errors[:10],
         )
         logger.info(
@@ -1509,15 +1544,18 @@ async def _run_resync_submissions(
             contest_id=contest_id,
             homework_id=homework_id,
             assignments=len(alias_to_aid),
-            sub_imported=sub_imported,
+            sub_created=sub_stats["created"],
+            sub_dedup=sub_stats["deduplicated"],
         )
         if job_id is not None:
             await _finalize_import_job(
                 job_id=job_id,
                 config_id=str(cfg.id),
                 status="completed",
-                imported=sub_imported,
-                failed=len(sub_errors),
+                imported=sub_stats["created"],
+                deduplicated=sub_stats["deduplicated"],
+                skipped=sub_stats["skipped"],
+                failed=sub_stats["failed"],
                 errors=sub_errors[:10],
             )
     except Exception as exc:  # noqa: BLE001
@@ -1620,6 +1658,9 @@ async def _run_sync_all_imported_contests(
         return
 
     total_subs = 0
+    total_dedup = 0
+    total_skipped = 0
+    total_failed = 0
     contests_done = 0
     errors: list[str] = []
 
@@ -1745,7 +1786,7 @@ async def _run_sync_all_imported_contests(
                 # that here; instead we sample its outcome and update
                 # the ImportJob row).
                 adapter = YandexContestAdapter()
-                sub_imported, sub_errors = await _import_submissions_for_aliases(
+                sub_stats, sub_errors = await _import_submissions_for_aliases(
                     adapter=adapter,
                     cfg=cfg,
                     contest_id=contest_id,
@@ -1756,7 +1797,10 @@ async def _run_sync_all_imported_contests(
                     settings=settings,
                     op_id=None,
                 )
-                total_subs += sub_imported
+                total_subs += sub_stats["created"]
+                total_dedup += sub_stats["deduplicated"]
+                total_skipped += sub_stats["skipped"]
+                total_failed += sub_stats["failed"]
                 if sub_errors:
                     errors.extend(sub_errors[:2])
                 contests_done += 1
@@ -1764,13 +1808,17 @@ async def _run_sync_all_imported_contests(
                     job_id,
                     stage="homework_done",
                     submissions_imported=total_subs,
+                    submissions_scanned=(
+                        total_subs + total_dedup + total_skipped + total_failed
+                    ),
                 )
 
         logger.info(
             "yc.sync_all.completed",
             cfg_id=cfg.id,
             contests_done=contests_done,
-            subs_imported=total_subs,
+            subs_created=total_subs,
+            subs_dedup=total_dedup,
             err_count=len(errors),
         )
         await _finalize_import_job(
@@ -1778,7 +1826,9 @@ async def _run_sync_all_imported_contests(
             config_id=str(cfg.id),
             status="completed",
             imported=total_subs,
-            failed=len(errors),
+            deduplicated=total_dedup,
+            skipped=total_skipped,
+            failed=total_failed,
             errors=errors[:10],
         )
     except Exception as exc:  # noqa: BLE001
