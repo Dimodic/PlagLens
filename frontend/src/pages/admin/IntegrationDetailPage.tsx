@@ -1,29 +1,45 @@
 /**
- * /admin/integrations/:id — view / edit / schedules / sync / OAuth.
+ * /integrations/:id (also mounted as /admin/integrations/:id).
+ *
+ * Flat open-document layout per .claude/UI_RULES.md. Earlier iterations
+ * leaned heavily on Card wrappers + tabs + raw kind-specific edit form
+ * (oauth_token, contest_ids, course_id) — but those are admin-side
+ * debug surfaces. For a teacher all that matters is:
+ *
+ *   1. What this integration is — header reads ``display_name`` only,
+ *      no ``kind``/``status`` chips next to it.
+ *   2. Rename it (inline form).
+ *   3. Run a manual sync.
+ *   4. See recent sync history.
+ *   5. Set up automatic sync schedules.
+ *   6. Disconnect / re-authorise if OAuth expired.
+ *
+ * Cursor state + kind-specific settings are gone from this page; they
+ * still live on the backend and can be inspected from the audit log if
+ * needed.
  */
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { StatusPill } from '@/components/common/StatusPill';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
-import { EmptyState } from '@/components/common/EmptyState';
-import { IntegrationStatusBadge } from '@/components/admin/IntegrationStatusBadge';
 import { Page, PageHeader } from '@/components/layout/Page';
-import {
-  IntegrationConfigForm,
-  type IntegrationConfigFormValues,
-} from '@/components/admin/IntegrationConfigForm';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useCreateSchedule,
+  useDeleteIntegration,
   useDeleteSchedule,
   useImportJobs,
   useIntegration,
@@ -39,88 +55,88 @@ export function IntegrationDetailPage() {
   const { id } = useParams<{ id: string }>();
   useDocumentTitle('Интеграция');
   const notify = useNotifications();
+  const navigate = useNavigate();
 
   const integrationQ = useIntegration(id);
   const schedulesQ = useSchedules(id);
-  const jobsQ = useImportJobs(id, { limit: 20 });
+  const jobsQ = useImportJobs(id, { limit: 10 });
   const update = useUpdateIntegration(id ?? '');
   const test = useTestIntegration();
   const sync = useSyncNow(id ?? '');
   const oauth = useOauthStartIntegration();
+  const remove = useDeleteIntegration();
   const createSchedule = useCreateSchedule(id ?? '');
   const deleteSchedule = useDeleteSchedule(id ?? '');
 
-  const [values, setValues] = useState<IntegrationConfigFormValues>({
-    display_name: '',
-    course_id: null,
-    settings: {},
-  });
+  const [displayName, setDisplayName] = useState('');
   const [cron, setCron] = useState('0 */6 * * *');
   const [scheduleEnabled, setScheduleEnabled] = useState(true);
 
   useEffect(() => {
     if (integrationQ.data) {
-      setValues({
-        display_name: integrationQ.data.display_name,
-        course_id: integrationQ.data.course_id,
-        settings: integrationQ.data.settings ?? {},
-      });
+      setDisplayName(integrationQ.data.display_name);
     }
   }, [integrationQ.data]);
 
   if (integrationQ.isLoading) {
     return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
+      <Page width="regular">
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      </Page>
     );
   }
   if (integrationQ.error) {
-    return <ProblemAlert problem={integrationQ.error as unknown as Problem} />;
+    return (
+      <Page width="regular">
+        <ProblemAlert problem={integrationQ.error as unknown as Problem} />
+      </Page>
+    );
   }
 
   const i = integrationQ.data;
   if (!i) return null;
 
-  const handleSave = async () => {
+  const dirtyName = displayName.trim() !== i.display_name && !!displayName.trim();
+  const isPendingAuth = i.status === 'pending_auth';
+
+  const onSaveName = async () => {
     try {
-      await update.mutateAsync({
-        display_name: values.display_name,
-        settings: values.settings,
-      });
+      await update.mutateAsync({ display_name: displayName.trim() });
       notify.success('Сохранено');
-      integrationQ.refetch();
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось');
     }
   };
 
-  const handleTest = async () => {
+  const onTest = async () => {
     try {
       const r = await test.mutateAsync(i.id);
+      const why = r.detail ?? r.message;
       if (r.ok) {
-        notify.success(`Connection OK${r.latency_ms ? ` (${r.latency_ms}ms)` : ''}`);
+        notify.success(
+          `Подключение работает${r.latency_ms ? ` · ${r.latency_ms} мс` : ''}`,
+        );
       } else {
-        // Backend uses `detail`; some legacy callers used `message` — try both.
-        const why = r.detail ?? r.message;
-        notify.error(why ? `Тест не прошёл: ${why}` : 'Тест не прошёл');
+        notify.error(why ? `Не отвечает: ${why}` : 'Не отвечает');
       }
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось');
     }
   };
 
-  const handleSync = async () => {
+  const onSync = async () => {
     try {
       await sync.mutateAsync({});
-      notify.success('Sync запущен');
+      notify.success('Синхронизация запущена');
       jobsQ.refetch();
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось');
     }
   };
 
-  const handleOAuth = async () => {
+  const onReauth = async () => {
     try {
       const r = await oauth.mutateAsync(i.id);
       window.location.href = r.authorize_url;
@@ -129,7 +145,7 @@ export function IntegrationDetailPage() {
     }
   };
 
-  const handleAddSchedule = async () => {
+  const onAddSchedule = async () => {
     try {
       await createSchedule.mutateAsync({ cron, enabled: scheduleEnabled });
       notify.success('Расписание добавлено');
@@ -139,7 +155,7 @@ export function IntegrationDetailPage() {
     }
   };
 
-  const handleDeleteSchedule = async (sid: string) => {
+  const onDeleteSchedule = async (sid: string) => {
     try {
       await deleteSchedule.mutateAsync(sid);
       notify.success('Удалено');
@@ -148,195 +164,321 @@ export function IntegrationDetailPage() {
     }
   };
 
+  const onDisconnect = async () => {
+    if (
+      !confirm(
+        `Отключить интеграцию «${i.display_name}»?\nСвязанные ДЗ останутся в курсе, но импорт прекратится.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      await remove.mutateAsync(i.id);
+      notify.success('Интеграция отключена');
+      navigate('/integrations');
+    } catch (e) {
+      notify.error((e as Problem)?.detail ?? 'Не удалось');
+    }
+  };
+
+  const jobs = jobsQ.data?.data ?? [];
+  const schedules = schedulesQ.data ?? [];
+
   return (
     <Page width="regular">
       <PageHeader
-        title={
-          <span className="flex items-center gap-3">
-            {i.display_name}
-            <span className="flex items-center gap-2">
-              <StatusPill tone="neutral">{i.kind}</StatusPill>
-              <IntegrationStatusBadge status={i.status} />
-            </span>
-          </span>
-        }
+        title={<span data-testid="integration-detail-title">{i.display_name}</span>}
         action={
           <>
-            <Button variant="ghost" onClick={handleTest} disabled={test.isPending}>
-              {test.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Тест
+            <Button
+              variant="ghost"
+              onClick={onTest}
+              disabled={test.isPending}
+              data-testid="integration-detail-test"
+            >
+              {test.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Проверить
             </Button>
-            <Button onClick={handleSync} disabled={sync.isPending}>
-              {sync.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Sync now
+            <Button
+              onClick={onSync}
+              disabled={sync.isPending || isPendingAuth}
+              data-testid="integration-detail-sync"
+            >
+              {sync.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-4 w-4" />
+              )}
+              Синхронизировать
             </Button>
-            {i.status === 'pending_auth' && (
-              <Button variant="outline" onClick={handleOAuth} className="text-amber-600 border-amber-600">
-                Re-auth
-              </Button>
-            )}
           </>
         }
       />
 
-      <Tabs defaultValue="config">
-        <TabsList>
-          <TabsTrigger value="config">Configuration</TabsTrigger>
-          <TabsTrigger value="schedules">Schedules</TabsTrigger>
-          <TabsTrigger value="jobs">Sync history</TabsTrigger>
-          <TabsTrigger value="cursor">Cursor</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="config" className="pt-4">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <IntegrationConfigForm
-                kind={i.kind}
-                value={values}
-                onChange={setValues}
-                readonlyCourse
-              />
-              <div className="flex items-center justify-end">
-                <Button onClick={handleSave} disabled={update.isPending}>
-                  {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Сохранить
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="schedules" className="pt-4">
-          <Card>
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-end gap-3">
-                <div className="flex-1 space-y-1.5">
-                  <Label htmlFor="schedule-cron">Cron</Label>
-                  <Input
-                    id="schedule-cron"
-                    value={cron}
-                    onChange={(e) => setCron(e.currentTarget.value)}
-                  />
-                  <p className="text-xs text-muted-foreground">Например: 0 */6 * * *</p>
-                </div>
-                <div className="flex items-center gap-2 pb-2">
-                  <Switch
-                    id="schedule-enabled"
-                    checked={scheduleEnabled}
-                    onCheckedChange={(v) => setScheduleEnabled(v)}
-                  />
-                  <Label htmlFor="schedule-enabled">Enabled</Label>
-                </div>
-                <Button onClick={handleAddSchedule} disabled={createSchedule.isPending}>
-                  {createSchedule.isPending ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plus className="mr-2 h-4 w-4" />
-                  )}
-                  Добавить
-                </Button>
-              </div>
-
-              {schedulesQ.isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : schedulesQ.data && schedulesQ.data.length > 0 ? (
-                <div className="space-y-2">
-                  {schedulesQ.data.map((s) => (
-                    <div
-                      key={s.id}
-                      className="flex items-center justify-between gap-3"
-                      data-testid={`schedule-${s.id}`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <code className="rounded bg-muted px-2 py-0.5 text-xs font-mono">
-                          {s.cron}
-                        </code>
-                        <StatusPill tone={s.enabled ? 'success' : 'neutral'}>
-                          {s.enabled ? 'enabled' : 'disabled'}
-                        </StatusPill>
-                        {s.next_run_at && (
-                          <span className="text-xs text-muted-foreground">
-                            next: {dayjs(s.next_run_at).format('DD.MM HH:mm')}
-                          </span>
-                        )}
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDeleteSchedule(s.id)}
-                        className="text-destructive hover:text-destructive"
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Удалить
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Расписаний нет</p>
+      {/* pending_auth — single-line nudge to re-OAuth */}
+      {isPendingAuth && (
+        <div className="flex items-start gap-3 border-t border-border/50 pt-6 text-sm">
+          <AlertCircle className="mt-0.5 h-4 w-4 flex-none text-amber-500" />
+          <div className="space-y-2">
+            <p>
+              Подключение требует авторизации. Без неё импорт работать не будет.
+            </p>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onReauth}
+              disabled={oauth.isPending}
+              data-testid="integration-detail-reauth"
+            >
+              {oauth.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+              Пройти авторизацию заново
+            </Button>
+          </div>
+        </div>
+      )}
 
-        <TabsContent value="jobs" className="pt-4">
-          {jobsQ.isLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            </div>
-          ) : jobsQ.data && jobsQ.data.data.length > 0 ? (
-            <div className="space-y-3">
-              {jobsQ.data.data.map((j) => (
-                <Card key={j.id} data-testid={`job-${j.id}`}>
-                  <CardContent className="p-4 space-y-1">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <StatusPill tone="neutral">{j.status}</StatusPill>
-                        <span className="text-xs font-mono">{j.id}</span>
-                        <span className="text-xs text-muted-foreground">{j.trigger}</span>
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {j.started_at
-                          ? dayjs(j.started_at).format('DD.MM HH:mm')
-                          : 'queued'}
+      {/* Name */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Название
+        </h2>
+        <div className="flex items-end gap-2">
+          <div className="flex-1 space-y-1.5">
+            <Label htmlFor="integration-display-name" className="sr-only">
+              Название
+            </Label>
+            <Input
+              id="integration-display-name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.currentTarget.value)}
+              data-testid="integration-detail-name"
+            />
+          </div>
+          <Button
+            onClick={onSaveName}
+            disabled={!dirtyName || update.isPending}
+            data-testid="integration-detail-save"
+          >
+            {update.isPending && (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            )}
+            Сохранить
+          </Button>
+        </div>
+      </section>
+
+      {/* Schedules */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Расписание автосинхронизации
+        </h2>
+
+        {schedulesQ.isLoading ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Загружаем…
+          </div>
+        ) : schedules.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Расписаний нет — добавьте ниже, чтобы импорт шёл автоматически.
+          </p>
+        ) : (
+          <ul
+            className="divide-y divide-border/40"
+            data-testid="integration-detail-schedules"
+          >
+            {schedules.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+                data-testid={`schedule-${s.id}`}
+              >
+                <div className="flex items-center gap-3">
+                  <code className="rounded bg-muted/50 px-2 py-0.5 font-mono text-xs">
+                    {s.cron}
+                  </code>
+                  <span
+                    className={
+                      s.enabled
+                        ? 'text-xs text-emerald-600 dark:text-emerald-400'
+                        : 'text-xs text-muted-foreground/70'
+                    }
+                  >
+                    {s.enabled ? 'включено' : 'выключено'}
+                  </span>
+                  {s.next_run_at && (
+                    <span className="text-xs text-muted-foreground">
+                      следующий запуск {dayjs(s.next_run_at).format('D MMM, HH:mm')}
+                    </span>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-destructive hover:text-destructive"
+                  onClick={() => onDeleteSchedule(s.id)}
+                  aria-label="Удалить расписание"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex flex-wrap items-end gap-3 pt-2">
+          <div className="min-w-[200px] flex-1 space-y-1.5">
+            <Label htmlFor="schedule-cron">Cron-выражение</Label>
+            <Input
+              id="schedule-cron"
+              value={cron}
+              onChange={(e) => setCron(e.currentTarget.value)}
+              placeholder="0 */6 * * *"
+              className="font-mono"
+            />
+            <p className="text-xs text-muted-foreground">
+              Например: <span className="font-mono">0 */6 * * *</span> — раз в 6 часов.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 pb-2.5">
+            <Switch
+              id="schedule-enabled"
+              checked={scheduleEnabled}
+              onCheckedChange={setScheduleEnabled}
+            />
+            <Label htmlFor="schedule-enabled" className="text-sm">
+              Включено
+            </Label>
+          </div>
+          <Button
+            onClick={onAddSchedule}
+            disabled={createSchedule.isPending || !cron.trim()}
+          >
+            {createSchedule.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            Добавить
+          </Button>
+        </div>
+      </section>
+
+      {/* Sync history */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          История синхронизаций
+        </h2>
+
+        {jobsQ.isLoading ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Загружаем…
+          </div>
+        ) : jobs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Импортов ещё не было.</p>
+        ) : (
+          <ul
+            className="divide-y divide-border/40"
+            data-testid="integration-detail-jobs"
+          >
+            {jobs.map((j) => {
+              const at = j.started_at ?? j.finished_at;
+              return (
+                <li
+                  key={j.id}
+                  className="space-y-0.5 py-2.5 text-sm"
+                  data-testid={`job-${j.id}`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-2">
+                      {j.status === 'completed' ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : j.status === 'failed' ? (
+                        <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                      ) : (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+                      )}
+                      <span className="text-foreground">
+                        {jobStatusLabel(j.status)}
                       </span>
-                    </div>
-                    {j.stats && (
-                      <p className="text-xs text-muted-foreground">
-                        imported: {j.stats.imported} • skipped: {j.stats.skipped} •
-                        failed: {j.stats.failed}
-                      </p>
-                    )}
-                    {j.error && (
-                      <p className="text-xs text-destructive">
-                        {j.error.title}
-                        {j.error.detail ? `: ${j.error.detail}` : ''}
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <EmptyState title="Импортов ещё не было" />
-          )}
-        </TabsContent>
+                      <span className="text-xs text-muted-foreground">
+                        · {triggerLabel(j.trigger)}
+                      </span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {at ? dayjs(at).format('D MMM, HH:mm') : 'в очереди'}
+                    </span>
+                  </div>
+                  {j.stats && (
+                    <p className="pl-5 text-xs text-muted-foreground">
+                      импортировано {j.stats.imported} · пропущено{' '}
+                      {j.stats.skipped} · ошибок {j.stats.failed}
+                    </p>
+                  )}
+                  {j.error && (
+                    <p className="pl-5 text-xs text-destructive">
+                      {j.error.title}
+                      {j.error.detail ? `: ${j.error.detail}` : ''}
+                    </p>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
 
-        <TabsContent value="cursor" className="pt-4">
-          <Card>
-            <CardContent className="p-6">
-              <p className="mb-3 text-sm text-muted-foreground">
-                Текущий cursor (kind-specific):
-              </p>
-              <pre className="overflow-auto rounded bg-muted p-3 text-xs font-mono">
-                {JSON.stringify(i.cursor ?? {}, null, 2)}
-              </pre>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      {/* Disconnect */}
+      <section className="border-t border-border/50 pt-6">
+        <Button
+          variant="ghost"
+          onClick={onDisconnect}
+          disabled={remove.isPending}
+          className="text-destructive hover:text-destructive"
+          data-testid="integration-detail-disconnect"
+        >
+          {remove.isPending && (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          )}
+          <Trash2 className="mr-2 h-4 w-4" />
+          Отключить интеграцию
+        </Button>
+      </section>
     </Page>
   );
+}
+
+function jobStatusLabel(status: string): string {
+  switch (status) {
+    case 'completed':
+      return 'успешно';
+    case 'failed':
+      return 'ошибка';
+    case 'running':
+      return 'в работе';
+    case 'queued':
+      return 'в очереди';
+    default:
+      return status;
+  }
+}
+
+function triggerLabel(trigger: string): string {
+  switch (trigger) {
+    case 'manual':
+      return 'вручную';
+    case 'scheduled':
+      return 'по расписанию';
+    case 'webhook':
+      return 'веб-хук';
+    default:
+      return trigger;
+  }
 }
 
 export default IntegrationDetailPage;
