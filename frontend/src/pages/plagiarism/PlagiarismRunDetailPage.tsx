@@ -15,6 +15,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ClusterCard } from '@/components/plagiarism/ClusterCard';
 import { ClusterMapView } from '@/components/plagiarism/ClusterMapView';
 import { PairTable } from '@/components/plagiarism/PairTable';
+import { SubmissionPreviewDialog } from '@/components/plagiarism/SubmissionPreviewDialog';
 import {
   SimilarityBar,
   similarityPercent,
@@ -258,6 +259,12 @@ function MapTab({ runId, totalSubmissions }: MapTabProps) {
   // matches).
   const pairsQ = usePairs(runId, { limit: 200, sort: '-similarity' });
   const clustersQ = useClusters(runId);
+  // Tap-target → modal showing the clicked student's source code. Lives
+  // here (not inside ClusterMapView) so the modal portal sits at page
+  // level and is unaffected by the map's internal pan/zoom.
+  const [previewSubmissionId, setPreviewSubmissionId] = useState<
+    string | null
+  >(null);
   const isLoading = pairsQ.isLoading || clustersQ.isLoading;
   const error = pairsQ.error || clustersQ.error;
   if (isLoading) {
@@ -275,17 +282,26 @@ function MapTab({ runId, totalSubmissions }: MapTabProps) {
     return (
       <EmptyState
         title="Совпадений не найдено"
-        description="JPlag не нашёл пар выше порога. Рисовать карту нечего."
+        description="Антиплагиат не нашёл пар выше порога. Рисовать карту нечего."
       />
     );
   }
   return (
-    <ClusterMapView
-      pairs={pairs}
-      clusters={clusters}
-      runId={runId}
-      totalSubmissions={totalSubmissions}
-    />
+    <>
+      <ClusterMapView
+        pairs={pairs}
+        clusters={clusters}
+        runId={runId}
+        totalSubmissions={totalSubmissions}
+        onNodeClick={setPreviewSubmissionId}
+      />
+      <SubmissionPreviewDialog
+        submissionId={previewSubmissionId}
+        onOpenChange={(open) => {
+          if (!open) setPreviewSubmissionId(null);
+        }}
+      />
+    </>
   );
 }
 

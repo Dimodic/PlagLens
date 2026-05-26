@@ -41,6 +41,11 @@ interface ClusterMapViewProps {
    *  itself into a side-by-side diff view). When omitted, edges fall
    *  back to a <Link> to the standalone pair-diff page. */
   onPairClick?: (pairId: string) => void;
+  /** Node click handler. When set, clicking a circle calls back with
+   *  the submission id — the parent typically opens a modal showing
+   *  that student's source code so a teacher can eyeball the code
+   *  without leaving the map. */
+  onNodeClick?: (submissionId: string) => void;
   /** Total submissions the run analysed. When provided, the map renders
    *  a caption — "N из M посылок с совпадениями" — so a teacher doesn't
    *  misread the (deliberately small) cluster graph as "only N students
@@ -116,6 +121,7 @@ export function ClusterMapView({
   runId,
   focusSubmissionId,
   onPairClick,
+  onNodeClick,
   totalSubmissions,
 }: ClusterMapViewProps) {
   const layout = useMemo(() => buildLayout(pairs, clusters), [pairs, clusters]);
@@ -443,14 +449,31 @@ export function ClusterMapView({
                 cy={n.cy}
                 r={18}
                 className={cn(
-                  isFocus
-                    ? 'stroke-primary'
-                    : 'stroke-border',
+                  isFocus ? 'stroke-primary' : 'stroke-border',
                   n.filled ? 'fill-foreground' : 'fill-background',
+                  onNodeClick &&
+                    'cursor-pointer transition-transform hover:scale-110',
                 )}
                 strokeWidth={isFocus ? 2.5 : 1.5}
+                onClick={
+                  onNodeClick
+                    ? (e) => {
+                        e.stopPropagation();
+                        onNodeClick(n.submissionId);
+                      }
+                    : undefined
+                }
+                style={
+                  onNodeClick
+                    ? { transformBox: 'fill-box', transformOrigin: 'center' }
+                    : undefined
+                }
               >
-                <title>{n.label}</title>
+                <title>
+                  {onNodeClick
+                    ? `${n.label} — нажмите, чтобы посмотреть код`
+                    : n.label}
+                </title>
               </circle>
               <text
                 x={lx}
@@ -586,12 +609,16 @@ function buildLayout(
     }
   }
 
-  // 5. Geometry — pack clusters in a 2D grid rather than one long
-  // horizontal row. The previous "row only" layout produced a 6000-px-
-  // wide chart for 20+ clusters; rendered at fit-to-container it
-  // squished everything to ~50 px tall and edges turned into noise.
-  // sqrt-grid keeps the canvas roughly square so SVG scaling preserves
-  // aspect ratio and dots stay visible.
+  // 5. Geometry — shelf-pack per-cluster cells (each sized to fit its
+  // own ring + labels) instead of a uniform sqrt-grid. The previous
+  // grid sized every cell to the *largest* cluster's footprint, so a
+  // 60-member ring sitting next to a 2-member dyad blew the dyad's
+  // cell up to the same dimensions and left huge expanses of dead
+  // space (and the small clusters drifted hundreds of pixels apart).
+  // Shelf-pack lays cells L→R, wraps when the running row width
+  // exceeds the target — large clusters pin their row's height, small
+  // ones nestle against each other inside the leftover horizontal
+  // run.
   const placements: { ids: string[]; isOutlier: boolean; clusterIdx: number }[] =
     [];
   for (const bucket of filledBuckets) {
@@ -600,40 +627,69 @@ function buildLayout(
   if (outliers.length) {
     placements.push({ ids: outliers, isOutlier: true, clusterIdx: -1 });
   }
-  const clusterCount = placements.length;
-  // Largest cluster drives the cell footprint so its ring always fits
-  // inside its cell — otherwise a single 10-member cluster pushes its
-  // labels into the neighbouring cell.
-  const maxClusterSize = placements.reduce(
-    (m, p) => Math.max(m, p.ids.length),
-    1,
-  );
-  const cellW = Math.max(260, 130 + maxClusterSize * 22);
-  const cellH = Math.max(240, 130 + maxClusterSize * 20);
-  const cols = clusterCount === 0 ? 1 : Math.ceil(Math.sqrt(clusterCount));
-  const rows = clusterCount === 0 ? 1 : Math.ceil(clusterCount / cols);
+
+  // Per-cluster cell size — driven by the ring radius (which scales
+  // with member count) plus enough margin for the radial label.
+  const cellOf = (size: number): { w: number; h: number; ringR: number } => {
+    if (size <= 1) return { w: 160, h: 130, ringR: 0 };
+    const baseR = 35 + size * 6;
+    // Cap so a single huge cluster doesn't run off the SVG; the rest
+    // of the formula keeps small clusters genuinely small.
+    const ringR = Math.min(baseR, 240);
+    const pad = 110; // label band on each side
+    const sz = Math.max(220, ringR * 2 + pad);
+    return { w: sz, h: sz, ringR };
+  };
+
+  // Shelf-pack — pick a target width that scales with the biggest
+  // cluster but doesn't run wider than ~3 large cells. Then wrap.
+  const cells = placements.map((p) => cellOf(p.ids.length));
+  const maxCellW = cells.reduce((m, c) => Math.max(m, c.w), 0);
   const padding = 30;
-  const width = Math.max(640, cols * cellW + padding * 2);
-  const height = Math.max(400, rows * cellH + padding * 2);
+  const gap = 16;
+  const targetRowW = Math.max(maxCellW * 2 + gap, 900);
+
+  type CellLayout = {
+    cx: number;
+    cy: number;
+    ringR: number;
+    placement: typeof placements[number];
+  };
+  const cellLayouts: CellLayout[] = [];
+  let curX = padding;
+  let curY = padding;
+  let rowMaxH = 0;
+  let rowMaxW = 0;
+  placements.forEach((p, i) => {
+    const c = cells[i];
+    // Wrap row when the next cell would push past the target width.
+    if (curX > padding && curX + c.w > padding + targetRowW) {
+      rowMaxW = Math.max(rowMaxW, curX);
+      curX = padding;
+      curY += rowMaxH + gap;
+      rowMaxH = 0;
+    }
+    cellLayouts.push({
+      cx: curX + c.w / 2,
+      cy: curY + c.h / 2,
+      ringR: c.ringR,
+      placement: p,
+    });
+    curX += c.w + gap;
+    rowMaxH = Math.max(rowMaxH, c.h);
+  });
+  rowMaxW = Math.max(rowMaxW, curX);
+  const width = Math.max(640, rowMaxW + padding);
+  const height = Math.max(360, curY + rowMaxH + padding);
 
   const nodes: NodeLayout[] = [];
-  placements.forEach((p, idx) => {
-    const col = idx % cols;
-    const row = Math.floor(idx / cols);
-    const cx = padding + (col + 0.5) * cellW;
-    const cy = padding + (row + 0.5) * cellH;
-    // Ring radius scales with members so they don't pile on top of
-    // each other; labels sit *outside* the ring (see render) so the
-    // ring itself can be smaller than the cell. cap stays sensible
-    // for big clusters.
-    const baseR = p.ids.length <= 1 ? 0 : 35 + p.ids.length * 6;
-    const ringR = Math.min(baseR, cellW / 2.6);
-    placeOnCircle(p.ids, cx, cy, ringR).forEach((pos, i) => {
-      const id = p.ids[i];
+  cellLayouts.forEach(({ cx, cy, ringR, placement }) => {
+    placeOnCircle(placement.ids, cx, cy, ringR).forEach((pos, i) => {
+      const id = placement.ids[i];
       nodes.push({
         submissionId: id,
         label: labels.get(id) ?? id,
-        clusterIdx: p.clusterIdx,
+        clusterIdx: placement.clusterIdx,
         cx: pos.x,
         cy: pos.y,
         clusterCx: cx,
