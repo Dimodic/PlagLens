@@ -214,24 +214,27 @@ export default function YandexContestImportPage() {
   };
 
   // -------- add binding --------
+  // No "Название ДЗ" input: it's reachable info on Y.Contest's side
+  // (GET /v2/contests/<id> returns ``name``). We seed the homework
+  // with a placeholder title ("Контест #NNNNN") and let the first
+  // import-participants tick rename it to the real contest name —
+  // simpler than blocking the form on an extra Y.Contest call before
+  // the user even hit "Привязать".
   const [newCourseId, setNewCourseId] = useState<string>('');
-  const [newTitle, setNewTitle] = useState('');
   const [newContestId, setNewContestId] = useState('');
   const addM = useMutation({
     mutationFn: async () => {
       const cid = Number(newContestId.trim());
       if (!newCourseId) throw new Error('Выберите курс');
-      if (!newTitle.trim()) throw new Error('Укажите название ДЗ');
       if (!cid) throw new Error('ID контеста должен быть числом');
       return homeworksApi.create(newCourseId, {
-        title: newTitle.trim(),
+        title: `Контест #${cid}`,
         // Magic marker the importer + autosync read.
         description: `Yandex.Contest contest_id=${cid}`,
       });
     },
     onSuccess: () => {
       notify.success('Контест привязан');
-      setNewTitle('');
       setNewContestId('');
       queryClient.invalidateQueries({
         queryKey: ['course-homeworks', newCourseId],
@@ -252,16 +255,9 @@ export default function YandexContestImportPage() {
 
   return (
     <Page width="regular">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Импорт из Yandex.Contest
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Один OAuth-токен обслуживает все ваши курсы. Привяжите контест к ДЗ —
-          студенты, посылки и оценки начнут синхронизироваться автоматически
-          каждые 5 минут. Кнопки ниже запускают конкретный контест вручную.
-        </p>
-      </header>
+      <h1 className="text-2xl font-semibold tracking-tight">
+        Импорт из Yandex.Contest
+      </h1>
 
       {/* Autosync row */}
       <section className="space-y-3 border-t border-border/50 pt-6">
@@ -271,7 +267,7 @@ export default function YandexContestImportPage() {
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-foreground">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            каждые 5 минут — для всех привязанных контестов
+            каждые 5 минут
           </div>
           {configId && <ManualSyncButton configId={configId} />}
         </div>
@@ -387,10 +383,10 @@ export default function YandexContestImportPage() {
         </h2>
         <form
           onSubmit={onAddSubmit}
-          className="grid gap-3 sm:grid-cols-[1fr_1fr_140px_auto] sm:items-end"
+          className="flex flex-wrap items-end gap-3"
           data-testid="yc-add-binding-form"
         >
-          <div className="space-y-1.5">
+          <div className="min-w-[200px] flex-1 space-y-1.5">
             <Label htmlFor="yc-add-course">Курс</Label>
             <Select value={newCourseId} onValueChange={setNewCourseId}>
               <SelectTrigger id="yc-add-course" data-testid="yc-add-course">
@@ -405,17 +401,7 @@ export default function YandexContestImportPage() {
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="yc-add-title">Название ДЗ</Label>
-            <Input
-              id="yc-add-title"
-              value={newTitle}
-              onChange={(e) => setNewTitle(e.currentTarget.value)}
-              placeholder="ДЗ 1 — Сортировки"
-              data-testid="yc-add-title"
-            />
-          </div>
-          <div className="space-y-1.5">
+          <div className="w-32 space-y-1.5">
             <Label htmlFor="yc-add-contest-id">ID контеста</Label>
             <Input
               id="yc-add-contest-id"
@@ -431,10 +417,7 @@ export default function YandexContestImportPage() {
           <Button
             type="submit"
             disabled={
-              addM.isPending ||
-              !newCourseId ||
-              !newTitle.trim() ||
-              !newContestId.trim()
+              addM.isPending || !newCourseId || !newContestId.trim()
             }
             data-testid="yc-add-submit"
           >
@@ -446,13 +429,6 @@ export default function YandexContestImportPage() {
             Привязать
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground">
-          ID — это число из URL контеста на{' '}
-          <span className="font-mono">contest.yandex.ru</span>. В описание ДЗ
-          мы запишем маркер{' '}
-          <code className="font-mono">contest_id=NNNNN</code> — этого достаточно,
-          чтобы автосинк подхватил привязку.
-        </p>
       </section>
 
       {configId && <SyncHistorySection configId={configId} />}
