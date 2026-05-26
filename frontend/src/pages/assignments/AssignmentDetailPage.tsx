@@ -18,11 +18,8 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronRight,
-  Clock,
-  FileText,
   Loader2,
   MoreHorizontal,
-  Settings,
   Sparkles,
   Trash2,
   Upload,
@@ -361,6 +358,15 @@ export default function AssignmentDetailPage() {
             )}
             {isTeacher && (
               <>
+                {/*
+                  Header is now: primary "Запустить проверку" + kebab.
+                  Everything else (settings, deadlines, all-submissions,
+                  duplicate, archive) lives inside the kebab — the previous
+                  layout had three header buttons + a separate "Действия"
+                  rail in the sidebar that listed two of the same destinations
+                  again, which is exactly the duplication the design rules
+                  forbid.
+                */}
                 <Button
                   onClick={handleRunPlag}
                   disabled={runPlag.isPending}
@@ -368,16 +374,6 @@ export default function AssignmentDetailPage() {
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
                   Запустить проверку
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  data-testid="assignment-settings-button"
-                >
-                  <Link to={`/assignments/${assignment.id}/settings`}>
-                    <Settings className="mr-2 h-4 w-4" />
-                    Настройки
-                  </Link>
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -391,6 +387,30 @@ export default function AssignmentDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      asChild
+                      data-testid="assignment-action-settings"
+                    >
+                      <Link to={`/assignments/${assignment.id}/settings`}>
+                        Настройки
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      asChild
+                      data-testid="assignment-action-all-submissions"
+                    >
+                      <Link to={`/assignments/${assignment.id}/submissions`}>
+                        Все посылки
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      asChild
+                      data-testid="assignment-action-deadlines"
+                    >
+                      <Link to={`/assignments/${assignment.id}/deadlines`}>
+                        Дедлайны
+                      </Link>
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => void handleDuplicate()}
                       data-testid="assignment-action-duplicate"
@@ -442,9 +462,12 @@ export default function AssignmentDetailPage() {
             )}
           </TabsList>
 
-          {/* Body — design-system §4 Pattern D: 1fr main + 280px rail. */}
-          <div className="mt-6 grid grid-cols-1 gap-10 lg:grid-cols-[1fr_240px]">
-            {/* LEFT */}
+          {/* Body — single full-width column. The 240px right rail used
+              to host an "Действия" block, but its only items (Все посылки,
+              Дедлайны) are now in the kebab next to the title; everything
+              else on the right was duplicating tab content. */}
+          <div className="mt-6">
+            {/* MAIN */}
             <div className="min-w-0 space-y-6">
               <TabsContent value="about" className="mt-0">
                 {assignment.description ? (
@@ -713,36 +736,6 @@ export default function AssignmentDetailPage() {
               </TabsContent>
             </div>
 
-            {/* RIGHT — единственная секция «Действия», без дубля
-                «Запустить проверку» (она уже в шапке) и без дубля
-                статистики (есть полноценный таб «Статистика»). */}
-            <aside className="min-w-0 text-sm">
-              <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-3">
-                Действия
-              </h2>
-              <div className="flex flex-col gap-2">
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full justify-start"
-                >
-                  <Link to={`/assignments/${assignment.id}/submissions`}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Все посылки
-                  </Link>
-                </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  className="w-full justify-start"
-                >
-                  <Link to={`/assignments/${assignment.id}/deadlines`}>
-                    <Clock className="mr-2 h-4 w-4" />
-                    Дедлайны
-                  </Link>
-                </Button>
-              </div>
-            </aside>
           </div>
         </Tabs>
       </div>
