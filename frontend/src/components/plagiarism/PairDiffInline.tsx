@@ -37,6 +37,70 @@ interface PairDiffInlineProps {
 export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
   const { data, isLoading, error } = usePairDetail(runId, pairId);
 
+  // ---- Hooks must run unconditionally — early returns sit below ----
+  //
+  // Everything that ends in ``useXxx`` needs to be called every render,
+  // otherwise the loading→loaded transition adds a hook and React bails
+  // with #310 ("Rendered more hooks than during the previous render").
+  // We compute the derived values defensively (handling ``data ===
+  // undefined``) and *then* branch on the loading / error state.
+
+  type SubmissionInfoWithContent = { content?: string | null } & Record<
+    string,
+    unknown
+  >;
+  const aFull = data
+    ? (data.submissions.a as SubmissionInfoWithContent).content
+    : undefined;
+  const bFull = data
+    ? (data.submissions.b as SubmissionInfoWithContent).content
+    : undefined;
+  const fragments = data?.fragments ?? [];
+
+  const buildContent = (side: 'a' | 'b'): string => {
+    const full = side === 'a' ? aFull : bFull;
+    if (typeof full === 'string' && full) return full;
+    const lines: string[] = [];
+    for (const f of fragments) {
+      const start = side === 'a' ? f.a_start_line : f.b_start_line;
+      const end = side === 'a' ? f.a_end_line : f.b_end_line;
+      const content = (side === 'a' ? f.a_content : f.b_content) ?? '';
+      while (lines.length < start - 1) lines.push('');
+      const fragLines = content.split(/\r?\n/);
+      for (let i = 0; i < fragLines.length && start + i - 1 < end; i++) {
+        lines[start + i - 1] = fragLines[i];
+      }
+    }
+    return lines.join('\n');
+  };
+
+  const aFile =
+    fragments.find((f: PlagiarismPairFragment) => f.a_file)?.a_file ??
+    'submission';
+  const bFile =
+    fragments.find((f: PlagiarismPairFragment) => f.b_file)?.b_file ??
+    'submission';
+  const aFinal = buildContent('a');
+  const bFinal = buildContent('b');
+  // Fragment fallback — see file header. Compute once per (content,
+  // backend-fragments) so the same pair doesn't re-tokenise on every
+  // viewport repaint. Called unconditionally so React's hook order
+  // stays stable across the loading→loaded transition.
+  const effectiveFragments = useMemo<PlagiarismPairFragment[]>(() => {
+    if (fragments.length > 0) return fragments;
+    if (!aFinal || !bFinal) return [];
+    return synthesiseFragmentsByStructuralLineMatch(aFinal, bFinal, {
+      aFile,
+      bFile,
+    });
+    // aFinal / bFinal / aFile / bFile are derived from `data`; depending
+    // on `data` covers them transitively. Re-listing them is fine — the
+    // refs are stable across renders when data is.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, aFinal, bFinal, aFile, bFile]);
+
+  // ---- Early returns now safe — every hook above has fired ----
+
   if (isLoading) {
     return (
       <div className="py-10 text-center text-sm text-muted-foreground">
@@ -53,60 +117,9 @@ export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
     );
   }
 
-  // Prefer the full submission source when the backend supplies it
-  // (submissions.{a,b}.content) — match ranges then become overlays
-  // on the complete file, so the closing brace of ``main`` and any
-  // surrounding helper functions stay visible. Older runs without
-  // content fall back to the fragment-stitch below.
-  type SubmissionInfoWithContent = { content?: string | null } & Record<
-    string,
-    unknown
-  >;
-  const aFull = (data.submissions.a as SubmissionInfoWithContent).content;
-  const bFull = (data.submissions.b as SubmissionInfoWithContent).content;
-  const buildContent = (side: 'a' | 'b'): string => {
-    const full = side === 'a' ? aFull : bFull;
-    if (typeof full === 'string' && full) return full;
-    const lines: string[] = [];
-    for (const f of data.fragments) {
-      const start = side === 'a' ? f.a_start_line : f.b_start_line;
-      const end = side === 'a' ? f.a_end_line : f.b_end_line;
-      const content = (side === 'a' ? f.a_content : f.b_content) ?? '';
-      while (lines.length < start - 1) lines.push('');
-      const fragLines = content.split(/\r?\n/);
-      for (let i = 0; i < fragLines.length && start + i - 1 < end; i++) {
-        lines[start + i - 1] = fragLines[i];
-      }
-    }
-    return lines.join('\n');
-  };
-
-  const aFile =
-    data.fragments.find((f: PlagiarismPairFragment) => f.a_file)?.a_file ??
-    'submission';
-  const bFile =
-    data.fragments.find((f: PlagiarismPairFragment) => f.b_file)?.b_file ??
-    'submission';
   const aName = data.submissions.a.author?.display_name ?? 'студент A';
   const bName = data.submissions.b.author?.display_name ?? 'студент B';
   const simPct = (data.similarity * 100).toFixed(1);
-
-  // Fragment fallback — see file header. Compute once per (content,
-  // backend-fragments) so the same pair doesn't re-tokenise on every
-  // viewport repaint.
-  const aFinal = buildContent('a');
-  const bFinal = buildContent('b');
-  const effectiveFragments = useMemo<PlagiarismPairFragment[]>(() => {
-    if (data.fragments.length > 0) return data.fragments;
-    if (!aFinal || !bFinal) return [];
-    return synthesiseFragmentsByStructuralLineMatch(aFinal, bFinal, {
-      aFile,
-      bFile,
-    });
-    // aFinal/bFinal are derived from `data`; depending on `data` covers
-    // them transitively.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.fragments, aFinal, bFinal, aFile, bFile]);
 
   return (
     <div className="flex h-full flex-col gap-3 min-h-0">
