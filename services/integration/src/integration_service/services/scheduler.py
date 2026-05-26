@@ -159,7 +159,103 @@ async def _record_job(
 
 
 async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
-    """Pull every contest tied to this config; report aggregate stats."""
+    """Autosync tick for one YC config.
+
+    Reads ``cfg.settings.autosync`` (UI-managed prefs):
+      * ``enabled``        — bool, master switch
+      * ``hours``          — int 1..24, cooldown window
+      * ``homework_ids``   — list of homework_id strings the teacher
+                              ticked
+      * ``last_run_at``    — ISO timestamp of the previous successful
+                              tick (we stamp it ourselves on completion)
+
+    If autosync is off, no homeworks are selected, or we're inside the
+    cooldown window, the tick skips without burning rate limits. The
+    actual resync work is delegated to the same
+    ``_run_sync_all_imported_contests`` helper that backs the manual
+    "Sync all" button, but with a ``homework_filter`` set so only
+    selected homeworks get pulled.
+    """
+    settings_obj = cfg.settings if isinstance(cfg.settings, dict) else {}
+    autosync = settings_obj.get("autosync") if isinstance(settings_obj, dict) else None
+    if not isinstance(autosync, dict):
+        return {"config": cfg.id, "skipped": True, "reason": "no autosync prefs"}
+    if not autosync.get("enabled", False):
+        return {"config": cfg.id, "skipped": True, "reason": "autosync disabled"}
+
+    try:
+        hours = int(autosync.get("hours") or 6)
+    except (TypeError, ValueError):
+        hours = 6
+    hours = max(1, min(24, hours))
+    homework_ids = {str(x) for x in (autosync.get("homework_ids") or [])}
+    if not homework_ids:
+        return {
+            "config": cfg.id,
+            "skipped": True,
+            "reason": "no homeworks selected",
+        }
+
+    # Cooldown — refuse to re-tick within ``hours`` of the last success.
+    last_str = autosync.get("last_run_at")
+    if isinstance(last_str, str):
+        try:
+            last_dt = datetime.fromisoformat(last_str.replace("Z", "+00:00"))
+            elapsed_h = (datetime.now(UTC) - last_dt).total_seconds() / 3600.0
+            if elapsed_h < hours:
+                return {
+                    "config": cfg.id,
+                    "skipped": True,
+                    "reason": f"cooldown ({elapsed_h:.1f}h < {hours}h)",
+                }
+        except (ValueError, AttributeError):
+            pass
+
+    # Run the same helper the manual sync uses, but constrained to the
+    # selected homeworks. Inline await — the scheduler tick already
+    # owns the event loop, no need for asyncio.create_task here.
+    from integration_service.api.v1.yandex_contest import (
+        _run_sync_all_imported_contests,
+        _start_import_job,
+        _stamp_autosync_last_run,
+    )
+
+    job_id = await _start_import_job(
+        config_id=str(cfg.id),
+        tenant_id=str(cfg.tenant_id),
+        scope={
+            "autosync": True,
+            "homework_ids": sorted(homework_ids),
+            "hours": hours,
+        },
+        trigger="scheduled",
+    )
+    cfg_snap = type(
+        "_CfgSnap",
+        (),
+        {
+            "id": cfg.id,
+            "tenant_id": cfg.tenant_id,
+            "course_id": cfg.course_id,
+            "settings": cfg.settings,
+        },
+    )()
+    await _run_sync_all_imported_contests(
+        job_id=job_id, cfg=cfg_snap, homework_filter=homework_ids
+    )
+    await _stamp_autosync_last_run(str(cfg.id))
+    return {
+        "config": cfg.id,
+        "homeworks": len(homework_ids),
+        "hours": hours,
+    }
+
+
+# Legacy scheduler path (course-scoped configs, pulls every contest
+# from every homework). Kept here in case we ever revive it for a
+# non-YC adapter that doesn't fit the new autosync model. Currently
+# unreachable from ``_sync_one_config``.
+async def _sync_one_config_legacy(cfg: IntegrationConfig) -> dict[str, Any]:
     started = datetime.now(UTC)
     headers = await auth_headers()
     course_id = cfg.course_id

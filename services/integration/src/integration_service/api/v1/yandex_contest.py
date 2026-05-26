@@ -1537,8 +1537,35 @@ async def _run_resync_submissions(
             )
 
 
+async def _stamp_autosync_last_run(config_id: str) -> None:
+    """Record the current timestamp on ``cfg.settings.autosync.last_run_at``.
+
+    Called by the scheduler immediately after a successful autosync tick
+    so subsequent ticks within the configured ``hours`` window can skip
+    themselves rather than thrash the upstream API.
+    """
+    sm = get_sessionmaker()
+    async with sm() as s:
+        row = (
+            await s.execute(
+                select(IntegrationConfig).where(IntegrationConfig.id == config_id)
+            )
+        ).scalar_one_or_none()
+        if row is None:
+            return
+        settings_obj = dict(row.settings or {})
+        autosync = dict(settings_obj.get("autosync") or {})
+        autosync["last_run_at"] = datetime.now(UTC).isoformat()
+        settings_obj["autosync"] = autosync
+        row.settings = settings_obj
+        await s.commit()
+
+
 async def _run_sync_all_imported_contests(
-    *, job_id: str, cfg: Any
+    *,
+    job_id: str,
+    cfg: Any,
+    homework_filter: set[str] | None = None,
 ) -> None:
     """Manual "Синхронизировать" handler for a YC integration.
 
@@ -1609,6 +1636,13 @@ async def _run_sync_all_imported_contests(
                     errors.append(f"bad mapping key {key_str}")
                     continue
                 hw_id_str = str(hw_id)
+
+                # Honour the optional homework filter — scheduled
+                # autosync passes the set of homeworks that have been
+                # checked in the UI; manual "Sync all" passes None and
+                # syncs everything.
+                if homework_filter is not None and hw_id_str not in homework_filter:
+                    continue
 
                 # Skip contests whose homework was deleted server-side.
                 alive = await _homework_exists(
