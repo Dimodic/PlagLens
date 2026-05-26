@@ -539,10 +539,23 @@ function buildLayout(
     );
   }
 
-  // 2. Build cluster index: submission_id → cluster index. Only index
-  //    members that actually made it into the node set.
+  // 2. Decide which cluster index every node belongs to.
+  //    The backend may or may not ship cluster rows: Dolos's adapter
+  //    reports ``supports_clusters = False`` so the orchestrator writes
+  //    none — without a synthetic fallback all 60-odd matched nodes
+  //    pile up in a single ``outliers`` ring and the map becomes a
+  //    spaghetti blob. When ``clusters`` is empty we run connected-
+  //    components on the strong-match subgraph (similarity ≥
+  //    PARTIAL_SIM) and treat each component as its own cluster. Pure
+  //    "touches"-only links don't merge components — that's what the
+  //    legacy outliers bucket exists for.
+  const effectiveClusters: PlagiarismCluster[] =
+    clusters.length > 0
+      ? clusters
+      : synthesiseClustersFromPairs(drawablePairs, connectedIds);
+
   const clusterOf = new Map<string, number>();
-  clusters.forEach((c, i) => {
+  effectiveClusters.forEach((c, i) => {
     for (const m of c.members) {
       if (connectedIds.has(m)) clusterOf.set(m, i);
     }
@@ -550,7 +563,7 @@ function buildLayout(
 
   // 3. Bucket nodes: clustered ones go to their cluster's list, the rest
   // form a synthetic "outliers" group placed last on the right.
-  const buckets: string[][] = clusters.map(() => []);
+  const buckets: string[][] = effectiveClusters.map(() => []);
   const outliers: string[] = [];
   for (const id of labels.keys()) {
     const ci = clusterOf.get(id);
@@ -645,6 +658,66 @@ function buildLayout(
   }));
 
   return { nodes, edges, width, height };
+}
+
+/**
+ * Connected-components clustering fallback used when the backend ships
+ * zero clusters (Dolos: ``supports_clusters=false``). Only edges with
+ * similarity ≥ ``PARTIAL_SIM`` merge components — pure ``touches`` noise
+ * doesn't, so weak matches don't dissolve the whole graph into one
+ * giant blob. Singletons skip — they end up in the legacy outliers
+ * bucket so the layout doesn't render a separate cell per isolated
+ * student.
+ */
+function synthesiseClustersFromPairs(
+  drawablePairs: PlagiarismPair[],
+  connectedIds: Set<string>,
+): PlagiarismCluster[] {
+  const adj = new Map<string, Set<string>>();
+  const touch = (id: string): Set<string> => {
+    let s = adj.get(id);
+    if (!s) {
+      s = new Set();
+      adj.set(id, s);
+    }
+    return s;
+  };
+  for (const id of connectedIds) touch(id);
+  for (const p of drawablePairs) {
+    if (p.similarity < PARTIAL_SIM) continue;
+    touch(p.a_submission_id).add(p.b_submission_id);
+    touch(p.b_submission_id).add(p.a_submission_id);
+  }
+  const visited = new Set<string>();
+  const components: string[][] = [];
+  for (const seed of connectedIds) {
+    if (visited.has(seed)) continue;
+    const comp: string[] = [];
+    const queue: string[] = [seed];
+    while (queue.length > 0) {
+      const v = queue.shift()!;
+      if (visited.has(v)) continue;
+      visited.add(v);
+      comp.push(v);
+      for (const next of adj.get(v) ?? []) {
+        if (!visited.has(next)) queue.push(next);
+      }
+    }
+    // Singletons (no strong edge to anyone) → leave for outliers.
+    if (comp.length >= 2) components.push(comp);
+  }
+  // Sort biggest-first so the layout's grid places the dominant
+  // groups in the top-left, which the eye reaches first.
+  components.sort((a, b) => b.length - a.length);
+  return components.map(
+    (members, i): PlagiarismCluster => ({
+      id: `synth-${i}`,
+      run_id: '',
+      members,
+      avg_similarity: 0,
+      dominant_language: '',
+    }),
+  );
 }
 
 function clamp(v: number, lo: number, hi: number): number {
