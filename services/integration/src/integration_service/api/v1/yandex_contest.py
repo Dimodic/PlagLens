@@ -9,11 +9,13 @@ import time
 import unicodedata
 from collections import Counter
 from dataclasses import asdict
+from datetime import UTC, datetime
 from typing import Any
 
 import httpx
 import structlog
 from fastapi import APIRouter, Depends, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration_service.adapters.base import RemoteProblem
@@ -24,10 +26,12 @@ from integration_service.adapters.yandex_contest import (
 from integration_service.api.v1.configs import ensure_owner_or_admin
 from integration_service.common.auth import Principal
 from integration_service.common.db import get_sessionmaker
+from integration_service.common.ids import new_job_id
 from integration_service.common.problems import ProblemException, not_found
 from integration_service.common.redis_client import get_redis
 from integration_service.config import get_settings
 from integration_service.deps import principal_dep, session_dep
+from integration_service.models import ImportJob, IntegrationConfig
 from integration_service.repositories import IntegrationConfigRepo
 from integration_service.services.oauth import get_access_token
 from integration_service.services.service_token import auth_headers as service_auth_headers
@@ -132,6 +136,97 @@ async def _op_get(op_id: str) -> dict[str, Any] | None:
         return json.loads(raw)
     except Exception:  # noqa: BLE001
         return None
+
+
+# ---- ImportJob bookkeeping for import-as-homework / resync ----
+#
+# The YC contest-import flow has its own progress model (Redis op_state polled
+# by the modal in CourseDetailPage), separate from the standard ImportJob
+# row used by the scheduler / generic sync endpoint. That kept the modal
+# responsive but meant ``GET /integrations/{id}/import-jobs`` returned an
+# empty list after every YC import — so the IntegrationDetailPage history
+# section read "Импортов ещё не было" even right after a successful run, and
+# the list view never advanced ``last_sync_at``. The helpers below mirror
+# the contest op into an ImportJob row + bump the config's last_sync_* so
+# both surfaces stay accurate.
+
+
+async def _start_import_job(
+    *,
+    config_id: str,
+    tenant_id: str,
+    scope: dict[str, Any],
+    trigger: str = "manual",
+) -> str:
+    """Insert an ``ImportJob`` row in ``running`` state and return its id."""
+    sm = get_sessionmaker()
+    job_id = new_job_id()
+    async with sm() as s:
+        job = ImportJob(
+            id=job_id,
+            integration_id=config_id,
+            tenant_id=tenant_id,
+            scope=scope,
+            trigger=trigger,
+            status="running",
+            progress={"completed": 0, "total": 0, "percent": 0.0},
+            stats={"imported": 0, "skipped": 0, "failed": 0},
+            started_at=datetime.now(UTC),
+        )
+        s.add(job)
+        await s.commit()
+    return job_id
+
+
+async def _finalize_import_job(
+    *,
+    job_id: str,
+    config_id: str,
+    status: str,
+    imported: int = 0,
+    skipped: int = 0,
+    failed: int = 0,
+    errors: list[str] | None = None,
+) -> None:
+    """Mark ``job_id`` finished and stamp ``last_sync_*`` on its config.
+
+    Idempotent — a missing row (e.g. the request that created it was rolled
+    back before commit) is silently ignored so a tail-end error in the
+    background task can't bring down a perfectly good import.
+    """
+    sm = get_sessionmaker()
+    now = datetime.now(UTC)
+    err_list = list(errors or [])
+    async with sm() as s:
+        job = (
+            await s.execute(select(ImportJob).where(ImportJob.id == job_id))
+        ).scalar_one_or_none()
+        if job is not None:
+            job.status = status
+            job.finished_at = now
+            job.stats = {
+                "imported": imported,
+                "skipped": skipped,
+                "failed": failed,
+                "errors": err_list[:20],
+            }
+            job.error = (
+                None if status == "completed" else {"errors": err_list[:5]}
+            )
+        cfg_row = (
+            await s.execute(
+                select(IntegrationConfig).where(IntegrationConfig.id == config_id)
+            )
+        ).scalar_one_or_none()
+        if cfg_row is not None:
+            cfg_row.last_sync_at = now
+            cfg_row.last_sync_status = (
+                "success" if status == "completed" else "failed"
+            )
+            cfg_row.last_sync_error = (
+                None if status == "completed" else "; ".join(err_list[:3]) or None
+            )
+        await s.commit()
 
 
 # ---- Idempotency: (course_id, contest_id) → homework_id mapping ----
@@ -950,12 +1045,23 @@ async def import_as_homework(
                 "errors": [],
                 "resync": True,
             })
+            job_id = await _start_import_job(
+                config_id=str(cfg.id),
+                tenant_id=str(cfg.tenant_id),
+                scope={
+                    "contest_id": contest_id,
+                    "course_id": effective_course_id,
+                    "mode": "resync",
+                },
+                trigger="manual",
+            )
             asyncio.create_task(
                 _run_resync_submissions(
                     op_id=op_id,
                     cfg=cfg_snapshot,
                     contest_id=contest_id,
                     homework_id=str(existing_hw_id),
+                    job_id=job_id,
                 )
             )
             return {
@@ -985,22 +1091,41 @@ async def import_as_homework(
         "submissions_imported": 0,
         "errors": [],
     })
+    job_id = await _start_import_job(
+        config_id=str(cfg.id),
+        tenant_id=str(cfg.tenant_id),
+        scope={
+            "contest_id": contest_id,
+            "course_id": effective_course_id,
+            "mode": "import_as_homework",
+        },
+        trigger="manual",
+    )
 
     asyncio.create_task(
         _run_import_as_homework(
-            op_id=op_id, cfg=cfg_snapshot, contest_id=contest_id
+            op_id=op_id,
+            cfg=cfg_snapshot,
+            contest_id=contest_id,
+            job_id=job_id,
         )
     )
     return {"operation_id": op_id, "status_url": f"/api/v1/integrations/yandex-contest/import-operations/{op_id}"}
 
 
 async def _run_import_as_homework(
-    *, op_id: str, cfg: Any, contest_id: int
+    *, op_id: str, cfg: Any, contest_id: int, job_id: str | None = None
 ) -> None:
     """Background worker doing the actual sync (homework + assignments +
     submissions) and updating the Redis op state as it goes. Uses the
     cached super_admin service token because the user's bearer is not
-    available out-of-request and would expire mid-import anyway."""
+    available out-of-request and would expire mid-import anyway.
+
+    ``job_id`` (when provided) ties this run to a pre-inserted ``ImportJob``
+    row — we update it with the final status + stats so the standard sync
+    history surfaces (``/integrations/{id}/import-jobs`` → the detail page)
+    show this import alongside scheduled / generic syncs.
+    """
     settings = get_settings()
     try:
         s2s = await service_auth_headers()
@@ -1018,6 +1143,13 @@ async def _run_import_as_homework(
                 stage=None,
                 errors=["no OAuth token for YC"],
             )
+            if job_id is not None:
+                await _finalize_import_job(
+                    job_id=job_id,
+                    config_id=str(cfg.id),
+                    status="failed",
+                    errors=["no OAuth token for YC"],
+                )
             return
 
         async with httpx.AsyncClient(
@@ -1067,20 +1199,26 @@ async def _run_import_as_homework(
                     break
                 last_text = hw_resp.text
                 if hw_resp.status_code != 409 or "slug" not in last_text.lower():
-                    await _op_update(
-                        op_id,
-                        status="failed",
-                        errors=[
-                            f"create homework: {hw_resp.status_code} {last_text[:160]}"
-                        ],
-                    )
+                    err = f"create homework: {hw_resp.status_code} {last_text[:160]}"
+                    await _op_update(op_id, status="failed", errors=[err])
+                    if job_id is not None:
+                        await _finalize_import_job(
+                            job_id=job_id,
+                            config_id=str(cfg.id),
+                            status="failed",
+                            errors=[err],
+                        )
                     return
             else:
-                await _op_update(
-                    op_id,
-                    status="failed",
-                    errors=["homework slug exhausted after 50 attempts"],
-                )
+                err = "homework slug exhausted after 50 attempts"
+                await _op_update(op_id, status="failed", errors=[err])
+                if job_id is not None:
+                    await _finalize_import_job(
+                        job_id=job_id,
+                        config_id=str(cfg.id),
+                        status="failed",
+                        errors=[err],
+                    )
                 return
             homework = hw_resp.json()
             homework_id = homework.get("id")
@@ -1165,13 +1303,14 @@ async def _run_import_as_homework(
                     op_id=op_id,
                 )
 
+        combined_errors = (result.errors + per_item_errors + sub_errors)[:10]
         await _op_update(
             op_id,
             status="completed",
             stage="done",
             problems_done=created,
             submissions_imported=sub_imported,
-            errors=(result.errors + per_item_errors + sub_errors)[:10],
+            errors=combined_errors,
         )
         logger.info(
             "yc.import_as_homework.completed",
@@ -1181,6 +1320,15 @@ async def _run_import_as_homework(
             created=created,
             sub_imported=sub_imported,
         )
+        if job_id is not None:
+            await _finalize_import_job(
+                job_id=job_id,
+                config_id=str(cfg.id),
+                status="completed",
+                imported=sub_imported,
+                failed=len(combined_errors),
+                errors=combined_errors,
+            )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "yc.import_as_homework.failed",
@@ -1189,10 +1337,22 @@ async def _run_import_as_homework(
             error=str(exc),
         )
         await _op_update(op_id, status="failed", errors=[str(exc)[:300]])
+        if job_id is not None:
+            await _finalize_import_job(
+                job_id=job_id,
+                config_id=str(cfg.id),
+                status="failed",
+                errors=[str(exc)[:300]],
+            )
 
 
 async def _run_resync_submissions(
-    *, op_id: str, cfg: Any, contest_id: int, homework_id: str
+    *,
+    op_id: str,
+    cfg: Any,
+    contest_id: int,
+    homework_id: str,
+    job_id: str | None = None,
 ) -> None:
     """Re-pull submissions for a contest whose homework + assignments already
     exist.
@@ -1217,9 +1377,15 @@ async def _run_resync_submissions(
                 "access_token"
             )
         if not token:
-            await _op_update(
-                op_id, status="failed", stage=None, errors=["no OAuth token for YC"]
-            )
+            err = "no OAuth token for YC"
+            await _op_update(op_id, status="failed", stage=None, errors=[err])
+            if job_id is not None:
+                await _finalize_import_job(
+                    job_id=job_id,
+                    config_id=str(cfg.id),
+                    status="failed",
+                    errors=[err],
+                )
             return
 
         async with httpx.AsyncClient(
@@ -1234,14 +1400,18 @@ async def _run_resync_submissions(
                 headers=fwd,
             )
             if hw_resp.status_code >= 400:
-                await _op_update(
-                    op_id,
-                    status="failed",
-                    errors=[
-                        f"load homework {homework_id}: "
-                        f"{hw_resp.status_code} {hw_resp.text[:120]}"
-                    ],
+                err = (
+                    f"load homework {homework_id}: "
+                    f"{hw_resp.status_code} {hw_resp.text[:120]}"
                 )
+                await _op_update(op_id, status="failed", errors=[err])
+                if job_id is not None:
+                    await _finalize_import_job(
+                        job_id=job_id,
+                        config_id=str(cfg.id),
+                        status="failed",
+                        errors=[err],
+                    )
                 return
             hw_json = hw_resp.json()
             await _op_update(
@@ -1261,14 +1431,18 @@ async def _run_resync_submissions(
                 params={"limit": 500},
             )
             if asg_resp.status_code >= 400:
-                await _op_update(
-                    op_id,
-                    status="failed",
-                    errors=[
-                        f"list assignments: "
-                        f"{asg_resp.status_code} {asg_resp.text[:120]}"
-                    ],
+                err = (
+                    f"list assignments: "
+                    f"{asg_resp.status_code} {asg_resp.text[:120]}"
                 )
+                await _op_update(op_id, status="failed", errors=[err])
+                if job_id is not None:
+                    await _finalize_import_job(
+                        job_id=job_id,
+                        config_id=str(cfg.id),
+                        status="failed",
+                        errors=[err],
+                    )
                 return
             rows = asg_resp.json().get("data", []) or []
             alias_to_aid: dict[str, str] = {}
@@ -1290,15 +1464,20 @@ async def _run_resync_submissions(
                 stage="fetching_submissions",
             )
             if not alias_to_aid:
-                await _op_update(
-                    op_id,
-                    status="completed",
-                    stage="done",
-                    errors=[
-                        "no Yandex.Contest assignments found on this homework — "
-                        "nothing to resync"
-                    ],
+                msg = (
+                    "no Yandex.Contest assignments found on this homework — "
+                    "nothing to resync"
                 )
+                await _op_update(
+                    op_id, status="completed", stage="done", errors=[msg]
+                )
+                if job_id is not None:
+                    await _finalize_import_job(
+                        job_id=job_id,
+                        config_id=str(cfg.id),
+                        status="completed",
+                        errors=[msg],
+                    )
                 return
 
             # 3. Re-run the submission import against the existing
@@ -1332,6 +1511,15 @@ async def _run_resync_submissions(
             assignments=len(alias_to_aid),
             sub_imported=sub_imported,
         )
+        if job_id is not None:
+            await _finalize_import_job(
+                job_id=job_id,
+                config_id=str(cfg.id),
+                status="completed",
+                imported=sub_imported,
+                failed=len(sub_errors),
+                errors=sub_errors[:10],
+            )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
             "yc.resync_submissions.failed",
@@ -1340,6 +1528,13 @@ async def _run_resync_submissions(
             error=str(exc),
         )
         await _op_update(op_id, status="failed", errors=[str(exc)[:300]])
+        if job_id is not None:
+            await _finalize_import_job(
+                job_id=job_id,
+                config_id=str(cfg.id),
+                status="failed",
+                errors=[str(exc)[:300]],
+            )
 
 
 @router.get("/{config_id}/contests/{contest_id}/participants")

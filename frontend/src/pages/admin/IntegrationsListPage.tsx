@@ -239,13 +239,16 @@ function IntegrationTile({ integration, onChanged }: TileProps) {
           </span>
         )}
       </div>
+      {/*
+        Subtitle shows the freshest useful fact, not architectural meta.
+        Course-id was tagged onto every row even when the integration is
+        tenant-wide ("Без курса") — useless for the teacher, who just wants
+        to know when this connection last did anything. Drop the course-id
+        chip; show only the last-sync line.
+      */}
       <p className="relative z-0 pointer-events-none mt-0.5 text-xs text-muted-foreground truncate">
-        {integration.course_id
-          ? `Курс #${integration.course_id}`
-          : 'Без курса'}
-        {' · '}
         {integration.last_sync_at
-          ? `последний импорт ${dayjs(integration.last_sync_at).format('D MMM')}`
+          ? `последний импорт ${dayjs(integration.last_sync_at).format('D MMM, HH:mm')}`
           : 'импортов ещё не было'}
       </p>
       {integration.last_sync_error && (
