@@ -513,6 +513,7 @@ async def _import_submissions_for_aliases(
     job_id: str | None = None,
     alias_to_title: dict[str, str] | None = None,
     progress_base: dict[str, Any] | None = None,
+    course_id: str | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """Pull contest submissions once, group by problem alias, then bulk-import
     users and post a per-assignment batchImport.
@@ -743,12 +744,22 @@ async def _import_submissions_for_aliases(
             settings.submission_service_url.rstrip("/")
             + f"/api/v1/assignments/{aid}/submissions:batchImport"
         )
+        # submission-service requires a non-null ``course_id`` (it's a
+        # plain ``str`` in the schema). For a tenant-wide integration
+        # ``cfg.course_id`` is None, so we must use the explicit
+        # ``course_id`` the caller resolved from the imported_contests
+        # mapping key ("{course}:{contest}"). Falling back to
+        # ``cfg.course_id`` keeps per-course configs working. Sending
+        # None was the bug: every batch 422'd with "course_id: Input
+        # should be a valid string" and "Синхронизировать всё"
+        # imported nothing.
+        effective_course_id = course_id or cfg.course_id
         try:
             sr = await client.post(
                 submission_url,
                 headers=fwd_headers,
                 json={
-                    "course_id": cfg.course_id,
+                    "course_id": effective_course_id,
                     "source": "yandex_contest",
                     # Re-importing the same contest moves any pre-existing
                     # YC submissions onto the freshly-created assignment
@@ -763,7 +774,30 @@ async def _import_submissions_for_aliases(
             errors.append(f"alias {alias}: submission unreachable: {exc!s}")
             continue
         if sr.status_code >= 400:
-            errors.append(f"alias {alias}: {sr.status_code} {sr.text[:120]}")
+            # Pull the RFC7807 field-error list when present so the run
+            # history shows *which* field the submission-service rejected
+            # (e.g. "items.0.external_score: ..."), not a truncated blob.
+            detail = sr.text[:160]
+            try:
+                body = sr.json()
+                if isinstance(body, dict):
+                    if body.get("errors"):
+                        detail = "; ".join(
+                            f"{e.get('field')}: {e.get('message')}"
+                            for e in body["errors"][:4]
+                        )
+                    elif body.get("detail"):
+                        detail = str(body["detail"])
+            except Exception:  # noqa: BLE001
+                pass
+            errors.append(f"alias {alias}: {sr.status_code} {detail}")
+            logger.warning(
+                "yc.batch_import_4xx",
+                alias=alias,
+                assignment_id=aid,
+                status=sr.status_code,
+                body=sr.text[:800],
+            )
             continue
         try:
             body_json = sr.json()
@@ -1818,10 +1852,17 @@ async def _run_sync_all_imported_contests(
             return
 
         # ---- Build the work plan up-front so we can show "ДЗ X/Y" ----
-        plan: list[tuple[int, str]] = []  # (contest_id, homework_id)
+        # Each entry: (contest_id, homework_id, course_id). The course
+        # id is parsed from the mapping key ("{course}:{contest}") — it's
+        # what batchImport needs, since a tenant-wide config has
+        # cfg.course_id == None.
+        plan: list[tuple[int, str, str | None]] = []
         for key, hw_id in mapping.items():
             key_str = str(key)
-            contest_part = key_str.split(":", 1)[1] if ":" in key_str else key_str
+            if ":" in key_str:
+                course_part, contest_part = key_str.split(":", 1)
+            else:
+                course_part, contest_part = "", key_str
             try:
                 cid = int(contest_part)
             except ValueError:
@@ -1830,7 +1871,10 @@ async def _run_sync_all_imported_contests(
             hw_str = str(hw_id)
             if homework_filter is not None and hw_str not in homework_filter:
                 continue
-            plan.append((cid, hw_str))
+            # Course from the key wins; fall back to the config's own
+            # course_id for legacy single-course configs.
+            course_for_hw = course_part or (cfg.course_id and str(cfg.course_id))
+            plan.append((cid, hw_str, course_for_hw))
         homework_total = len(plan)
 
         await _update_job_progress(
@@ -1845,7 +1889,9 @@ async def _run_sync_all_imported_contests(
         async with httpx.AsyncClient(
             timeout=settings.httpx_timeout_seconds
         ) as client:
-            for idx, (contest_id, hw_id_str) in enumerate(plan, start=1):
+            for idx, (contest_id, hw_id_str, course_for_hw) in enumerate(
+                plan, start=1
+            ):
                 # Pull the homework title so the progress line reads
                 # something a teacher can identify, not just "ДЗ 12".
                 # ``_homework_exists`` already probes the GET endpoint,
@@ -1943,6 +1989,7 @@ async def _run_sync_all_imported_contests(
                     job_id=job_id,
                     alias_to_title=alias_to_title,
                     progress_base=progress_base,
+                    course_id=course_for_hw,
                 )
                 # Per-homework breakdown for the expandable run details.
                 hw_created = sub_stats["created"]
