@@ -377,10 +377,7 @@ async def create_submission(
     else:
         from submission_service.api.deps import get_course_client
         client = get_course_client()
-        try:
-            info = await client.get_assignment(assignment_id, auth_token=auth_token)  # type: ignore[call-arg]
-        except TypeError:
-            info = await client.get_assignment(assignment_id)
+        info = await client.get_assignment(assignment_id, auth_token=auth_token)
         target_course = (info.course_id if info else None) or "crs_unknown"
     ensure_tenant(user, user.tenant_id)
     ensure_can_create_submission(user, target_course, target_author)

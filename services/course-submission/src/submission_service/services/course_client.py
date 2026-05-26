@@ -29,7 +29,9 @@ class AssignmentInfo:
 
 
 class CourseClient(Protocol):
-    async def get_assignment(self, assignment_id: str) -> AssignmentInfo | None: ...
+    async def get_assignment(
+        self, assignment_id: str, *, auth_token: str | None = None
+    ) -> AssignmentInfo | None: ...
 
 
 class InMemoryCourseClient:
@@ -41,7 +43,13 @@ class InMemoryCourseClient:
     def seed(self, info: AssignmentInfo) -> None:
         self._store[info.id] = info
 
-    async def get_assignment(self, assignment_id: str) -> AssignmentInfo | None:
+    async def get_assignment(
+        self, assignment_id: str, *, auth_token: str | None = None
+    ) -> AssignmentInfo | None:
+        # In-memory client has no auth concept; the kwarg exists only so the
+        # signature matches ``HttpCourseClient`` (whose batchImport call site
+        # passes the caller's bearer for cross-tenant authorisation).
+        del auth_token
         return self._store.get(assignment_id)
 
 

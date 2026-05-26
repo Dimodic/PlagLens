@@ -26,7 +26,16 @@ class InProcessCourseClient:
     def __init__(self, session_factory: async_sessionmaker[Any]) -> None:
         self._session_factory = session_factory
 
-    async def get_assignment(self, assignment_id: str) -> AssignmentInfo | None:
+    async def get_assignment(
+        self, assignment_id: str, *, auth_token: str | None = None
+    ) -> AssignmentInfo | None:
+        # ``auth_token`` is part of the ``CourseClient`` protocol so callers
+        # (e.g. submission's batchImport route) can pass the user's bearer
+        # to ``HttpCourseClient`` for cross-tenant reads. We're in-process —
+        # the row lookup goes through the DB session, no HTTP auth needed —
+        # so we accept and ignore it to stay duck-compatible with the http
+        # client. (See submission_service.api.routers.bulk.import_batch.)
+        del auth_token
         try:
             aid = int(assignment_id)
         except (TypeError, ValueError):
