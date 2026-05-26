@@ -86,18 +86,20 @@ export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
   // backend-fragments) so the same pair doesn't re-tokenise on every
   // viewport repaint. Called unconditionally so React's hook order
   // stays stable across the loading→loaded transition.
-  const effectiveFragments = useMemo<PlagiarismPairFragment[]>(() => {
-    if (fragments.length > 0) return fragments;
-    if (!aFinal || !bFinal) return [];
+  const synthetic = useMemo<{
+    fragments: PlagiarismPairFragment[];
+    colorIndices: number[];
+  } | null>(() => {
+    if (fragments.length > 0) return null;
+    if (!aFinal || !bFinal) return { fragments: [], colorIndices: [] };
     return synthesiseFragmentsByStructuralLineMatch(aFinal, bFinal, {
       aFile,
       bFile,
     });
-    // aFinal / bFinal / aFile / bFile are derived from `data`; depending
-    // on `data` covers them transitively. Re-listing them is fine — the
-    // refs are stable across renders when data is.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, aFinal, bFinal, aFile, bFile]);
+  const effectiveFragments = synthetic ? synthetic.fragments : fragments;
+  const effectiveColorIndices = synthetic ? synthetic.colorIndices : undefined;
 
   // ---- Early returns now safe — every hook above has fired ----
 
@@ -154,16 +156,12 @@ export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
         highlightedFragments={
           new Set(effectiveFragments.map((_f, i) => i))
         }
-        // Synthetic fragments don't carry "this A range maps to that B
-        // range" — they just say "this line participated in the
-        // structural match". Multi-colour rotation in that case reads
-        // as a false pairing signal (the user spotted "B has a red
-        // band, A doesn't" and asked why — answer: same B pattern
-        // matched the same A region twice, the renderer just ran out
-        // of A-runs and rotated palette anyway). Backend-shipped
-        // fragments DO encode pair correspondence — leave them
-        // multi-colour.
-        monochromeHighlights={data.fragments.length === 0}
+        // Synthetic fragments are emitted one-per-side; ``colorIndices``
+        // ties each B-run to the colour of its corresponding A-run so a
+        // pattern reused multiple times on B (e.g. ``cout/return`` once
+        // inside the ``if`` AND once at the end of ``main``) reads as
+        // the same group, not as two unrelated colours.
+        colorIndices={effectiveColorIndices}
       />
     </div>
   );
@@ -230,19 +228,32 @@ interface SynthesiseOpts {
 }
 
 /** Build a per-line skeleton-match fragment list. Pure (no React); the
- *  caller wraps it in a ``useMemo``. */
+ *  caller wraps it in a ``useMemo``.
+ *
+ *  Output shape:
+ *    * one fragment per A-run (b-side blanked to ``0..0``, no B highlight)
+ *    * one fragment per B-run (a-side blanked to ``0..0``)
+ *    * ``colorIndices[i]`` picks the palette slot for fragment ``i``:
+ *        - A-run fragment i → slot = i (each A-run is its own group)
+ *        - B-run fragment   → slot = the A-run index this B-run mostly
+ *          maps to (so reused patterns share a colour with their
+ *          originating A region)
+ *
+ *  The caller forwards ``colorIndices`` to ``SideBySideDiff`` which uses
+ *  it instead of the default array-position rotation. Without that
+ *  mapping the renderer was painting B-side-only runs in the next
+ *  unused palette slot — visually inventing a "new" match group where
+ *  there wasn't one (e.g. ``B[15-17]`` red while A had nothing red,
+ *  because A only had two runs and B's third run rolled past the end). */
 function synthesiseFragmentsByStructuralLineMatch(
   aContent: string,
   bContent: string,
   { aFile, bFile }: SynthesiseOpts,
-): PlagiarismPairFragment[] {
+): { fragments: PlagiarismPairFragment[]; colorIndices: number[] } {
   const aLines = aContent.split(/\r?\n/);
   const bLines = bContent.split(/\r?\n/);
 
-  // Index B by normalised line. We also need to know how rare the
-  // skeleton is — a blank line or a stand-alone ``}`` matches dozens
-  // of places and would paint every brace on the page; treat skeletons
-  // shorter than 2 chars or made of pure punctuation as too noisy.
+  // Skeleton indexes for both sides.
   const bIndex = new Map<string, number[]>();
   bLines.forEach((line, i) => {
     const norm = normaliseLineForMatch(line);
@@ -252,46 +263,98 @@ function synthesiseFragmentsByStructuralLineMatch(
     else bIndex.set(norm, [i + 1]);
   });
 
+  // For every B line that gets matched, remember which A line first
+  // surfaced its skeleton — that A line's run is the B line's home
+  // colour group. ``bLineToA`` is the bridge between B-runs and the
+  // A-side palette.
   const matchedA = new Set<number>();
   const matchedB = new Set<number>();
+  const bLineToA = new Map<number, number>();
   aLines.forEach((line, i) => {
     const norm = normaliseLineForMatch(line);
     if (!isMeaningfulSkeleton(norm)) return;
     const hits = bIndex.get(norm);
     if (!hits || hits.length === 0) return;
-    matchedA.add(i + 1);
-    for (const lineB of hits) matchedB.add(lineB);
+    const aLineNum = i + 1;
+    matchedA.add(aLineNum);
+    for (const lineB of hits) {
+      matchedB.add(lineB);
+      if (!bLineToA.has(lineB)) bLineToA.set(lineB, aLineNum);
+    }
   });
 
-  // Group consecutive matched lines into runs — the renderer paints
-  // each run as one band with a coloured left border, which reads as
-  // "this block of code matched" rather than a flicker of single
-  // lines.
+  // Group into consecutive runs.
   const aRuns = groupConsecutive(matchedA);
   const bRuns = groupConsecutive(matchedB);
 
-  // Pair the i-th A-run with the i-th B-run for fragment indexing; if
-  // the counts differ, we still attach what we have — extra runs on
-  // either side become standalone fragments referring to the matching
-  // side's last range (good enough for highlight purposes).
-  const out: PlagiarismPairFragment[] = [];
-  const total = Math.max(aRuns.length, bRuns.length);
-  for (let i = 0; i < total; i++) {
-    const aRun = aRuns[i] ?? aRuns[aRuns.length - 1] ?? { start: 0, end: 0 };
-    const bRun = bRuns[i] ?? bRuns[bRuns.length - 1] ?? { start: 0, end: 0 };
-    if (aRun.start === 0 && bRun.start === 0) continue;
-    out.push({
+  // A-line → which A-run contains it.
+  const aLineToRun = new Map<number, number>();
+  aRuns.forEach((run, idx) => {
+    for (let l = run.start; l <= run.end; l++) aLineToRun.set(l, idx);
+  });
+
+  // For each B-run, vote among its lines: which A-run does it
+  // *mostly* refer to? That A-run's index is this B-run's colour slot.
+  const bRunToARun: number[] = bRuns.map((bRun) => {
+    const votes = new Map<number, number>();
+    for (let l = bRun.start; l <= bRun.end; l++) {
+      const aLine = bLineToA.get(l);
+      if (aLine == null) continue;
+      const aRunIdx = aLineToRun.get(aLine);
+      if (aRunIdx == null) continue;
+      votes.set(aRunIdx, (votes.get(aRunIdx) ?? 0) + 1);
+    }
+    let best = -1;
+    let bestVotes = -1;
+    for (const [k, v] of votes) {
+      if (v > bestVotes) {
+        best = k;
+        bestVotes = v;
+      }
+    }
+    return best;
+  });
+
+  // Emit fragments one-per-side. Blanking the opposite side to
+  // ``0..0`` means the renderer's per-line zone map sees no real
+  // line on that side for this fragment, so the highlight only paints
+  // where it's supposed to.
+  const fragments: PlagiarismPairFragment[] = [];
+  const colorIndices: number[] = [];
+
+  aRuns.forEach((run, idx) => {
+    fragments.push({
       a_file: aFile,
-      a_start_line: aRun.start,
-      a_end_line: aRun.end,
+      a_start_line: run.start,
+      a_end_line: run.end,
       a_content: '',
       b_file: bFile,
-      b_start_line: bRun.start,
-      b_end_line: bRun.end,
+      b_start_line: 0,
+      b_end_line: 0,
       b_content: '',
     });
-  }
-  return out;
+    colorIndices.push(idx);
+  });
+
+  bRuns.forEach((run, idx) => {
+    fragments.push({
+      a_file: aFile,
+      a_start_line: 0,
+      a_end_line: 0,
+      a_content: '',
+      b_file: bFile,
+      b_start_line: run.start,
+      b_end_line: run.end,
+      b_content: '',
+    });
+    // Fall back to ``idx`` only if we couldn't vote (no A-run
+    // shared a skeleton with any line in this B-run). In practice
+    // that doesn't happen — every B-run inside ``matchedB`` has at
+    // least one line with a matching A line.
+    colorIndices.push(bRunToARun[idx] >= 0 ? bRunToARun[idx] : idx);
+  });
+
+  return { fragments, colorIndices };
 }
 
 function isMeaningfulSkeleton(s: string): boolean {

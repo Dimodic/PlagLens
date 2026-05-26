@@ -23,16 +23,16 @@ interface SideBySideDiffProps {
   highlightedFragments?: Set<number>;
   /** Index of fragment to scroll-to in both panes (re-runs on change). */
   scrollToFragment?: number | null;
-  /** When true, every fragment uses the same palette slot. Use this for
-   *  synthetic fragments (client-side structural matching) where the
-   *  index doesn't carry "this A region maps to that B region" meaning
-   *  — multi-colour rotation in that case reads as a false pairing
-   *  signal ("why is B[15-17] red while A has nothing red?" — because
-   *  the synthesiser ran out of A runs and reused the last one, NOT
-   *  because that B region matched something else specific). With
-   *  multi-colour off it just says "this line participated in the
-   *  match", which is the honest claim. */
-  monochromeHighlights?: boolean;
+  /** Per-fragment colour slot. When provided, ``colorIndices[i]`` picks
+   *  the palette entry for fragment ``i`` instead of the default
+   *  rotation by array position. Used by the synthetic-fragment path
+   *  (structural line matching) where multiple fragments correspond to
+   *  the same A↔B group and should share a colour — e.g. ``B[15-17]``
+   *  and ``B[10-11]`` both refer back to ``A[9-10]``, so they get the
+   *  same slot as that A-run and the diff reads "same pattern, twice"
+   *  instead of "two unrelated colours". Length must match fragments;
+   *  missing entries fall back to the fragment index. */
+  colorIndices?: number[];
 }
 
 interface HighlightZone {
@@ -79,11 +79,7 @@ const ZONE_PALETTE: { fill: string; border: string }[] = [
   { fill: 'bg-emerald-500/10', border: 'border-l-emerald-500' },
 ];
 
-function zoneClasses(
-  idx: number,
-  monochrome = false,
-): { fill: string; border: string } {
-  if (monochrome) return ZONE_PALETTE[0];
+function zoneClasses(idx: number): { fill: string; border: string } {
   return ZONE_PALETTE[idx % ZONE_PALETTE.length];
 }
 
@@ -105,10 +101,11 @@ interface PaneProps {
   side: DiffSide;
   zones: HighlightZone[];
   scrollToLine?: number | null;
-  monochrome?: boolean;
+  /** Per-fragment colour slot override — see SideBySideDiffProps. */
+  colorIndices?: number[];
 }
 
-function Pane({ side, zones, scrollToLine, monochrome }: PaneProps) {
+function Pane({ side, zones, scrollToLine, colorIndices }: PaneProps) {
   // `side.content` is built from fragments whose `a_content`/`b_content`
   // may be null on older runs; guard so we never .split(null) → 500.
   const lines = useMemo(
@@ -172,7 +169,10 @@ function Pane({ side, zones, scrollToLine, monochrome }: PaneProps) {
           {lines.map((line, idx) => {
             const lineNo = idx + 1;
             const zone = zoneByLine.get(lineNo);
-            const colors = zone ? zoneClasses(zone.index, monochrome) : null;
+            const slot = zone
+              ? (colorIndices?.[zone.index] ?? zone.index)
+              : 0;
+            const colors = zone ? zoneClasses(slot) : null;
             return (
               <div
                 key={lineNo}
@@ -205,7 +205,7 @@ export function SideBySideDiff({
   fragments,
   highlightedFragments,
   scrollToFragment,
-  monochromeHighlights,
+  colorIndices,
 }: SideBySideDiffProps) {
   const visible = highlightedFragments ?? new Set(fragments.map((_, i) => i));
   const aZones = buildSideZones(fragments, 'a', visible);
@@ -233,7 +233,7 @@ export function SideBySideDiff({
           side={left}
           zones={aZones}
           scrollToLine={scrollToLineLeft}
-          monochrome={monochromeHighlights}
+          colorIndices={colorIndices}
         />
       </div>
       <div
@@ -244,7 +244,7 @@ export function SideBySideDiff({
           side={right}
           zones={bZones}
           scrollToLine={scrollToLineRight}
-          monochrome={monochromeHighlights}
+          colorIndices={colorIndices}
         />
       </div>
     </div>
