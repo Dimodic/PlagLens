@@ -6,6 +6,8 @@ Caches the parsed `Principal` in `request.state.principal`.
 
 from __future__ import annotations
 
+import re
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 
@@ -37,13 +39,22 @@ _QUERY_TOKEN_PATHS: tuple[str, ...] = (
     "/v1/notifications/stream",
     "/api/v1/notifications/stream",
 )
+# Same idea but for dynamic-id endpoints — exact-match isn't enough when
+# the route carries ``{config_id}`` / ``{job_id}`` segments. Listed as
+# regex patterns; first match wins.
+_QUERY_TOKEN_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^/api/v1/integrations/[^/]+/import-jobs/[^/]+/events$"),
+)
 
 
 def _extract_token(request: Request) -> str | None:
     auth = request.headers.get("authorization")
     if auth and auth.lower().startswith("bearer "):
         return auth[7:].strip()
-    if request.url.path in _QUERY_TOKEN_PATHS:
+    path = request.url.path
+    if path in _QUERY_TOKEN_PATHS or any(
+        p.match(path) for p in _QUERY_TOKEN_PATTERNS
+    ):
         qp = request.query_params.get("access_token")
         if qp:
             return qp.strip()

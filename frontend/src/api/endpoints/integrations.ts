@@ -295,6 +295,23 @@ export const integrationsApi = {
       )
       .then((r) => r.data),
 
+  /** SSE URL for live ImportJob progress. EventSource can't set
+   * Authorization headers, so the token rides in the query string —
+   * the gateway whitelists this path in ``_QUERY_TOKEN_PATTERNS``. */
+  jobEventsUrl: (
+    configId: string,
+    jobId: string,
+    accessToken?: string | null,
+  ): string => {
+    const base = (
+      (import.meta.env.VITE_API_BASE_URL as string) || '/api/v1'
+    ).replace(/\/$/, '');
+    const tokenPart = accessToken
+      ? `?access_token=${encodeURIComponent(accessToken)}`
+      : '';
+    return `${base}/integrations/${configId}/import-jobs/${jobId}/events${tokenPart}`;
+  },
+
   /** Poll endpoint for the async import operation. Returns the current
    * stage + counters; ``status`` cycles ``running → completed | failed``.
    * Returns ``{ status: 'expired' }`` for unknown / expired ids. */

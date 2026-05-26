@@ -1537,6 +1537,28 @@ async def _run_resync_submissions(
             )
 
 
+async def _update_job_progress(job_id: str, **patch: Any) -> None:
+    """Merge ``patch`` into ``ImportJob.progress`` JSON column.
+
+    Called from the sync workers at key checkpoints (per-homework
+    transition, per-batch import) so the SSE endpoint streaming this
+    row can surface "ДЗ X/Y «Имя» · посылок Z" instead of a flat "в
+    работе" label. Idempotent — silent no-op if the row has been
+    finalised already.
+    """
+    sm = get_sessionmaker()
+    async with sm() as s:
+        row = (
+            await s.execute(select(ImportJob).where(ImportJob.id == job_id))
+        ).scalar_one_or_none()
+        if row is None or row.status not in ("running", "queued"):
+            return
+        merged = dict(row.progress or {})
+        merged.update(patch)
+        row.progress = merged
+        await s.commit()
+
+
 async def _stamp_autosync_last_run(config_id: str) -> None:
     """Record the current timestamp on ``cfg.settings.autosync.last_run_at``.
 
@@ -1618,44 +1640,73 @@ async def _run_sync_all_imported_contests(
             )
             return
 
+        # ---- Build the work plan up-front so we can show "ДЗ X/Y" ----
+        plan: list[tuple[int, str]] = []  # (contest_id, homework_id)
+        for key, hw_id in mapping.items():
+            key_str = str(key)
+            contest_part = key_str.split(":", 1)[1] if ":" in key_str else key_str
+            try:
+                cid = int(contest_part)
+            except ValueError:
+                errors.append(f"bad mapping key {key_str}")
+                continue
+            hw_str = str(hw_id)
+            if homework_filter is not None and hw_str not in homework_filter:
+                continue
+            plan.append((cid, hw_str))
+        homework_total = len(plan)
+
+        await _update_job_progress(
+            job_id,
+            stage="starting",
+            homework_total=homework_total,
+            homework_idx=0,
+            homework_title=None,
+            submissions_imported=0,
+        )
+
         async with httpx.AsyncClient(
             timeout=settings.httpx_timeout_seconds
         ) as client:
-            for key, hw_id in mapping.items():
-                # Key formats:
-                #   * new ``"{course_id}:{contest_id}"``
-                #   * legacy ``"{contest_id}"`` (single-course configs)
-                key_str = str(key)
-                if ":" in key_str:
-                    _course_part, contest_part = key_str.split(":", 1)
-                else:
-                    contest_part = key_str
+            for idx, (contest_id, hw_id_str) in enumerate(plan, start=1):
+                # Pull the homework title so the progress line reads
+                # something a teacher can identify, not just "ДЗ 12".
+                # ``_homework_exists`` already probes the GET endpoint,
+                # but it doesn't return the body — issue our own GET
+                # here so we can both check liveness AND grab the title
+                # in one round-trip.
+                hw_title: str | None = None
                 try:
-                    contest_id = int(contest_part)
-                except ValueError:
-                    errors.append(f"bad mapping key {key_str}")
-                    continue
-                hw_id_str = str(hw_id)
-
-                # Honour the optional homework filter — scheduled
-                # autosync passes the set of homeworks that have been
-                # checked in the UI; manual "Sync all" passes None and
-                # syncs everything.
-                if homework_filter is not None and hw_id_str not in homework_filter:
-                    continue
-
-                # Skip contests whose homework was deleted server-side.
-                alive = await _homework_exists(
-                    client,
-                    settings=settings,
-                    homework_id=hw_id_str,
-                    fwd_headers=fwd,
-                )
-                if not alive:
+                    hw_resp = await client.get(
+                        settings.course_service_url.rstrip("/")
+                        + f"/api/v1/homeworks/{hw_id_str}",
+                        headers=fwd,
+                    )
+                except httpx.HTTPError:
+                    hw_resp = None
+                if hw_resp is None or hw_resp.status_code == 404:
                     errors.append(
                         f"contest {contest_id}: homework {hw_id_str} more not exists"
                     )
                     continue
+                if hw_resp.status_code >= 400:
+                    errors.append(
+                        f"contest {contest_id}: load homework "
+                        f"{hw_resp.status_code}"
+                    )
+                    continue
+                try:
+                    hw_title = (hw_resp.json() or {}).get("title")
+                except Exception:  # noqa: BLE001
+                    hw_title = None
+
+                await _update_job_progress(
+                    job_id,
+                    stage="loading_homework",
+                    homework_idx=idx,
+                    homework_title=hw_title,
+                    current_contest_id=contest_id,
+                )
 
                 # Rebuild alias → assignment-id from the homework's
                 # external bindings, then re-run the submission pull.
@@ -1686,6 +1737,13 @@ async def _run_sync_all_imported_contests(
                 if not alias_to_aid:
                     continue
 
+                await _update_job_progress(job_id, stage="fetching_submissions")
+
+                # Reuse the existing per-contest worker — but pump our
+                # job-level progress as it ticks (it has its own Redis-
+                # backed ``op_id`` flow for the modal but we don't use
+                # that here; instead we sample its outcome and update
+                # the ImportJob row).
                 adapter = YandexContestAdapter()
                 sub_imported, sub_errors = await _import_submissions_for_aliases(
                     adapter=adapter,
@@ -1696,12 +1754,17 @@ async def _run_sync_all_imported_contests(
                     client=client,
                     fwd_headers=fwd,
                     settings=settings,
-                    op_id=None,  # no Redis op state for this multi-contest path
+                    op_id=None,
                 )
                 total_subs += sub_imported
                 if sub_errors:
                     errors.extend(sub_errors[:2])
                 contests_done += 1
+                await _update_job_progress(
+                    job_id,
+                    stage="homework_done",
+                    submissions_imported=total_subs,
+                )
 
         logger.info(
             "yc.sync_all.completed",

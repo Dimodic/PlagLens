@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
-from typing import Any, Optional
+from typing import Any, AsyncIterator, Optional
 
 from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration_service.api.v1.configs import ensure_owner_or_admin
@@ -189,6 +191,97 @@ async def cancel_job(
     job.finished_at = datetime.now(UTC)
     await session.commit()
     return _job_dto(job)
+
+
+@router.get(
+    "/{config_id}/import-jobs/{job_id}/events",
+    response_class=StreamingResponse,
+)
+async def stream_import_job_events(
+    config_id: str,
+    job_id: str,
+    p: Principal = Depends(principal_dep),
+    session: AsyncSession = Depends(session_dep),
+) -> StreamingResponse:
+    """SSE stream of an import job's progress.
+
+    Frontend opens an ``EventSource`` on this endpoint while a job is
+    running so the «История синхронизаций» row can show live numbers
+    (`ДЗ 2/3 «Имя» · посылок 384`) instead of a flat «в работе» label.
+    The stream polls the row every ~1.5s; once the job leaves ``running``
+    we emit one final ``done`` event and close. The route is registered
+    in the gateway's ``_QUERY_TOKEN_PATTERNS`` because ``EventSource``
+    can't set Authorization headers — clients pass ``?access_token=…``.
+    """
+    # Authorise once up-front; the streaming generator below opens its
+    # own DB sessions per poll because the request-scoped session would
+    # otherwise be torn down at function return.
+    crepo = IntegrationConfigRepo(session)
+    cfg = await crepo.get(config_id, tenant_id=p.tenant_id)
+    if cfg is None:
+        raise not_found("IntegrationConfig", config_id)
+    ensure_owner_or_admin(p, cfg.course_id)
+    jrepo = ImportJobRepo(session)
+    job = await jrepo.get(job_id, tenant_id=p.tenant_id)
+    if job is None or job.integration_id != config_id:
+        raise not_found("ImportJob", job_id)
+
+    tenant_id = p.tenant_id
+    POLL_S = 1.5
+    MAX_S = 30 * 60  # safety cap — 30 min, the worker should be long done
+
+    async def gen() -> AsyncIterator[bytes]:
+        from integration_service.common.db import get_sessionmaker
+
+        sm = get_sessionmaker()
+        elapsed = 0.0
+        last_payload: str | None = None
+        while elapsed < MAX_S:
+            async with sm() as s:
+                repo = ImportJobRepo(s)
+                row = await repo.get(job_id, tenant_id=tenant_id)
+            if row is None:
+                yield b"event: error\ndata: {\"detail\":\"job gone\"}\n\n"
+                return
+            payload = json.dumps(
+                {
+                    "id": row.id,
+                    "status": row.status,
+                    "progress": row.progress or {},
+                    "stats": row.stats or {},
+                    "started_at": row.started_at.isoformat()
+                    if row.started_at
+                    else None,
+                    "finished_at": row.finished_at.isoformat()
+                    if row.finished_at
+                    else None,
+                    "error": row.error,
+                }
+            )
+            # Only emit when something actually changed — saves bytes
+            # on a long quiet job.
+            if payload != last_payload:
+                last_payload = payload
+                yield f"event: progress\ndata: {payload}\n\n".encode("utf-8")
+            if row.status not in ("running", "queued"):
+                yield b"event: done\ndata: {}\n\n"
+                return
+            # Heartbeat between progress events so proxies don't drop
+            # the connection on a long compute-only stretch.
+            yield b": ping\n\n"
+            await asyncio.sleep(POLL_S)
+            elapsed += POLL_S
+        yield b"event: error\ndata: {\"detail\":\"stream timeout\"}\n\n"
+
+    return StreamingResponse(
+        gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/{config_id}/import-jobs/{job_id}:retry", response_model=ImportJobOut)

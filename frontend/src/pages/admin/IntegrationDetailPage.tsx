@@ -23,7 +23,7 @@
  *   settings.autosync = { enabled: bool, hours: number, homework_ids: string[] }
  *   settings.imported_contests = { "<course>:<contest>": "<homework_id>" }
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import {
@@ -68,7 +68,9 @@ import {
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import { integrationsApi } from '@/api/endpoints/integrations';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { tokenStore } from '@/api/client';
+import { integrationKeys } from '@/hooks/api/useIntegrations';
 import type { Problem } from '@/api/types';
 
 interface AutosyncPrefs {
@@ -198,6 +200,16 @@ interface DetailProps {
   navigate: ReturnType<typeof useNavigate>;
 }
 
+interface JobProgress {
+  id?: string;
+  stage?: string;
+  homework_idx?: number;
+  homework_total?: number;
+  homework_title?: string | null;
+  current_contest_id?: number;
+  submissions_imported?: number;
+}
+
 function IntegrationDetail(props: DetailProps) {
   const {
     i,
@@ -212,6 +224,7 @@ function IntegrationDetail(props: DetailProps) {
     notify,
     navigate,
   } = props;
+  const qc = useQueryClient();
 
   const settings = (i.settings ?? {}) as Record<string, unknown>;
   const autosync = useMemo(() => readAutosync(settings), [settings]);
@@ -252,6 +265,55 @@ function IntegrationDetail(props: DetailProps) {
     selectedCourseId ?? undefined,
     { limit: 200 },
   );
+
+  // ---- Live progress over SSE for the topmost running job ----
+  // EventSource can't set headers, so the gateway accepts the token
+  // as a ``?access_token=`` query param on this whitelisted path.
+  const runningJob = useMemo(
+    () => jobs.find((j) => j.status === 'running' || j.status === 'queued'),
+    [jobs],
+  );
+  const [liveProgress, setLiveProgress] = useState<JobProgress | null>(null);
+  const lastJobIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    const jobId = runningJob?.id ?? null;
+    // Reset progress whenever the active job changes (or goes away).
+    if (lastJobIdRef.current !== jobId) {
+      lastJobIdRef.current = jobId;
+      setLiveProgress(null);
+    }
+    if (!jobId || typeof EventSource === 'undefined') return;
+    const token = tokenStore.get();
+    if (!token) return;
+    const url = integrationsApi.jobEventsUrl(i.id, jobId, token);
+    const es = new EventSource(url, { withCredentials: true });
+    es.addEventListener('progress', (ev: MessageEvent) => {
+      try {
+        const payload = JSON.parse(ev.data) as {
+          id?: string;
+          status?: string;
+          progress?: JobProgress;
+        };
+        setLiveProgress({ id: payload.id, ...(payload.progress ?? {}) });
+      } catch {
+        /* noise */
+      }
+    });
+    es.addEventListener('done', () => {
+      es.close();
+      // Final state landed — pull the row freshly so stats/error display.
+      void qc.invalidateQueries({
+        queryKey: integrationKeys.importJobs(i.id, { limit: 10 }),
+      });
+    });
+    es.addEventListener('error', () => {
+      // EventSource will auto-retry; we just stop showing stale data
+      // if the connection collapses. The query refetch on tab focus /
+      // visibility change covers reconciliation.
+    });
+    return () => es.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [runningJob?.id, i.id]);
   // Filter homeworks to those imported by this integration on the
   // selected course. The map's value is the homework_id we recorded
   // at import time.
@@ -591,6 +653,14 @@ function IntegrationDetail(props: DetailProps) {
           >
             {jobs.map((j) => {
               const at = j.started_at ?? j.finished_at;
+              const isRunning =
+                j.status === 'running' || j.status === 'queued';
+              const progress =
+                isRunning && liveProgress?.id === j.id
+                  ? liveProgress
+                  : isRunning
+                    ? ((j.progress ?? {}) as JobProgress)
+                    : null;
               return (
                 <li
                   key={j.id}
@@ -617,13 +687,24 @@ function IntegrationDetail(props: DetailProps) {
                       {at ? dayjs(at).format('D MMM, HH:mm') : 'в очереди'}
                     </span>
                   </div>
-                  {j.stats && (
+                  {progress && (
                     <p className="pl-5 text-xs text-muted-foreground">
-                      импортировано {j.stats.imported} · пропущено{' '}
-                      {j.stats.skipped} · ошибок {j.stats.failed}
+                      {formatProgress(progress)}
                     </p>
                   )}
-                  {j.error && (
+                  {!isRunning && j.stats && (
+                    <p className="pl-5 text-xs text-muted-foreground">
+                      {/* Show error count only when the run actually
+                         failed. Dolos / dedup noise during a successful
+                         resync would otherwise stamp a confusing
+                         «ошибок N» on a green check. */}
+                      импортировано {j.stats.imported}
+                      {j.status === 'failed' && (
+                        <> · ошибок {j.stats.failed}</>
+                      )}
+                    </p>
+                  )}
+                  {!isRunning && j.error && j.status === 'failed' && (
                     <p className="pl-5 text-xs text-destructive">
                       {j.error.title ?? 'ошибка'}
                       {j.error.detail ? `: ${j.error.detail}` : ''}
@@ -666,6 +747,47 @@ function triggerLabel(trigger: string): string {
       return 'веб-хук';
     default:
       return trigger;
+  }
+}
+
+function formatProgress(p: JobProgress): string {
+  // Compose the live-progress line: "ДЗ 2/3 «Имя» · посылок 384".
+  // Field availability depends on which checkpoint the worker has
+  // reached, so we degrade gracefully.
+  const parts: string[] = [];
+  if (typeof p.homework_idx === 'number' && typeof p.homework_total === 'number') {
+    const title = p.homework_title ? ` «${p.homework_title}»` : '';
+    parts.push(`ДЗ ${p.homework_idx}/${p.homework_total}${title}`);
+  } else if (p.homework_title) {
+    parts.push(`«${p.homework_title}»`);
+  }
+  if (typeof p.submissions_imported === 'number' && p.submissions_imported > 0) {
+    parts.push(`посылок ${p.submissions_imported}`);
+  }
+  if (parts.length === 0) {
+    // Fallback when worker hasn't ticked yet (or job is plain queued).
+    const stage = p.stage ?? 'starting';
+    return stageLabel(stage);
+  }
+  return parts.join(' · ');
+}
+
+function stageLabel(stage: string): string {
+  switch (stage) {
+    case 'starting':
+      return 'подготовка';
+    case 'loading_homework':
+      return 'загрузка ДЗ';
+    case 'fetching_submissions':
+      return 'выкачиваем посылки';
+    case 'importing_submissions':
+      return 'импортируем посылки';
+    case 'homework_done':
+      return 'ДЗ обработано';
+    case 'done':
+      return 'готово';
+    default:
+      return stage;
   }
 }
 
