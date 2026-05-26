@@ -1537,6 +1537,165 @@ async def _run_resync_submissions(
             )
 
 
+async def _run_sync_all_imported_contests(
+    *, job_id: str, cfg: Any
+) -> None:
+    """Manual "Синхронизировать" handler for a YC integration.
+
+    Walks every ``(course_id, contest_id) → homework_id`` mapping
+    recorded on this config in ``settings.imported_contests`` and
+    re-pulls submissions for each. Equivalent to clicking
+    «Перепроверить» on every previously imported contest at once,
+    but coalesced into a single ``ImportJob`` row so the integration
+    detail page's history shows one tidy entry instead of N.
+
+    Why this exists: ``trigger_sync`` used to call ``enqueue_import``,
+    which dropped a ``queued`` row into the DB and emitted a Kafka
+    event that nothing consumed — the row sat in "в очереди" forever
+    and the user complained ("ушло в какую-то бесконечную очередь").
+    The scheduler ticks on its own clock and also bails on
+    tenant-wide configs with ``no course_id``, so it never picked up
+    those queued rows either.
+    """
+    settings = get_settings()
+    mapping = (cfg.settings or {}).get("imported_contests") if isinstance(cfg.settings, dict) else None
+    if not isinstance(mapping, dict) or not mapping:
+        await _finalize_import_job(
+            job_id=job_id,
+            config_id=str(cfg.id),
+            status="completed",
+            errors=[
+                "Нет импортированных контестов — синхронизировать пока нечего"
+            ],
+        )
+        return
+
+    total_subs = 0
+    contests_done = 0
+    errors: list[str] = []
+
+    try:
+        s2s = await service_auth_headers()
+        fwd = {**s2s, "Content-Type": "application/json"}
+        token = await get_access_token(str(cfg.id)) if cfg.id else None
+        if not token and isinstance(cfg.settings, dict):
+            token = cfg.settings.get("oauth_token") or cfg.settings.get(
+                "access_token"
+            )
+        if not token:
+            await _finalize_import_job(
+                job_id=job_id,
+                config_id=str(cfg.id),
+                status="failed",
+                errors=["no OAuth token for YC"],
+            )
+            return
+
+        async with httpx.AsyncClient(
+            timeout=settings.httpx_timeout_seconds
+        ) as client:
+            for key, hw_id in mapping.items():
+                # Key formats:
+                #   * new ``"{course_id}:{contest_id}"``
+                #   * legacy ``"{contest_id}"`` (single-course configs)
+                key_str = str(key)
+                if ":" in key_str:
+                    _course_part, contest_part = key_str.split(":", 1)
+                else:
+                    contest_part = key_str
+                try:
+                    contest_id = int(contest_part)
+                except ValueError:
+                    errors.append(f"bad mapping key {key_str}")
+                    continue
+                hw_id_str = str(hw_id)
+
+                # Skip contests whose homework was deleted server-side.
+                alive = await _homework_exists(
+                    client,
+                    settings=settings,
+                    homework_id=hw_id_str,
+                    fwd_headers=fwd,
+                )
+                if not alive:
+                    errors.append(
+                        f"contest {contest_id}: homework {hw_id_str} more not exists"
+                    )
+                    continue
+
+                # Rebuild alias → assignment-id from the homework's
+                # external bindings, then re-run the submission pull.
+                asg_resp = await client.get(
+                    settings.course_service_url.rstrip("/")
+                    + f"/api/v1/homeworks/{hw_id_str}/assignments",
+                    headers=fwd,
+                    params={"limit": 500},
+                )
+                if asg_resp.status_code >= 400:
+                    errors.append(
+                        f"contest {contest_id}: list assignments "
+                        f"{asg_resp.status_code}"
+                    )
+                    continue
+                rows = asg_resp.json().get("data", []) or []
+                alias_to_aid: dict[str, str] = {}
+                for row in rows:
+                    for binding in row.get("external_bindings", []) or []:
+                        if binding.get("system") != "yandex_contest":
+                            continue
+                        ext = str(binding.get("external_assignment_id") or "")
+                        if ":" not in ext:
+                            continue
+                        c_part, alias = ext.split(":", 1)
+                        if str(c_part) == str(contest_id) and alias:
+                            alias_to_aid[alias] = str(row.get("id"))
+                if not alias_to_aid:
+                    continue
+
+                adapter = YandexContestAdapter()
+                sub_imported, sub_errors = await _import_submissions_for_aliases(
+                    adapter=adapter,
+                    cfg=cfg,
+                    contest_id=contest_id,
+                    alias_to_aid=alias_to_aid,
+                    homework_id=hw_id_str,
+                    client=client,
+                    fwd_headers=fwd,
+                    settings=settings,
+                    op_id=None,  # no Redis op state for this multi-contest path
+                )
+                total_subs += sub_imported
+                if sub_errors:
+                    errors.extend(sub_errors[:2])
+                contests_done += 1
+
+        logger.info(
+            "yc.sync_all.completed",
+            cfg_id=cfg.id,
+            contests_done=contests_done,
+            subs_imported=total_subs,
+            err_count=len(errors),
+        )
+        await _finalize_import_job(
+            job_id=job_id,
+            config_id=str(cfg.id),
+            status="completed",
+            imported=total_subs,
+            failed=len(errors),
+            errors=errors[:10],
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.exception(
+            "yc.sync_all.failed", cfg_id=cfg.id, error=str(exc)
+        )
+        await _finalize_import_job(
+            job_id=job_id,
+            config_id=str(cfg.id),
+            status="failed",
+            errors=[str(exc)[:300]] + errors[:5],
+        )
+
+
 @router.get("/{config_id}/contests/{contest_id}/participants")
 async def list_participants(
     config_id: str,

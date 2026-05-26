@@ -1,6 +1,7 @@
 """Sync runs + import jobs (§F)."""
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any, Optional
 
@@ -57,6 +58,57 @@ async def trigger_sync(
     scope: dict[str, Any] = payload.scope.model_dump()
     if payload.force_full:
         scope["force_full"] = True
+
+    # Yandex.Contest has a real "sync all previously imported contests"
+    # flow — go through it directly rather than dropping a row into the
+    # queued/Kafka pipe that nothing actually consumes. (The legacy
+    # ``enqueue_import`` path emits ``integration.import.started.v1``
+    # but no worker subscribes; for YC clicking "Синхронизировать" on
+    # the integration page would otherwise leave a row stuck "в
+    # очереди" forever.)
+    if cfg.kind == "yandex_contest":
+        from integration_service.api.v1.yandex_contest import (
+            _run_sync_all_imported_contests,
+            _start_import_job,
+        )
+
+        job_id = await _start_import_job(
+            config_id=str(cfg.id),
+            tenant_id=str(cfg.tenant_id),
+            scope=scope,
+            trigger="manual",
+        )
+        cfg_snapshot = type(
+            "_CfgSnap",
+            (),
+            {
+                "id": cfg.id,
+                "tenant_id": cfg.tenant_id,
+                "course_id": cfg.course_id,
+                "settings": cfg.settings,
+            },
+        )()
+        asyncio.create_task(
+            _run_sync_all_imported_contests(job_id=job_id, cfg=cfg_snapshot)
+        )
+        response.headers["Location"] = (
+            f"{get_settings().api_prefix}/operations/{job_id}"
+        )
+        op = OperationOut(
+            id=job_id,
+            kind="submission_import",
+            status="running",
+            progress={"completed": 0, "total": 0, "percent": 0.0},
+            started_at=datetime.now(UTC),
+            finished_at=None,
+            metadata={"integration_id": cfg.id, "kind": cfg.kind},
+        )
+        if idempotency_key:
+            await idempotency.store_response(
+                p.tenant_id, idempotency_key, body, op.model_dump(mode="json")
+            )
+        return op
+
     job = await enqueue_import(session, cfg, scope, "manual", bus=bus)
     await session.commit()
     response.headers["Location"] = f"{get_settings().api_prefix}/operations/{job.id}"
