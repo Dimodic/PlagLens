@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "plaglens-plagiarism-service"
 version = "0.1.0"
-description = "PlagLens Plagiarism Service: orchestrates plagiarism providers (JPlag, MOSS, Codequiry, Dolos), manages corpus, suspicious flags"
+description = "PlagLens Plagiarism Service: orchestrates the Dolos plagiarism engine, manages corpus, suspicious flags"
 requires-python = ">=3.12"
 authors = [{ name = "PlagLens Team" }]
 readme = "README.md"

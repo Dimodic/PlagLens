@@ -1,6 +1,6 @@
 """Provider abstraction.
 
-Concrete providers (JPlag, MOSS, Codequiry, Dolos) implement this interface
+Concrete providers (today: Dolos) implement this interface
 and are dispatched by the orchestrator. The interface mirrors the spec in
 ``08-PLAGIARISM.md``.
 """

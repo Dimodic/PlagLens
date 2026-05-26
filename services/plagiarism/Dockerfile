@@ -28,66 +28,48 @@ COPY services/plagiarism/src ./src
 
 RUN pip wheel --wheel-dir /wheels --find-links /wheels .
 
-# ---- Stage 2: jplag-fetcher ----
-# Pulls the official JPlag fat-jar from GitHub Releases. Pinned by ARG so CI
-# can override during a hot-fix. We verify the jar is non-empty and parseable
-# in stage 3 ("smoke check").
-FROM debian:bookworm-slim AS jplag-fetcher
-
-ARG JPLAG_VERSION=5.1.0
-ENV JPLAG_VERSION=${JPLAG_VERSION}
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-    && rm -rf /var/lib/apt/lists/* \
-    && mkdir -p /opt \
-    && curl -fsSL \
-        "https://github.com/jplag/JPlag/releases/download/v${JPLAG_VERSION}/jplag-${JPLAG_VERSION}-jar-with-dependencies.jar" \
-        -o /opt/jplag.jar \
-    && test -s /opt/jplag.jar
-
-# ---- Stage 3: runtime ----
+# ---- Stage 2: runtime ----
 FROM python:3.12-slim-bookworm AS runtime
 
-ARG JPLAG_VERSION=5.1.0
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PORT=8000 \
-    SERVICE_NAME=plagiarism \
-    JPLAG_JAR_PATH=/opt/jplag.jar \
-    JPLAG_VERSION=${JPLAG_VERSION}
+    SERVICE_NAME=plagiarism
 
-# Install Java 21 (required by JPlag 5.1.0+) via Eclipse Temurin + libpq for asyncpg.
-# JPlag 5.1.0 was compiled with class file v65 (Java 21); Debian's default-jre is Java 17.
+# Runtime layout:
+#   * libpq5    — asyncpg
+#   * nodejs 20 — Dolos is a Node CLI (@dodona/dolos), invoked by the
+#                 ``DolosProvider`` subprocess wrapper. Without it every
+#                 run fails with "dolos binary missing: No such file".
+#   * build-essential + python3 + git — needed only at ``npm install``
+#                 time so tree-sitter native modules compile; purged
+#                 right after to keep the layer small.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
         curl \
         ca-certificates \
-        wget \
         gnupg \
+        build-essential \
+        python3 \
+        git \
     && mkdir -p /etc/apt/keyrings \
-    && wget -qO- https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /etc/apt/keyrings/adoptium.gpg \
-    && echo "deb [signed-by=/etc/apt/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main" > /etc/apt/sources.list.d/adoptium.list \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key \
+        | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" \
+        > /etc/apt/sources.list.d/nodesource.list \
     && apt-get update \
-    && apt-get install -y --no-install-recommends temurin-21-jre \
-    && apt-get purge -y wget gnupg \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g --omit=dev @dodona/dolos \
+    && npm cache clean --force \
+    && apt-get purge -y build-essential gnupg git \
     && apt-get autoremove -y \
-    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/lib/apt/lists/* /root/.npm \
+    && dolos --version \
     && groupadd --system --gid 10001 plaglens \
     && useradd --system --uid 10001 --gid plaglens --home /app --shell /sbin/nologin plaglens \
-    && mkdir -p /opt /app
+    && mkdir -p /app
 
 WORKDIR /app
-
-# Copy the verified JPlag fat-jar from the fetcher stage.
-COPY --from=jplag-fetcher /opt/jplag.jar /opt/jplag.jar
-
-# Smoke check: JPlag must be invokable (parses the jar's main class). If the
-# JRE/jar combination is broken, the build fails here rather than at runtime.
-RUN java -jar /opt/jplag.jar --help > /dev/null 2>&1 \
-    || java -jar /opt/jplag.jar -h > /dev/null 2>&1 \
-    || { echo "JPlag jar smoke check failed"; java -jar /opt/jplag.jar --help; exit 1; }
 
 COPY --from=builder /wheels /wheels
 RUN pip install --no-index --find-links=/wheels plaglens-plagiarism-service && \

@@ -300,12 +300,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://plagiarism_app:${POSTGRES_PASSWORD}@postgres:5432/plaglens
       DATABASE_SCHEMA: plagiarism
       SUBMISSION_BASE_URL: http://course-submission:8000
-      # The Dockerfile downloads JPlag to /opt/jplag.jar (single file,
-      # no subdir). The previous "/opt/jplag/jplag.jar" caused every
-      # JPlag launch to fail with "Unable to access jarfile" and runs
-      # tipped over into ``failed`` immediately after the scheduler
-      # picked them up. Match the Dockerfile layout.
-      JPLAG_JAR_PATH: /opt/jplag.jar
       MOSS_USER_ID: ${MOSS_USER_ID:-}
       CODEQUIRY_API_KEY: ${CODEQUIRY_API_KEY:-}
       DOLOS_BIN_PATH: /usr/local/bin/dolos

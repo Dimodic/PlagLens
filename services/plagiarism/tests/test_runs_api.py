@@ -7,7 +7,7 @@ from tests.conftest import admin_headers, teacher_headers
 async def test_create_run_returns_202(client):
     resp = await client.post(
         "/api/v1/assignments/asn_42/plagiarism-runs",
-        json={"provider": "jplag", "with_corpus": False, "options": {"min_tokens": 9}},
+        json={"provider": "dolos", "with_corpus": False, "options": {"min_tokens": 9}},
         headers={**teacher_headers(course_id="crs_a"), "Idempotency-Key": "idem-1"},
         params={"course_id": "crs_a"},
     )
@@ -19,7 +19,7 @@ async def test_create_run_returns_202(client):
 
 async def test_idempotency_replay_returns_same_run(client):
     headers = {**teacher_headers(course_id="crs_a"), "Idempotency-Key": "idem-2"}
-    body = {"provider": "jplag", "options": {"min_tokens": 9}}
+    body = {"provider": "dolos", "options": {"min_tokens": 9}}
     r1 = await client.post(
         "/api/v1/assignments/asn_42/plagiarism-runs",
         json=body, headers=headers, params={"course_id": "crs_a"},
@@ -37,7 +37,7 @@ async def test_idempotency_conflict_on_different_body(client):
     headers = {**teacher_headers(course_id="crs_a"), "Idempotency-Key": "idem-3"}
     r1 = await client.post(
         "/api/v1/assignments/asn_42/plagiarism-runs",
-        json={"provider": "jplag", "options": {"min_tokens": 9}},
+        json={"provider": "dolos", "options": {"min_tokens": 9}},
         headers=headers,
         params={"course_id": "crs_a"},
     )
@@ -55,7 +55,7 @@ async def test_list_runs_by_assignment(client):
     headers = teacher_headers(course_id="crs_b")
     await client.post(
         "/api/v1/assignments/asn_55/plagiarism-runs",
-        json={"provider": "jplag"},
+        json={"provider": "dolos"},
         headers=headers,
         params={"course_id": "crs_b"},
     )
@@ -88,7 +88,7 @@ async def test_retry_only_failed(client):
     headers = teacher_headers(course_id="crs_c")
     r = await client.post(
         "/api/v1/assignments/asn_60/plagiarism-runs",
-        json={"provider": "jplag"},
+        json={"provider": "dolos"},
         headers=headers,
         params={"course_id": "crs_c"},
     )

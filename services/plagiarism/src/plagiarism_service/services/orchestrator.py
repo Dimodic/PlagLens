@@ -120,7 +120,7 @@ class Orchestrator:
             if existing is not None:
                 return existing, True
             # Same scope as a previously-completed run? Hand that one
-            # back — no submissions changed, no point re-running JPlag.
+            # back — no submissions changed, no point re-running the engine.
             done = await repo.find_completed_idempotent(
                 tenant_id=tenant_id,
                 assignment_id=assignment_id,
@@ -441,7 +441,7 @@ class Orchestrator:
             # Cluster IDs must be globally unique — the previous
             # ``clu_{i:08x}`` scheme restarted from 0 for every run and
             # collided with prior runs' rows (pk_plagiarism_clusters
-            # IntegrityError on the second JPlag run). Use the same
+            # IntegrityError on the second engine run). Use the same
             # time-prefixed random id generator as runs/pairs.
             db_clusters = [
                 PlagiarismCluster(

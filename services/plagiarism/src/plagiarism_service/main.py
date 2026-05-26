@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     producer: EventProducer = NullEventProducer()
     set_producer(producer)
     # Start the APScheduler tick that polls queued/running runs. Without
-    # this, the only way a JPlag subprocess ever starts is "by accident"
+    # this, the only way a Dolos subprocess ever starts is "by accident"
     # — the API just enqueues a row and nothing ever picks it up. Symptom
     # was every plagiarism run sitting in ``queued`` indefinitely.
     scheduler = build_scheduler(get_orchestrator())

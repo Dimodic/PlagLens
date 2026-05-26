@@ -1,4 +1,5 @@
-"""Provider admin endpoints."""
+"""Provider admin endpoints — Dolos is the only shipped engine, so the
+listing/test/usage endpoints are exercised against ``dolos`` only."""
 from __future__ import annotations
 
 from tests.conftest import admin_headers
@@ -10,12 +11,12 @@ async def test_list_providers(client):
     )
     assert resp.status_code == 200
     names = [p["provider"] for p in resp.json()["data"]]
-    assert {"jplag", "moss", "codequiry", "dolos"} <= set(names)
+    assert "dolos" in set(names)
 
 
 async def test_test_provider(client):
     resp = await client.post(
-        "/api/v1/admin/plagiarism/providers/jplag:test",
+        "/api/v1/admin/plagiarism/providers/dolos:test",
         headers=admin_headers(),
     )
     assert resp.status_code == 200
@@ -24,7 +25,7 @@ async def test_test_provider(client):
 
 async def test_set_default(client):
     resp = await client.post(
-        "/api/v1/admin/plagiarism/providers/moss:set-default",
+        "/api/v1/admin/plagiarism/providers/dolos:set-default",
         headers=admin_headers(),
     )
     assert resp.status_code == 200
@@ -33,7 +34,7 @@ async def test_set_default(client):
 
 async def test_provider_usage(client):
     resp = await client.get(
-        "/api/v1/admin/plagiarism/providers/jplag/usage",
+        "/api/v1/admin/plagiarism/providers/dolos/usage",
         headers=admin_headers(),
     )
     assert resp.status_code == 200

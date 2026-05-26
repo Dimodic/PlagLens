@@ -71,7 +71,18 @@ class Settings(BaseSettings):
     # Only Dolos is shipped as a working implementation; the abstract
     # ``PlagiarismProvider`` interface remains open for future engines.
     default_provider: str = "dolos"
-    dolos_bin: str = "dolos"
+    # Two env aliases for compatibility:
+    #   * ``DOLOS_BIN``      — matches the field name (pydantic default mapping)
+    #   * ``DOLOS_BIN_PATH`` — what docker-compose has been setting since the
+    #                          Dolos rollout. Without the alias the value was
+    #                          silently ignored and the field fell back to
+    #                          ``"dolos"`` (which only works because the npm
+    #                          install drops the binary in /usr/local/bin/ ⇒
+    #                          on $PATH).
+    dolos_bin: str = Field(
+        default="dolos",
+        validation_alias=AliasChoices("DOLOS_BIN", "DOLOS_BIN_PATH"),
+    )
     dolos_timeout_seconds: int = 600
 
     # ----- corpus -----
@@ -91,7 +102,7 @@ class Settings(BaseSettings):
     # services). Without the second alias the default
     # ``http://submission-service.internal:8080`` shadows the compose
     # value and submission lookups fail silently — the assignment's
-    # submission_ids come back empty, JPlag runs stay queued forever.
+    # submission_ids come back empty, runs stay queued forever.
     submission_service_base: str = Field(
         default="http://submission-service.internal:8080",
         validation_alias=AliasChoices(

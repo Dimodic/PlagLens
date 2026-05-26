@@ -2,7 +2,7 @@
 
 Only Dolos is shipped as a working implementation. The ``PlagiarismProvider``
 abstract base + the registry below stay in place so adding another engine
-(JPlag, MOSS, Codequiry, …) is a matter of dropping in one more subclass —
+is a matter of dropping in one more subclass —
 no orchestrator-side changes required.
 """
 

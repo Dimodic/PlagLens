@@ -23,10 +23,10 @@ from ..deps import get_db, get_principal_dep
 
 router = APIRouter(prefix="/admin/plagiarism/providers", tags=["provider-admin"])
 
-# Only Dolos ships as a working adapter. The legacy list used to also
-# contain "jplag" / "moss" / "codequiry"; their entries showed up in the
-# admin Providers page as un-configurable stubs even though the engines
-# themselves were removed.
+# Only Dolos ships as a working adapter. Adding another engine means
+# (a) drop a new ``PlagiarismProvider`` subclass under ``providers/``,
+# (b) register it in ``providers/__init__.py:get_provider``, and
+# (c) append its name here so it shows up in the admin Providers page.
 _KNOWN = ("dolos",)
 
 

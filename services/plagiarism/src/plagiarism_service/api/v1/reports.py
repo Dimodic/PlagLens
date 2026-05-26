@@ -143,7 +143,7 @@ async def list_pairs(
 def _slice_lines(text: str, start: int, end: int) -> str:
     """Return inclusive 1-indexed line range from ``text``.
 
-    JPlag fragments carry start/end lines but no content. We fetch the
+    Dolos fragments carry start/end lines but no content. We fetch the
     original submission file at pair-detail time and slice here so the
     side-by-side diff actually has code to render."""
     if not text or start <= 0 or end < start:
@@ -175,7 +175,7 @@ async def get_pair(
     # We *always* fetch the source files for both submissions: the
     # frontend needs the FULL file (incl. the trailing ``}`` of main
     # and surrounding helpers) to render the side-by-side diff with
-    # JPlag match ranges as overlays. Only the fragment-snippet
+    # Dolos match ranges as overlays. Only the fragment-snippet
     # hydration ("a_content"/"b_content" on each fragment) is skipped
     # when those fields already have data — that part is just for
     # back-compat with older clients that read the fragment snippets
@@ -209,7 +209,7 @@ async def get_pair(
         )
         a_lang = a_item.language if a_item else None
         b_lang = b_item.language if b_item else None
-        # Helper: tolerate the file-name mismatch between JPlag (which
+        # Helper: tolerate the file-name mismatch between Dolos (which
         # reports the path relative to the submission folder it saw)
         # and submission service (which may carry a different leading
         # segment). Fall back to first file content if exact match
@@ -230,7 +230,7 @@ async def get_pair(
 
         # Stash the FULL files used by the matches so the frontend can
         # render the complete source (closing braces and all) with
-        # highlights overlaid — JPlag's match ranges typically stop at
+        # highlights overlaid — Dolos's match ranges typically stop at
         # the last matched token, so a diff that renders only fragment
         # content is missing the final ``}`` of ``main`` and looks cut
         # off to the grader. (Variables declared at function scope above
@@ -350,12 +350,12 @@ async def list_clusters(
     # member identities so the UI shows real names, not ``sub_xxx``.
     author_map = (run.scope or {}).get("author_map") or {}
     # Cluster avg similarity is recomputed from the actual pairs rather
-    # than trusting the value JPlag wrote at finalize time — older runs
+    # than trusting the value Dolos wrote at finalize time — older runs
     # have it stored as 0 (the parser was reading the wrong overview.json
     # key), and recomputing keeps the number honest regardless.
     pair_sim = await _pair_similarity_map(db, run_id, principal.tenant_id)
     # Compute the honest avg per cluster, then:
-    #   • drop noise clusters (avg < 5%) — JPlag's clustering is eager
+    #   • drop noise clusters (avg < 5%) — Dolos's clustering is eager
     #     and produces "everyone weakly touches everyone" groups that
     #     carry no signal and just clutter the list + map.
     #   • sort by avg desc so the strongest match sits on top.
@@ -390,7 +390,7 @@ async def _pair_similarity_map(
     """``{(sub_a, sub_b): similarity}`` for every pair of a run, with the
     submission-id tuple sorted so lookups are order-independent."""
     pair_repo = PairRepository(db)
-    # Generous limit — JPlag prunes to top matches, a run rarely exceeds
+    # Generous limit — Dolos prunes to top matches, a run rarely exceeds
     # a few thousand pairs even for large cohorts.
     pairs = await pair_repo.list_by_run(
         run_id=run_id, tenant_id=tenant_id, limit=5000

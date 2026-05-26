@@ -14,7 +14,7 @@ async def test_assignment_config_crud(client):
     assert get0.status_code == 200
     patch = await client.patch(
         "/api/v1/assignments/asn_99/plagiarism-config",
-        json={"provider": "jplag", "threshold": 0.75, "auto_run": True},
+        json={"provider": "dolos", "threshold": 0.75, "auto_run": True},
         headers=headers,
         params={"course_id": "crs_e"},
     )
