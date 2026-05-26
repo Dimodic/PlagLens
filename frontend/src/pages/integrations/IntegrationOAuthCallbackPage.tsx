@@ -55,14 +55,11 @@ export default function IntegrationOAuthCallbackPage() {
 
     integrationsApi
       .oauthFinalize({ code, state: stateParam })
-      .then((res) => {
-        // Go straight to the integration's detail surface. No
-        // intermediate "all good, click here" page.
-        const dest =
-          res.kind === 'yandex_contest'
-            ? `/integrations/yandex-contest/${res.config_id}/contests`
-            : `/integrations/${res.config_id}`;
-        navigate(dest, { replace: true });
+      .then(() => {
+        // After OAuth we drop the user on the integrations list — the
+        // actual import flow (Yandex.Contest → ДЗ, Stepik → курс) lives
+        // on the relevant course page, not on a per-integration view.
+        navigate('/integrations', { replace: true });
       })
       .catch((raw) => {
         setProblem(raw as Problem);

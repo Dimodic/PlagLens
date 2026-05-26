@@ -126,11 +126,11 @@ function chunkPairs<T>(arr: T[]): T[][] {
 }
 
 function openLink(integration: IntegrationConfig): string {
-  if (integration.kind === 'yandex_contest') {
-    return `/integrations/yandex-contest/${integration.id}/contests`;
-  }
   // Detail page is mounted at both /integrations/:id (teacher+admin) and
   // /admin/integrations/:id (admin only). Use the teacher-friendly mirror.
+  // Per-kind import flows (Y.Contest contest pick, Stepik course pick)
+  // live on the course detail page, not here — those tiles still open
+  // the integration's generic detail (audit + cron + revoke).
   return `/integrations/${integration.id}`;
 }
 

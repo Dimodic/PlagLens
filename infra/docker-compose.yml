@@ -253,6 +253,15 @@ services:
       ENABLE_KAFKA: "true"
       SUBMISSION_BASE_URL: http://course-submission:8000
       COURSE_BASE_URL: http://course-submission:8000
+      # When the historical ``course`` + ``submission`` services got
+      # merged into ``course-submission`` the legacy *_SERVICE_URL env
+      # names were left pointing at the old (now non-existent) hosts.
+      # /import-as-homework calls ``settings.course_service_url`` and
+      # ``submission_service_url`` directly — without the override
+      # below it gets ``http://course:8000`` and dies with
+      # '[Errno -3] Temporary failure in name resolution'.
+      COURSE_SERVICE_URL: http://course-submission:8000
+      SUBMISSION_SERVICE_URL: http://course-submission:8000
       # Public-facing host of the SPA — used to render OAuth-redirect
       # defaults in /admin/integrations → Авторизация. Without this the
       # admin sees http://localhost:5173/… and pastes it to Yandex/etc,

@@ -162,7 +162,6 @@ const YandexContestSetupPage = lazy(() => import('@/pages/integrations/YandexCon
 const StepikSetupPage = lazy(() => import('@/pages/integrations/StepikSetupPage'));
 const EjudgeSetupPage = lazy(() => import('@/pages/integrations/EjudgeSetupPage'));
 const IntegrationOAuthCallbackPage = lazy(() => import('@/pages/integrations/IntegrationOAuthCallbackPage'));
-const YandexContestImportPage = lazy(() => import('@/pages/integrations/YandexContestImportPage'));
 const GoogleSheetsSetupPage = lazy(() => import('@/pages/integrations/GoogleSheetsSetupPage'));
 const WebhooksAdminPage = lazy(() => import('@/pages/admin/WebhooksAdminPage'));
 const EmailConfigPage = lazy(() => import('@/pages/admin/EmailConfigPage'));
@@ -371,16 +370,13 @@ const protectedRoutes: RouteObject[] = [
           </RoleGuard>
         ),
       },
+      // /integrations/yandex-contest/:id/contests used to host a parallel
+      // contest-binding UI; that flow now lives entirely on the course
+      // detail page (CourseDetailPage → '+ Новое ДЗ' → 'Из Yandex.Contest').
+      // Old bookmarks land on the integrations list.
       {
         path: 'integrations/yandex-contest/:configId/contests',
-        element: (
-          <RoleGuard
-            global={['teacher', 'admin']}
-            fallback={<NotFoundPage />}
-          >
-            <YandexContestImportPage />
-          </RoleGuard>
-        ),
+        element: <Navigate to="/integrations" replace />,
       },
       {
         path: 'integrations/stepik/setup',
