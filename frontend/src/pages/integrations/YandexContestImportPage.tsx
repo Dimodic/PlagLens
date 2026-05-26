@@ -1,45 +1,61 @@
 /**
- * /integrations/yandex-contest/:configId/contests — import participants from
- * a Yandex.Contest contest into the bound PlagLens course.
+ * /integrations/yandex-contest/:configId/contests — manage Yandex.Contest
+ * imports for the current teacher's OAuth-connected account.
  *
- * Yandex.Contest API does NOT expose "list all contests" — you must know the
- * contest_id ahead of time. PlagLens stores those IDs on each homework
- * (description field "Yandex.Contest contest_id=NNNNN" by convention), so we:
- *   1) Load the bound config to find its course_id.
- *   2) Load that course's homeworks and parse contest_id from descriptions.
- *   3) Render each homework as a one-click "Импортировать" row.
- *   4) Also offer a manual contest_id input as a fallback.
+ * Y.Contest API doesn't expose ``GET /contests`` — the teacher must
+ * know each contest_id ahead of time. PlagLens stores those IDs on
+ * homework descriptions (``contest_id=NNNNN``). One OAuth token can
+ * serve any number of courses, so this page:
  *
- * Each click calls our backend `import-participants`, which in turn pulls
- * Yandex.Contest API → identity bulk-import → course batchCreate.
+ *   1. Lists every homework across the teacher's courses that already
+ *      has a contest_id in its description (= "Привязанные контесты").
+ *   2. Lets the teacher add a new binding: pick course + give the
+ *      homework a name + paste the Y.Contest contest_id. We POST to
+ *      /courses/:id/homeworks with a description containing the magic
+ *      ``contest_id=NNNNN`` marker — the next autosync tick + the
+ *      import buttons pick it up.
+ *   3. Per row: "Импортировать участников", "Импортировать посылки",
+ *      "Отвязать" (delete homework).
+ *
+ * UI rules (.claude/UI_RULES.md): no Card chrome, only hairline dividers
+ * between rows. The earlier "Card with grey fill" version read as
+ * unrelated stacked boxes.
  */
 import { FormEvent, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueries, useQueryClient } from '@tanstack/react-query';
 import {
-  CheckCircle2,
-  Loader2,
   AlertCircle,
-  RefreshCw,
-  Clock,
-  Users,
-  FileText,
-  Trash2,
   CalendarDays,
+  CheckCircle2,
+  Clock,
+  ExternalLink,
+  FileText,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Users,
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Page } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import { useIntegration } from '@/hooks/api/useIntegrations';
 import { homeworksApi } from '@/api/endpoints/homeworks';
-import { useSyncNow } from '@/hooks/api/useIntegrations';
+import { useMyCourses } from '@/hooks/api/useCourses';
 import { useNotifications } from '@/hooks/useNotifications';
-import { Badge } from '@/components/ui/badge';
+import { cn } from '@/components/ui/utils';
 import type { Problem } from '@/api/types';
 
 interface ImportSummary {
@@ -47,7 +63,12 @@ interface ImportSummary {
   failed: number;
   errors: string[];
   identity?: { created: number; existing: number };
-  course?: { added: number; existing: number; failed: number; error?: string };
+  course?: {
+    added: number;
+    existing: number;
+    failed: number;
+    error?: string;
+  };
 }
 
 interface SubmissionsSummary {
@@ -66,47 +87,93 @@ function extractContestId(description?: string | null): number | null {
   return m ? Number(m[1]) : null;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Course = any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Homework = any;
+
+interface BoundContest {
+  hw: Homework;
+  course: Course;
+  contestId: number;
+}
+
 export default function YandexContestImportPage() {
   useDocumentTitle('Импорт из Yandex.Contest');
   const { configId } = useParams<{ configId: string }>();
+  const notify = useNotifications();
+  const queryClient = useQueryClient();
 
   const cfgQ = useIntegration(configId);
-  const courseId = cfgQ.data?.course_id;
 
-  const hwQ = useQuery({
-    queryKey: ['course-homeworks', courseId],
-    queryFn: () => homeworksApi.listForCourse(String(courseId), { limit: 200 }),
-    enabled: !!courseId,
+  // All courses where the current user is owner/teacher — the OAuth
+  // token serves any of them, so we fan out homework queries across
+  // the whole set.
+  const myCoursesQ = useMyCourses();
+  const courses: Course[] = Array.isArray(myCoursesQ.data)
+    ? (myCoursesQ.data as Course[])
+    : ((myCoursesQ.data as { data?: Course[] } | undefined)?.data ?? []);
+
+  const hwQueries = useQueries({
+    queries: courses.map((c) => ({
+      queryKey: ['course-homeworks', String(c.id)],
+      queryFn: () => homeworksApi.listForCourse(String(c.id), { limit: 200 }),
+      enabled: !!c.id,
+    })),
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const homeworks: any[] = hwQ.data?.data ?? [];
 
-  const candidates = useMemo(
-    () =>
-      homeworks
-        .map((hw) => ({
-          hw,
-          contestId: extractContestId(hw.description),
-        }))
-        .filter((x) => x.contestId !== null) as Array<{
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        hw: any;
-        contestId: number;
-      }>,
-    [homeworks],
-  );
+  const bound: BoundContest[] = useMemo(() => {
+    const out: BoundContest[] = [];
+    courses.forEach((c, idx) => {
+      const list = hwQueries[idx]?.data?.data ?? [];
+      for (const hw of list) {
+        const cid = extractContestId(hw.description);
+        if (cid !== null) {
+          out.push({ hw, course: c, contestId: cid });
+        }
+      }
+    });
+    return out;
+  }, [courses, hwQueries]);
 
+  const isInitialLoad =
+    myCoursesQ.isPending ||
+    (courses.length > 0 && hwQueries.some((q) => q.isPending));
+
+  // -------- import actions --------
   const [busyId, setBusyId] = useState<string | null>(null);
   const [results, setResults] = useState<Record<string, ImportSummary>>({});
-  const [subResults, setSubResults] = useState<Record<string, SubmissionsSummary>>({});
-  const [manualId, setManualId] = useState('');
+  const [subResults, setSubResults] = useState<
+    Record<string, SubmissionsSummary>
+  >({});
+
+  const onImport = async (contestId: number, key: string) => {
+    if (!configId) return;
+    setBusyId(key);
+    try {
+      const res = await integrationsApi.ycImportParticipants(configId, contestId);
+      setResults((p) => ({ ...p, [key]: res }));
+    } catch (raw) {
+      const p = raw as Problem;
+      setResults((prev) => ({
+        ...prev,
+        [key]: {
+          imported: 0,
+          failed: 1,
+          errors: [p.detail ?? p.title ?? 'Ошибка импорта'],
+        },
+      }));
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const onImportSubmissions = async (contestId: number, key: string) => {
     if (!configId) return;
     setBusyId(`sub-${key}`);
     try {
       const res = await integrationsApi.ycImportSubmissions(configId, contestId);
-      setSubResults((prev) => ({ ...prev, [key]: res }));
+      setSubResults((p) => ({ ...p, [key]: res }));
     } catch (raw) {
       const p = raw as Problem;
       setSubResults((prev) => ({
@@ -123,96 +190,111 @@ export default function YandexContestImportPage() {
     }
   };
 
-  const onImport = async (contestId: number, key: string) => {
-    if (!configId) return;
-    setBusyId(key);
-    try {
-      const res = await integrationsApi.ycImportParticipants(configId, contestId);
-      setResults((prev) => ({
-        ...prev,
-        [key]: {
-          imported: res.imported,
-          failed: res.failed,
-          errors: res.errors,
-          identity: res.identity,
-          course: res.course,
-        },
-      }));
-    } catch (raw) {
-      const p = raw as Problem;
-      setResults((prev) => ({
-        ...prev,
-        [key]: {
-          imported: 0,
-          failed: 1,
-          errors: [p.detail ?? p.title ?? 'Ошибка импорта'],
-        },
-      }));
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const onManualSubmit = (e: FormEvent) => {
-    e.preventDefault();
-    const id = Number(manualId.trim());
-    if (!id) return;
-    void onImport(id, `manual-${id}`);
-  };
-
-  const queryClient = useQueryClient();
-  const notifyTop = useNotifications();
+  // -------- delete binding --------
   const deleteHwM = useMutation({
     mutationFn: (hwId: string) => homeworksApi.delete(hwId),
     onSuccess: () => {
-      notifyTop.success('ДЗ удалено из курса');
-      queryClient.invalidateQueries({ queryKey: ['course-homeworks', courseId] });
+      notify.success('Привязка снята');
+      courses.forEach((c) =>
+        queryClient.invalidateQueries({
+          queryKey: ['course-homeworks', String(c.id)],
+        }),
+      );
     },
-    onError: (e) => notifyTop.error((e as unknown as Problem)?.detail ?? 'Не удалось удалить'),
+    onError: (e) =>
+      notify.error(
+        (e as unknown as Problem)?.detail ?? 'Не удалось снять привязку',
+      ),
   });
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const onDeleteHw = (hw: any) => {
-    if (!confirm(`Удалить «${hw.title}» из курса? Связь с Yandex.Contest пропадёт.`))
+  const onUnbind = (hw: Homework) => {
+    if (!confirm(`Отвязать «${hw.title}»? Связь с Yandex.Contest пропадёт.`))
       return;
     deleteHwM.mutate(String(hw.id));
   };
 
+  // -------- add binding --------
+  const [newCourseId, setNewCourseId] = useState<string>('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newContestId, setNewContestId] = useState('');
+  const addM = useMutation({
+    mutationFn: async () => {
+      const cid = Number(newContestId.trim());
+      if (!newCourseId) throw new Error('Выберите курс');
+      if (!newTitle.trim()) throw new Error('Укажите название ДЗ');
+      if (!cid) throw new Error('ID контеста должен быть числом');
+      return homeworksApi.create(newCourseId, {
+        title: newTitle.trim(),
+        // Magic marker the importer + autosync read.
+        description: `Yandex.Contest contest_id=${cid}`,
+      });
+    },
+    onSuccess: () => {
+      notify.success('Контест привязан');
+      setNewTitle('');
+      setNewContestId('');
+      queryClient.invalidateQueries({
+        queryKey: ['course-homeworks', newCourseId],
+      });
+    },
+    onError: (e) =>
+      notify.error(
+        (e as unknown as Problem)?.detail ??
+          (e as Error)?.message ??
+          'Не удалось привязать',
+      ),
+  });
+
+  const onAddSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    addM.mutate();
+  };
+
   return (
     <Page width="regular">
-      <div className="space-y-1">
-        <h1 className="text-3xl font-bold tracking-tight">
+      <header className="space-y-1">
+        <h1 className="text-2xl font-semibold tracking-tight">
           Импорт из Yandex.Contest
         </h1>
         <p className="text-sm text-muted-foreground">
-          Привязанные к курсу контесты. Импорт студентов и посылок работает
-          автоматически каждые 5 минут — кнопки ниже запускают конкретный
-          контест вручную.
+          Один OAuth-токен обслуживает все ваши курсы. Привяжите контест к ДЗ —
+          студенты, посылки и оценки начнут синхронизироваться автоматически
+          каждые 5 минут. Кнопки ниже запускают конкретный контест вручную.
         </p>
-      </div>
+      </header>
 
-      {configId && <SyncHistorySection configId={configId} />}
+      {/* Autosync row */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Автосинхронизация
+        </h2>
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-2 text-sm text-foreground">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            каждые 5 минут — для всех привязанных контестов
+          </div>
+          {configId && <ManualSyncButton configId={configId} />}
+        </div>
+      </section>
 
-      {cfgQ.isPending || hwQ.isPending ? (
-        <Card className="border-border/70">
-          <CardContent className="p-8 flex items-center gap-3 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Загружаем…
-          </CardContent>
-        </Card>
-      ) : candidates.length === 0 ? (
-        <Card className="border-dashed border-border/70">
-          <CardContent className="p-8 text-center text-sm text-muted-foreground">
-            <p>В курсе нет ДЗ с привязанным contest_id.</p>
-            <p className="mt-2">
-              Используйте форму ниже, чтобы импортировать участников по ID
-              вручную.
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card className="border-border/70">
-          <CardContent className="p-0">
-            {candidates.map(({ hw, contestId }, idx) => {
+      {/* Bound contests */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Привязанные контесты
+        </h2>
+
+        {isInitialLoad ? (
+          <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            Загружаем привязки…
+          </div>
+        ) : bound.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Пока ни один контест не привязан. Добавьте первый ниже.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border/40">
+            {bound.map(({ hw, course, contestId }) => {
               const key = `hw-${hw.id}`;
               const r = results[key];
               const sub = subResults[key];
@@ -220,317 +302,318 @@ export default function YandexContestImportPage() {
                 ? dayjs(hw.due_at).format('D MMMM YYYY')
                 : null;
               return (
-                <div
+                <li
                   key={hw.id}
-                  className={`px-5 py-5 ${idx > 0 ? 'border-t border-border/70' : ''}`}
+                  className="flex flex-col gap-3 py-4"
                   data-testid={`yc-hw-${hw.id}`}
                 >
-                  <div className="flex flex-wrap items-start gap-4">
-                    <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1 space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <h3 className="text-base font-semibold">{hw.title}</h3>
-                        <Badge variant="outline" className="font-normal">
-                          Yandex.Contest #{contestId}
-                        </Badge>
+                        <span className="text-sm font-medium text-foreground">
+                          {hw.title}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          · {course.name}
+                        </span>
                       </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <a
+                          href={`https://contest.yandex.ru/contest/${contestId}/`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-mono text-foreground/80 hover:underline"
+                        >
+                          contest #{contestId}
+                          <ExternalLink className="h-3 w-3" />
+                        </a>
                         {dueAt && (
                           <span className="inline-flex items-center gap-1">
                             <CalendarDays className="h-3 w-3" />
                             до {dueAt}
                           </span>
                         )}
-                        <a
-                          href={`https://contest.yandex.ru/contest/${contestId}/`}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary hover:underline"
-                        >
-                          contest.yandex.ru
-                        </a>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-1">
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="ghost"
+                        className="h-7 px-2"
                         onClick={() => onImport(contestId, key)}
                         disabled={busyId === key}
                         data-testid={`yc-import-hw-${hw.id}`}
                       >
-                        <Users className="mr-2 h-4 w-4" />
-                        {busyId === key ? 'Импорт…' : 'Импортировать студентов'}
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => onImportSubmissions(contestId, key)}
-                        disabled={busyId === `sub-${key}`}
-                        data-testid={`yc-sub-import-hw-${hw.id}`}
-                      >
-                        <FileText className="mr-2 h-4 w-4" />
-                        {busyId === `sub-${key}` ? 'Импорт…' : 'Импортировать посылки'}
+                        <Users className="mr-1.5 h-3.5 w-3.5" />
+                        {busyId === key ? 'Студенты…' : 'Студенты'}
                       </Button>
                       <Button
                         size="sm"
                         variant="ghost"
-                        onClick={() => onDeleteHw(hw)}
-                        disabled={deleteHwM.isPending}
-                        className="text-destructive hover:text-destructive"
-                        data-testid={`yc-delete-hw-${hw.id}`}
-                        title="Удалить ДЗ из курса"
+                        className="h-7 px-2"
+                        onClick={() => onImportSubmissions(contestId, key)}
+                        disabled={busyId === `sub-${key}`}
+                        data-testid={`yc-sub-import-hw-${hw.id}`}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <FileText className="mr-1.5 h-3.5 w-3.5" />
+                        {busyId === `sub-${key}` ? 'Посылки…' : 'Посылки'}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-7 px-2 text-destructive hover:text-destructive"
+                        onClick={() => onUnbind(hw)}
+                        disabled={deleteHwM.isPending}
+                        data-testid={`yc-delete-hw-${hw.id}`}
+                        title="Отвязать"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
                   {r && <ResultLine r={r} />}
                   {sub && <SubLine s={sub} />}
-                </div>
+                </li>
               );
             })}
-          </CardContent>
-        </Card>
-      )}
+          </ul>
+        )}
+      </section>
 
-      {/* Manual fallback */}
-      <Card className="border-border/70">
-        <CardContent className="p-5">
-          <form onSubmit={onManualSubmit} className="flex items-end gap-3">
-            <div className="flex-1 space-y-1.5">
-              <Label htmlFor="manual-contest-id">
-                Импорт по ID вручную
-              </Label>
-              <Input
-                id="manual-contest-id"
-                value={manualId}
-                onChange={(e) => setManualId(e.target.value)}
-                placeholder="73433"
-                inputMode="numeric"
-                pattern="[0-9]+"
-                className="font-mono"
-                data-testid="manual-contest-id"
-              />
-              <p className="text-xs text-muted-foreground">
-                Если контеста нет в ДЗ выше — введите его ID и нажмите
-                «Импортировать». ID — число из URL контеста на contest.yandex.ru.
-              </p>
-            </div>
-            <Button
-              type="submit"
-              disabled={!manualId.trim() || busyId === `manual-${Number(manualId)}`}
-              data-testid="manual-import-submit"
-            >
-              {busyId?.startsWith('manual-') ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Импортируем…
-                </>
-              ) : (
-                'Импортировать'
-              )}
-            </Button>
-          </form>
-          {results[`manual-${Number(manualId)}`] && (
-            <div className="mt-3">
-              <ResultLine r={results[`manual-${Number(manualId)}`]!} />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {/* Add binding */}
+      <section className="space-y-3 border-t border-border/50 pt-6">
+        <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Привязать контест
+        </h2>
+        <form
+          onSubmit={onAddSubmit}
+          className="grid gap-3 sm:grid-cols-[1fr_1fr_140px_auto] sm:items-end"
+          data-testid="yc-add-binding-form"
+        >
+          <div className="space-y-1.5">
+            <Label htmlFor="yc-add-course">Курс</Label>
+            <Select value={newCourseId} onValueChange={setNewCourseId}>
+              <SelectTrigger id="yc-add-course" data-testid="yc-add-course">
+                <SelectValue placeholder="Выберите курс" />
+              </SelectTrigger>
+              <SelectContent>
+                {courses.map((c) => (
+                  <SelectItem key={c.id} value={String(c.id)}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="yc-add-title">Название ДЗ</Label>
+            <Input
+              id="yc-add-title"
+              value={newTitle}
+              onChange={(e) => setNewTitle(e.currentTarget.value)}
+              placeholder="ДЗ 1 — Сортировки"
+              data-testid="yc-add-title"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="yc-add-contest-id">ID контеста</Label>
+            <Input
+              id="yc-add-contest-id"
+              value={newContestId}
+              onChange={(e) => setNewContestId(e.currentTarget.value)}
+              placeholder="73433"
+              inputMode="numeric"
+              pattern="[0-9]+"
+              className="font-mono"
+              data-testid="yc-add-contest-id"
+            />
+          </div>
+          <Button
+            type="submit"
+            disabled={
+              addM.isPending ||
+              !newCourseId ||
+              !newTitle.trim() ||
+              !newContestId.trim()
+            }
+            data-testid="yc-add-submit"
+          >
+            {addM.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Plus className="mr-2 h-4 w-4" />
+            )}
+            Привязать
+          </Button>
+        </form>
+        <p className="text-xs text-muted-foreground">
+          ID — это число из URL контеста на{' '}
+          <span className="font-mono">contest.yandex.ru</span>. В описание ДЗ
+          мы запишем маркер{' '}
+          <code className="font-mono">contest_id=NNNNN</code> — этого достаточно,
+          чтобы автосинк подхватил привязку.
+        </p>
+      </section>
+
+      {configId && <SyncHistorySection configId={configId} />}
+
+      {/* Suppress unused import when cfg load races — keeps cfgQ in the
+          dependency graph so refetches still tick after revoke flows. */}
+      {cfgQ.isError && (
+        <p className="text-xs text-destructive">
+          Не удалось загрузить интеграцию.
+        </p>
+      )}
     </Page>
   );
 }
 
-function SubLine({ s }: { s: SubmissionsSummary }) {
-  const failed = s.failed > 0 && s.fetched === 0;
-  return (
-    <div className="mt-2 text-xs">
-      {failed ? (
-        <span className="inline-flex items-start gap-1 text-sev-high">
-          <AlertCircle className="mt-0.5 h-3 w-3 flex-none" />
-          <span>{s.errors.join('; ')}</span>
-        </span>
-      ) : (
-        <span className="inline-flex items-start gap-1 text-sev-low">
-          <CheckCircle2 className="mt-0.5 h-3 w-3 flex-none" />
-          <span>
-            submissions: {s.fetched}
-            {s.note && (
-              <span className="ml-1 text-muted-foreground">· {s.note}</span>
-            )}
-          </span>
-        </span>
-      )}
-    </div>
-  );
-}
+/* ------------------------------------------------------------------ */
+/* Subcomponents                                                       */
 
-function ResultLine({ r }: { r: ImportSummary }) {
-  const failed = r.failed > 0 && r.imported === 0;
-  return (
-    <div className="mt-2 text-xs">
-      {failed ? (
-        <span className="inline-flex items-start gap-1 text-sev-high">
-          <AlertCircle className="mt-0.5 h-3 w-3 flex-none" />
-          <span>{r.errors.join('; ')}</span>
-        </span>
-      ) : (
-        <span className="inline-flex items-start gap-1 text-sev-low">
-          <CheckCircle2 className="mt-0.5 h-3 w-3 flex-none" />
-          <span>
-            participants: {r.imported}
-            {r.identity && (
-              <>
-                {' '}
-                · created {r.identity.created}, existing {r.identity.existing}
-              </>
-            )}
-            {r.course && r.course.added !== undefined && (
-              <> · enrolled {r.course.added}</>
-            )}
-            {r.course?.error && (
-              <span className="text-sev-mid"> · enroll: {r.course.error}</span>
-            )}
-          </span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-
-
-function SyncHistorySection({ configId }: { configId: string }) {
-  const qc = useQueryClient();
+function ManualSyncButton({ configId }: { configId: string }) {
   const notify = useNotifications();
-  const syncM = useSyncNow(configId);
+  const [busy, setBusy] = useState(false);
 
-  const jobsQ = useQuery({
-    queryKey: ['integration', configId, 'import-jobs'],
-    queryFn: () => integrationsApi.listImportJobs(configId, { limit: 10 }),
-    refetchInterval: 30_000, // refresh every 30s — autosync ticks every 5 min
-  });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const jobs: any[] = jobsQ.data?.data ?? [];
-
-  const onSyncNow = async () => {
+  const run = async () => {
+    setBusy(true);
     try {
-      await syncM.mutateAsync({});
-      notify.success('Синхронизация запущена');
-      // Give the backend a beat, then refetch.
-      setTimeout(
-        () => qc.invalidateQueries({ queryKey: ['integration', configId, 'import-jobs'] }),
-        1500,
-      );
+      await integrationsApi.syncNow(configId, {});
+      notify.success('Запустили синхронизацию');
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось запустить');
+      notify.error((e as Problem)?.detail ?? 'Не удалось');
+    } finally {
+      setBusy(false);
     }
   };
 
   return (
-    <Card className="border-border/70" data-testid="sync-history">
-      <CardContent className="p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <h2 className="text-xl font-bold">Автосинхронизация</h2>
-            <span className="text-xs text-muted-foreground">
-              · каждые 5 минут
-            </span>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onSyncNow}
-            disabled={syncM.isPending}
-            data-testid="sync-now-btn"
-          >
-            <RefreshCw className={`mr-2 h-4 w-4 ${syncM.isPending ? 'animate-spin' : ''}`} />
-            Запустить сейчас
-          </Button>
-        </div>
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={run}
+      disabled={busy}
+      data-testid="yc-manual-sync"
+    >
+      {busy ? (
+        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <RefreshCw className="mr-2 h-3.5 w-3.5" />
+      )}
+      Запустить сейчас
+    </Button>
+  );
+}
 
-        {jobs.length === 0 ? (
-          <p className="text-xs text-muted-foreground">
-            История появится после первого тика автосинка.
-          </p>
-        ) : (
-          <div className="overflow-hidden rounded-md border border-border/60">
-            <table className="w-full text-xs">
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium">Когда</th>
-                  <th className="px-3 py-2 text-left font-medium">Триггер</th>
-                  <th className="px-3 py-2 text-left font-medium">Статус</th>
-                  <th className="px-3 py-2 text-left font-medium">Результат</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map((j) => {
-                  const ok = j.status === 'completed';
-                  const failed = j.status === 'failed';
-                  const stats = j.stats ?? {};
-                  return (
-                    <tr
-                      key={j.id}
-                      className="border-t border-border/60 align-top"
-                      data-testid={`job-row-${j.id}`}
-                    >
-                      <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                        {dayjs(j.started_at ?? j.created_at).format(
-                          'DD.MM HH:mm:ss',
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {j.trigger === 'scheduled' ? 'auto' : j.trigger}
-                      </td>
-                      <td className="px-3 py-2">
-                        {ok && (
-                          <span className="inline-flex items-center gap-1 text-sev-low">
-                            <CheckCircle2 className="h-3 w-3" />
-                            completed
-                          </span>
-                        )}
-                        {failed && (
-                          <span className="inline-flex items-center gap-1 text-sev-high">
-                            <AlertCircle className="h-3 w-3" />
-                            failed
-                          </span>
-                        )}
-                        {!ok && !failed && (
-                          <span className="text-muted-foreground">{j.status}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">
-                        {stats.contests !== undefined && (
-                          <>
-                            {stats.contests} контестов · participants{' '}
-                            {stats.participants_imported ?? 0}
-                            {stats.users_created
-                              ? ` · created ${stats.users_created}`
-                              : ''}
-                            {stats.members_enrolled
-                              ? ` · enrolled ${stats.members_enrolled}`
-                              : ''}
-                            {stats.submissions_fetched
-                              ? ` · submissions ${stats.submissions_fetched}`
-                              : ''}
-                          </>
-                        )}
-                        {j.error?.detail && (
-                          <span className="block text-sev-high">
-                            {String(j.error.detail).slice(0, 120)}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+function ResultLine({ r }: { r: ImportSummary }) {
+  const ok = r.imported > 0 && r.failed === 0;
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-2 text-xs',
+        ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+      )}
+    >
+      {ok ? (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      ) : (
+        <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+      )}
+      <span>
+        импортировано {r.imported}, ошибок {r.failed}
+        {r.identity && (
+          <>
+            {' '}
+            · идентичности: создано {r.identity.created} / найдено{' '}
+            {r.identity.existing}
+          </>
         )}
-      </CardContent>
-    </Card>
+        {r.course && (
+          <>
+            {' '}
+            · в курс добавлено {r.course.added}, уже было{' '}
+            {r.course.existing}
+          </>
+        )}
+      </span>
+      {r.errors.length > 0 && (
+        <span className="text-destructive">— {r.errors[0]}</span>
+      )}
+    </div>
+  );
+}
+
+function SubLine({ s }: { s: SubmissionsSummary }) {
+  const ok = s.fetched > 0 && s.failed === 0;
+  return (
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-2 text-xs',
+        ok ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+      )}
+    >
+      {ok ? (
+        <CheckCircle2 className="h-3.5 w-3.5" />
+      ) : (
+        <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+      )}
+      <span>
+        посылок получено {s.fetched}, ошибок {s.failed}
+      </span>
+      {s.note && <span className="text-muted-foreground">— {s.note}</span>}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Sync history — collapsed to a flat list, no Card wrapper            */
+
+function SyncHistorySection({ configId }: { configId: string }) {
+  const q = useQueries({
+    queries: [
+      {
+        queryKey: ['integration', configId, 'jobs', { limit: 5 }],
+        queryFn: () => integrationsApi.listImportJobs(configId, { limit: 5 }),
+        enabled: !!configId,
+        refetchInterval: 15_000,
+      },
+    ],
+  });
+  const data = q[0]?.data?.data ?? [];
+  if (data.length === 0) return null;
+
+  return (
+    <section className="space-y-3 border-t border-border/50 pt-6">
+      <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+        История синхронизаций
+      </h2>
+      <ul className="divide-y divide-border/40">
+        {data.map((j) => {
+          const at = j.started_at ?? j.finished_at;
+          return (
+            <li
+              key={j.id}
+              className="flex items-center justify-between gap-3 py-2 text-xs"
+            >
+              <span className="flex items-center gap-2">
+                {j.status === 'completed' ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                ) : j.status === 'failed' ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-destructive" />
+                ) : (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                )}
+                <span className="font-mono text-muted-foreground">
+                  {j.status}
+                </span>
+              </span>
+              <span className="text-muted-foreground">
+                {at ? dayjs(at).format('D MMM, HH:mm') : '—'}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
