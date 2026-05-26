@@ -138,7 +138,13 @@ async def create_run(
         "with_corpus": bool(body.with_corpus),
         "submission_ids": explicit_ids,
     }
-    provider = body.provider or "jplag"
+    # Default provider — Dolos is the only adapter we ship today (JPlag /
+    # MOSS / Codequiry were removed). The default used to be ``"jplag"``
+    # and the registry no longer resolves it, so a teacher who pressed
+    # "Запустить проверку" without picking an engine got
+    # ``ValueError: Unknown plagiarism provider: jplag`` from the
+    # orchestrator and the run flipped to ``failed`` immediately.
+    provider = body.provider or "dolos"
     run, replayed = await orch.enqueue_run(
         tenant_id=principal.tenant_id,
         course_id=course_id,

@@ -23,7 +23,11 @@ from ..deps import get_db, get_principal_dep
 
 router = APIRouter(prefix="/admin/plagiarism/providers", tags=["provider-admin"])
 
-_KNOWN = ("jplag", "moss", "codequiry", "dolos")
+# Only Dolos ships as a working adapter. The legacy list used to also
+# contain "jplag" / "moss" / "codequiry"; their entries showed up in the
+# admin Providers page as un-configurable stubs even though the engines
+# themselves were removed.
+_KNOWN = ("dolos",)
 
 
 def _ensure_admin(principal: Principal) -> None:
