@@ -23,6 +23,16 @@ interface SideBySideDiffProps {
   highlightedFragments?: Set<number>;
   /** Index of fragment to scroll-to in both panes (re-runs on change). */
   scrollToFragment?: number | null;
+  /** When true, every fragment uses the same palette slot. Use this for
+   *  synthetic fragments (client-side structural matching) where the
+   *  index doesn't carry "this A region maps to that B region" meaning
+   *  — multi-colour rotation in that case reads as a false pairing
+   *  signal ("why is B[15-17] red while A has nothing red?" — because
+   *  the synthesiser ran out of A runs and reused the last one, NOT
+   *  because that B region matched something else specific). With
+   *  multi-colour off it just says "this line participated in the
+   *  match", which is the honest claim. */
+  monochromeHighlights?: boolean;
 }
 
 interface HighlightZone {
@@ -69,7 +79,11 @@ const ZONE_PALETTE: { fill: string; border: string }[] = [
   { fill: 'bg-emerald-500/10', border: 'border-l-emerald-500' },
 ];
 
-function zoneClasses(idx: number): { fill: string; border: string } {
+function zoneClasses(
+  idx: number,
+  monochrome = false,
+): { fill: string; border: string } {
+  if (monochrome) return ZONE_PALETTE[0];
   return ZONE_PALETTE[idx % ZONE_PALETTE.length];
 }
 
@@ -91,9 +105,10 @@ interface PaneProps {
   side: DiffSide;
   zones: HighlightZone[];
   scrollToLine?: number | null;
+  monochrome?: boolean;
 }
 
-function Pane({ side, zones, scrollToLine }: PaneProps) {
+function Pane({ side, zones, scrollToLine, monochrome }: PaneProps) {
   // `side.content` is built from fragments whose `a_content`/`b_content`
   // may be null on older runs; guard so we never .split(null) → 500.
   const lines = useMemo(
@@ -157,7 +172,7 @@ function Pane({ side, zones, scrollToLine }: PaneProps) {
           {lines.map((line, idx) => {
             const lineNo = idx + 1;
             const zone = zoneByLine.get(lineNo);
-            const colors = zone ? zoneClasses(zone.index) : null;
+            const colors = zone ? zoneClasses(zone.index, monochrome) : null;
             return (
               <div
                 key={lineNo}
@@ -190,6 +205,7 @@ export function SideBySideDiff({
   fragments,
   highlightedFragments,
   scrollToFragment,
+  monochromeHighlights,
 }: SideBySideDiffProps) {
   const visible = highlightedFragments ?? new Set(fragments.map((_, i) => i));
   const aZones = buildSideZones(fragments, 'a', visible);
@@ -213,13 +229,23 @@ export function SideBySideDiff({
         className="flex min-w-0 flex-1 min-h-0"
         data-testid="pair-pane-left"
       >
-        <Pane side={left} zones={aZones} scrollToLine={scrollToLineLeft} />
+        <Pane
+          side={left}
+          zones={aZones}
+          scrollToLine={scrollToLineLeft}
+          monochrome={monochromeHighlights}
+        />
       </div>
       <div
         className="flex min-w-0 flex-1 min-h-0"
         data-testid="pair-pane-right"
       >
-        <Pane side={right} zones={bZones} scrollToLine={scrollToLineRight} />
+        <Pane
+          side={right}
+          zones={bZones}
+          scrollToLine={scrollToLineRight}
+          monochrome={monochromeHighlights}
+        />
       </div>
     </div>
   );

@@ -154,6 +154,16 @@ export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
         highlightedFragments={
           new Set(effectiveFragments.map((_f, i) => i))
         }
+        // Synthetic fragments don't carry "this A range maps to that B
+        // range" — they just say "this line participated in the
+        // structural match". Multi-colour rotation in that case reads
+        // as a false pairing signal (the user spotted "B has a red
+        // band, A doesn't" and asked why — answer: same B pattern
+        // matched the same A region twice, the renderer just ran out
+        // of A-runs and rotated palette anyway). Backend-shipped
+        // fragments DO encode pair correspondence — leave them
+        // multi-colour.
+        monochromeHighlights={data.fragments.length === 0}
       />
     </div>
   );
