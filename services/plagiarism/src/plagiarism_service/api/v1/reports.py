@@ -175,11 +175,11 @@ async def get_pair(
     # We *always* fetch the source files for both submissions: the
     # frontend needs the FULL file (incl. the trailing ``}`` of main
     # and surrounding helpers) to render the side-by-side diff with
-    # Dolos match ranges as overlays. Only the fragment-snippet
-    # hydration ("a_content"/"b_content" on each fragment) is skipped
-    # when those fields already have data — that part is just for
-    # back-compat with older clients that read the fragment snippets
-    # directly.
+    # match ranges as overlays. The fetch must run regardless of whether
+    # the pair came with fragments — Dolos v2 only writes a similarity
+    # value, no per-range fragments, so ``raw_fragments`` is empty for
+    # every pair and the previous "only fetch when fragments exist"
+    # gate left both panes blank in the UI.
     needs_fragment_hydrate = bool(raw_fragments) and not any(
         fr.get("a_content") or fr.get("b_content") for fr in raw_fragments
     )
@@ -187,54 +187,62 @@ async def get_pair(
     b_lang: str | None = None
     _a_full: str | None = None
     _b_full: str | None = None
-    if raw_fragments:
-        from ...services.submission_fetcher import get_submission_fetcher
 
-        fetcher = get_submission_fetcher()
-        try:
-            a_item = await fetcher.fetch_one(
-                tenant_id=pair.tenant_id, submission_id=pair.a_submission_id
-            )
-            b_item = await fetcher.fetch_one(
-                tenant_id=pair.tenant_id, submission_id=pair.b_submission_id
-            )
-        except Exception:
-            a_item = None
-            b_item = None
-        a_files = (
-            {f.path: f.content for f in a_item.files} if a_item else {}
-        )
-        b_files = (
-            {f.path: f.content for f in b_item.files} if b_item else {}
-        )
-        a_lang = a_item.language if a_item else None
-        b_lang = b_item.language if b_item else None
-        # Helper: tolerate the file-name mismatch between Dolos (which
-        # reports the path relative to the submission folder it saw)
-        # and submission service (which may carry a different leading
-        # segment). Fall back to first file content if exact match
-        # misses — most submissions have just one file anyway.
-        def _resolve(files: dict[str, str], wanted: str | None) -> str:
-            if not files:
-                return ""
-            if wanted and wanted in files:
-                return files[wanted]
-            if wanted:
-                # match by basename
-                base = wanted.rsplit("/", 1)[-1]
-                for k, v in files.items():
-                    if k.rsplit("/", 1)[-1] == base:
-                        return v
-            # one-file submission fallback
-            return next(iter(files.values()), "")
+    from ...services.submission_fetcher import get_submission_fetcher
 
+    fetcher = get_submission_fetcher()
+    try:
+        a_item = await fetcher.fetch_one(
+            tenant_id=pair.tenant_id, submission_id=pair.a_submission_id
+        )
+        b_item = await fetcher.fetch_one(
+            tenant_id=pair.tenant_id, submission_id=pair.b_submission_id
+        )
+    except Exception:
+        a_item = None
+        b_item = None
+    a_files = (
+        {f.path: f.content for f in a_item.files} if a_item else {}
+    )
+    b_files = (
+        {f.path: f.content for f in b_item.files} if b_item else {}
+    )
+    a_lang = a_item.language if a_item else None
+    b_lang = b_item.language if b_item else None
+
+    # Helper: tolerate the file-name mismatch between Dolos (which
+    # reports the path relative to the submission folder it saw)
+    # and submission service (which may carry a different leading
+    # segment). Fall back to first file content if exact match
+    # misses — most submissions have just one file anyway.
+    def _resolve(files: dict[str, str], wanted: str | None) -> str:
+        if not files:
+            return ""
+        if wanted and wanted in files:
+            return files[wanted]
+        if wanted:
+            # match by basename
+            base = wanted.rsplit("/", 1)[-1]
+            for k, v in files.items():
+                if k.rsplit("/", 1)[-1] == base:
+                    return v
+        # one-file submission fallback
+        return next(iter(files.values()), "")
+
+    # No fragments? Still ship the full source so the side-by-side
+    # renders something the grader can read. Pick the single file from
+    # each submission (the YC import flow gives us exactly one file
+    # per submission).
+    if not raw_fragments:
+        _a_full = next(iter(a_files.values()), None)
+        _b_full = next(iter(b_files.values()), None)
+    else:
         # Stash the FULL files used by the matches so the frontend can
         # render the complete source (closing braces and all) with
         # highlights overlaid — Dolos's match ranges typically stop at
         # the last matched token, so a diff that renders only fragment
         # content is missing the final ``}`` of ``main`` and looks cut
-        # off to the grader. (Variables declared at function scope above
-        # so they survive the no-hydrate branch.)
+        # off to the grader.
         for fr in raw_fragments:
             a_full = _resolve(a_files, fr.get("a_file"))
             b_full = _resolve(b_files, fr.get("b_file"))
