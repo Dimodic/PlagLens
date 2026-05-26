@@ -253,6 +253,11 @@ services:
       ENABLE_KAFKA: "true"
       SUBMISSION_BASE_URL: http://course-submission:8000
       COURSE_BASE_URL: http://course-submission:8000
+      # Public-facing host of the SPA — used to render OAuth-redirect
+      # defaults in /admin/integrations → Авторизация. Without this the
+      # admin sees http://localhost:5173/… and pastes it to Yandex/etc,
+      # which then refuses the OAuth dance from the deployed host.
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-https://${PUBLIC_HOSTNAME:-localhost}}
       # Autosync scheduler — APScheduler in-process, fenced by Redis lock so
       # multiple integration replicas don't double-sync.
       ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-true}

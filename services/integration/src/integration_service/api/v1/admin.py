@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from integration_service.common.auth import Principal
 from integration_service.common.problems import ProblemException
+from integration_service.config import get_settings
 from integration_service.deps import principal_dep, session_dep
 from integration_service.repositories import (
     ImportJobRepo,
@@ -75,28 +76,32 @@ async def list_dlq(
 # right creds when the per-config OAuth flow kicks off.
 _KNOWN_PROVIDERS = {"yandex_contest", "stepik", "google_sheets"}
 
-# How we describe each known provider on the admin page (defaults that the
-# admin can override per tenant).
+# Per-provider static metadata. ``default_redirect_uri`` is built at
+# request time from ``settings.frontend_base_url`` so deploys see their
+# real public host (https://example.com/…) instead of the dev-default
+# http://localhost:5173 baked in at import time.
 _PROVIDER_DEFAULTS: dict[str, dict[str, str]] = {
     "yandex_contest": {
         "title": "Yandex.Contest",
         "register_url": "https://oauth.yandex.ru/client/new",
         "default_scope": "contest:manage",
-        "default_redirect_uri": "http://localhost:5173/integrations/oauth/callback",
     },
     "stepik": {
         "title": "Stepik",
         "register_url": "https://stepik.org/oauth2/applications/",
         "default_scope": "read",
-        "default_redirect_uri": "http://localhost:5173/integrations/oauth/callback",
     },
     "google_sheets": {
         "title": "Google Sheets",
         "register_url": "https://console.cloud.google.com/apis/credentials",
         "default_scope": "https://www.googleapis.com/auth/spreadsheets",
-        "default_redirect_uri": "http://localhost:5173/integrations/oauth/callback",
     },
 }
+
+
+def _default_redirect_uri() -> str:
+    base = get_settings().frontend_base_url.rstrip("/")
+    return f"{base}/integrations/oauth/callback"
 
 
 def _provider_view(kind: str, row: Any) -> dict[str, Any]:
@@ -106,7 +111,7 @@ def _provider_view(kind: str, row: Any) -> dict[str, Any]:
         "title": meta.get("title", kind),
         "register_url": meta.get("register_url"),
         "default_scope": meta.get("default_scope"),
-        "default_redirect_uri": meta.get("default_redirect_uri"),
+        "default_redirect_uri": _default_redirect_uri(),
         "configured": row is not None,
         # Never return the secret. Show only that it's set.
         "client_id": row.client_id if row else None,

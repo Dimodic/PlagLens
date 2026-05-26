@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     api_prefix: str = "/api/v1"
 
+    # ---- public-facing URL (frontend origin) ----
+    # Used to build OAuth ``redirect_uri`` defaults that the admin sees
+    # in /admin/integrations → Авторизация. Defaults to localhost so
+    # ``npm run dev`` works out of the box; the deploy passes the real
+    # host (e.g. https://85.192.48.223.nip.io) via FRONTEND_BASE_URL env.
+    frontend_base_url: str = "http://localhost:5173"
+
     # ---- database ----
     database_url: str = "postgresql+asyncpg://plaglens:plaglens@localhost:5432/plaglens"
     database_echo: bool = False
