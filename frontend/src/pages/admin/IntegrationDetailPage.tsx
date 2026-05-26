@@ -29,6 +29,8 @@ import dayjs from 'dayjs';
 import {
   AlertCircle,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   KeyRound,
   Loader2,
   MoreHorizontal,
@@ -71,6 +73,7 @@ import { integrationsApi } from '@/api/endpoints/integrations';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { tokenStore } from '@/api/client';
 import { integrationKeys } from '@/hooks/api/useIntegrations';
+import { cn } from '@/components/ui/utils';
 import type { Problem } from '@/api/types';
 
 interface AutosyncPrefs {
@@ -207,6 +210,8 @@ interface JobProgress {
   homework_total?: number;
   homework_title?: string | null;
   current_contest_id?: number;
+  current_problem?: string;
+  submissions_fetched?: number;
   submissions_imported?: number;
 }
 
@@ -274,6 +279,14 @@ function IntegrationDetail(props: DetailProps) {
     [jobs],
   );
   const [liveProgress, setLiveProgress] = useState<JobProgress | null>(null);
+  const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set());
+  const toggleJobExpanded = (id: string) =>
+    setExpandedJobs((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
   const lastJobIdRef = useRef<string | null>(null);
   useEffect(() => {
     const jobId = runningJob?.id ?? null;
@@ -661,14 +674,39 @@ function IntegrationDetail(props: DetailProps) {
                   : isRunning
                     ? ((j.progress ?? {}) as JobProgress)
                     : null;
+              const homeworks = j.stats?.homeworks ?? [];
+              const errorList = j.stats?.errors ?? j.error?.errors ?? [];
+              const canExpand =
+                !isRunning && (homeworks.length > 0 || errorList.length > 0);
+              const expanded = expandedJobs.has(j.id);
               return (
                 <li
                   key={j.id}
                   className="space-y-0.5 py-2.5 text-sm"
                   data-testid={`job-${j.id}`}
                 >
-                  <div className="flex items-center justify-between gap-3">
+                  {/* Header row — clickable chevron toggles details for
+                     finished runs. Running rows show live progress
+                     inline and aren't collapsible. */}
+                  <div
+                    className={cn(
+                      'flex items-center justify-between gap-3',
+                      canExpand && 'cursor-pointer select-none',
+                    )}
+                    onClick={
+                      canExpand ? () => toggleJobExpanded(j.id) : undefined
+                    }
+                  >
                     <span className="flex items-center gap-2">
+                      {canExpand ? (
+                        expanded ? (
+                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                        )
+                      ) : (
+                        <span className="inline-block w-3.5" />
+                      )}
                       {j.status === 'completed' ? (
                         <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                       ) : j.status === 'failed' ? (
@@ -687,28 +725,90 @@ function IntegrationDetail(props: DetailProps) {
                       {at ? dayjs(at).format('D MMM, HH:mm') : 'в очереди'}
                     </span>
                   </div>
+
+                  {/* Running → live progress line. */}
                   {progress && (
-                    <p className="pl-5 text-xs text-muted-foreground">
+                    <p className="pl-7 text-xs text-muted-foreground">
                       {formatProgress(progress)}
                     </p>
                   )}
+
+                  {/* Finished → one-line summary always visible. */}
                   {!isRunning && j.stats && (
-                    <p className="pl-5 text-xs text-muted-foreground">
-                      {/* "проверено N · новых M" — surface the dedup
-                         signal so a "0 imported" resync of an unchanged
-                         contest doesn't read as a silent failure. Falls
-                         back to the bare new-count when the backend
-                         didn't supply ``scanned`` (older rows). Errors
-                         only on actual failure. */}
+                    <p className="pl-7 text-xs text-muted-foreground">
                       {summariseStats(j.stats, j.status)}
                     </p>
                   )}
-                  {!isRunning && j.error && j.status === 'failed' && (
-                    <p className="pl-5 text-xs text-destructive">
-                      {j.error.title ?? 'ошибка'}
-                      {j.error.detail ? `: ${j.error.detail}` : ''}
-                    </p>
+
+                  {/* Expanded details — per-homework + per-task breakdown
+                     and the error list. */}
+                  {!isRunning && expanded && (
+                    <div className="mt-1.5 space-y-2 pl-7">
+                      {homeworks.map((hw) => (
+                        <div key={hw.homework_id} className="space-y-1">
+                          <p className="text-xs font-medium text-foreground">
+                            {hw.title}
+                            <span className="ml-2 font-normal text-muted-foreground">
+                              проверено {hw.scanned} · новых {hw.created}
+                              {hw.deduplicated > 0 && (
+                                <> · уже были {hw.deduplicated}</>
+                              )}
+                            </span>
+                          </p>
+                          {hw.problems.length > 0 && (
+                            <ul className="space-y-0.5 pl-3">
+                              {hw.problems.map((pr, idx) => (
+                                <li
+                                  key={`${hw.homework_id}-${idx}`}
+                                  className="flex items-center justify-between gap-3 text-xs text-muted-foreground"
+                                >
+                                  <span className="truncate">{pr.title}</span>
+                                  <span className="flex-none tabular-nums">
+                                    {pr.scanned} посыл.
+                                    {pr.created > 0 && (
+                                      <span className="text-emerald-600 dark:text-emerald-400">
+                                        {' '}
+                                        (+{pr.created})
+                                      </span>
+                                    )}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ))}
+                      {errorList.length > 0 && (
+                        <div className="space-y-0.5">
+                          <p className="text-xs font-medium text-destructive">
+                            Ошибки
+                          </p>
+                          <ul className="space-y-0.5 pl-3">
+                            {errorList.slice(0, 20).map((e, idx) => (
+                              <li
+                                key={idx}
+                                className="break-words text-xs text-destructive/90"
+                              >
+                                {e}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   )}
+
+                  {/* Hard failure with a single error → show it even when
+                     there's no expandable breakdown. */}
+                  {!isRunning &&
+                    !canExpand &&
+                    j.error &&
+                    j.status === 'failed' && (
+                      <p className="pl-7 text-xs text-destructive">
+                        {j.error.title ?? 'ошибка'}
+                        {j.error.detail ? `: ${j.error.detail}` : ''}
+                      </p>
+                    )}
                 </li>
               );
             })}
@@ -785,9 +885,10 @@ function summariseStats(
 }
 
 function formatProgress(p: JobProgress): string {
-  // Compose the live-progress line: "ДЗ 2/3 «Имя» · посылок 384".
-  // Field availability depends on which checkpoint the worker has
-  // reached, so we degrade gracefully.
+  // Live-progress line, e.g.:
+  //   "ДЗ 1/1 «КНАД…» · выкачиваем посылки · выкачано 340 · импорт 120"
+  // Field availability depends on which checkpoint the worker reached,
+  // so we degrade gracefully and always render *something* moving.
   const parts: string[] = [];
   if (typeof p.homework_idx === 'number' && typeof p.homework_total === 'number') {
     const title = p.homework_title ? ` «${p.homework_title}»` : '';
@@ -795,14 +896,17 @@ function formatProgress(p: JobProgress): string {
   } else if (p.homework_title) {
     parts.push(`«${p.homework_title}»`);
   }
+  // Stage label so the user knows *what* is happening during a long
+  // fetch (the part that previously looked frozen).
+  if (p.stage) parts.push(stageLabel(p.stage));
+  if (typeof p.submissions_fetched === 'number' && p.submissions_fetched > 0) {
+    parts.push(`выкачано ${p.submissions_fetched}`);
+  }
   if (typeof p.submissions_imported === 'number' && p.submissions_imported > 0) {
-    parts.push(`посылок ${p.submissions_imported}`);
+    parts.push(`импорт ${p.submissions_imported}`);
   }
-  if (parts.length === 0) {
-    // Fallback when worker hasn't ticked yet (or job is plain queued).
-    const stage = p.stage ?? 'starting';
-    return stageLabel(stage);
-  }
+  if (p.current_problem) parts.push(`задача: ${p.current_problem}`);
+  if (parts.length === 0) return stageLabel(p.stage ?? 'starting');
   return parts.join(' · ');
 }
 

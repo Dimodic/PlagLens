@@ -188,6 +188,7 @@ async def _finalize_import_job(
     failed: int = 0,
     deduplicated: int = 0,
     errors: list[str] | None = None,
+    homeworks: list[dict[str, Any]] | None = None,
 ) -> None:
     """Mark ``job_id`` finished and stamp ``last_sync_*`` on its config.
 
@@ -219,6 +220,7 @@ async def _finalize_import_job(
                 "failed": failed,
                 "scanned": scanned,
                 "errors": err_list[:20],
+                "homeworks": homeworks or [],
             }
             job.error = (
                 None if status == "completed" else {"errors": err_list[:5]}
@@ -508,7 +510,10 @@ async def _import_submissions_for_aliases(
     fwd_headers: dict[str, str],
     settings: Any,
     op_id: str | None = None,
-) -> tuple[dict[str, int], list[str]]:
+    job_id: str | None = None,
+    alias_to_title: dict[str, str] | None = None,
+    progress_base: dict[str, Any] | None = None,
+) -> tuple[dict[str, Any], list[str]]:
     """Pull contest submissions once, group by problem alias, then bulk-import
     users and post a per-assignment batchImport.
 
@@ -559,6 +564,16 @@ async def _import_submissions_for_aliases(
                 submissions_fetched=len(all_subs),
                 submissions_pages=pages_used,
             )
+        # Mirror into the ImportJob row so the integration-detail SSE
+        # stream shows the fetch counter ticking up — otherwise the
+        # 2-3 min /full GET marathon looks like a dead "в работе".
+        if job_id is not None:
+            await _update_job_progress(
+                job_id,
+                **(progress_base or {}),
+                stage="fetching_submissions",
+                submissions_fetched=len(all_subs),
+            )
         # Stop when the page is short (we've reached the tail) or contained
         # nothing new (server returned an overlapping batch).
         if len(page_res.submissions) < PAGE_SIZE or not page_new:
@@ -590,8 +605,17 @@ async def _import_submissions_for_aliases(
         with_login=sum(1 for rs in sub_res.submissions if rs.login),
         alias_map_keys=list(alias_to_aid.keys()),
     )
+    _empty_stats: dict[str, Any] = {
+        "created": 0,
+        "deduplicated": 0,
+        "skipped": 0,
+        "failed": 0,
+        "by_alias": {},
+    }
     if sub_res.failed and not sub_res.submissions:
-        return 0, [f"submissions fetch: {e}" for e in sub_res.errors[:3]]
+        return _empty_stats, [
+            f"submissions fetch: {e}" for e in sub_res.errors[:3]
+        ]
 
     by_alias: dict[str, list[Any]] = {}
     no_alias = 0
@@ -620,6 +644,10 @@ async def _import_submissions_for_aliases(
     total_dedup = 0
     total_skipped = 0
     total_failed = 0
+    # Per-problem breakdown for the expandable run details on the UI.
+    # alias → {title, scanned, created, deduplicated, skipped, failed}.
+    by_alias_stats: dict[str, dict[str, Any]] = {}
+    titles = alias_to_title or {}
     for alias, subs in by_alias.items():
         aid = alias_to_aid.get(alias)
         if not aid:
@@ -747,11 +775,27 @@ async def _import_submissions_for_aliases(
             total_dedup += dd
             total_skipped += sk
             total_failed += fl
+            by_alias_stats[alias] = {
+                "title": titles.get(alias) or f"Задача {alias}",
+                "scanned": cr + dd + sk + fl,
+                "created": cr,
+                "deduplicated": dd,
+                "skipped": sk,
+                "failed": fl,
+            }
             if op_id is not None:
                 await _op_update(
                     op_id,
                     stage="importing_submissions",
                     submissions_imported=total_ingested,
+                )
+            if job_id is not None:
+                await _update_job_progress(
+                    job_id,
+                    **(progress_base or {}),
+                    stage="importing_submissions",
+                    submissions_imported=total_ingested,
+                    current_problem=titles.get(alias) or alias,
                 )
             logger.info(
                 "yc.import_as_homework.subs_batch",
@@ -773,17 +817,21 @@ async def _import_submissions_for_aliases(
                     else None
                 ),
             )
-            if cr == 0 and (dd or sk or fl):
-                errors.append(
-                    f"alias {alias}: 0 created (dedup={dd}, skipped={sk}, failed={fl})"
-                )
+            # NB: a 0-created batch that's all dedup is NOT an error —
+            # it just means nothing new since last sync. Only genuine
+            # ``failed`` items are surfaced as errors (below). The old
+            # "0 created (dedup=…)" append was what made a clean resync
+            # show "ошибок 10".
+            if fl > 0:
+                errors.append(f"alias {alias}: {fl} items failed import")
         except Exception as exc:  # noqa: BLE001
             errors.append(f"alias {alias}: parse response: {exc!s}")
-    stats = {
+    stats: dict[str, Any] = {
         "created": total_ingested,
         "deduplicated": total_dedup,
         "skipped": total_skipped,
         "failed": total_failed,
+        "by_alias": by_alias_stats,
     }
     return stats, errors
 
@@ -1318,11 +1366,20 @@ async def _run_import_as_homework(
             # 4. Submissions — same client, same service token. This is the
             # slow stage (1000+ /full GETs); the op state ticks per page +
             # per batchImport so the modal can show live numbers.
-            sub_stats: dict[str, int] = {
+            sub_stats: dict[str, Any] = {
                 "created": 0, "deduplicated": 0, "skipped": 0, "failed": 0,
+                "by_alias": {},
             }
             sub_errors: list[str] = []
             if alias_to_aid:
+                # alias → problem title (from the just-imported problems)
+                # so the live progress / breakdown reads "B. Следующее
+                # чётное C++" instead of bare "B".
+                alias_to_title = {
+                    str(pr.alias): pr.title
+                    for pr in result.problems
+                    if pr.alias and pr.title
+                }
                 sub_stats, sub_errors = await _import_submissions_for_aliases(
                     adapter=adapter,
                     cfg=cfg,
@@ -1333,6 +1390,13 @@ async def _run_import_as_homework(
                     fwd_headers=fwd,
                     settings=settings,
                     op_id=op_id,
+                    job_id=job_id,
+                    alias_to_title=alias_to_title,
+                    progress_base={
+                        "homework_idx": 1,
+                        "homework_total": 1,
+                        "homework_title": contest_name,
+                    },
                 )
 
         combined_errors = (result.errors + per_item_errors + sub_errors)[:10]
@@ -1354,6 +1418,12 @@ async def _run_import_as_homework(
             sub_dedup=sub_stats["deduplicated"],
         )
         if job_id is not None:
+            hw_scanned = (
+                sub_stats["created"]
+                + sub_stats["deduplicated"]
+                + sub_stats["skipped"]
+                + sub_stats["failed"]
+            )
             await _finalize_import_job(
                 job_id=job_id,
                 config_id=str(cfg.id),
@@ -1363,6 +1433,25 @@ async def _run_import_as_homework(
                 skipped=sub_stats["skipped"],
                 failed=sub_stats["failed"],
                 errors=combined_errors,
+                homeworks=[
+                    {
+                        "homework_id": str(homework_id),
+                        "title": contest_name,
+                        "contest_id": contest_id,
+                        "scanned": hw_scanned,
+                        "created": sub_stats["created"],
+                        "deduplicated": sub_stats["deduplicated"],
+                        "problems": [
+                            {
+                                "title": v.get("title") or k,
+                                "scanned": v.get("scanned", 0),
+                                "created": v.get("created", 0),
+                                "deduplicated": v.get("deduplicated", 0),
+                            }
+                            for k, v in (sub_stats.get("by_alias") or {}).items()
+                        ],
+                    }
+                ],
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
@@ -1481,6 +1570,7 @@ async def _run_resync_submissions(
                 return
             rows = asg_resp.json().get("data", []) or []
             alias_to_aid: dict[str, str] = {}
+            alias_to_title: dict[str, str] = {}
             for row in rows:
                 for binding in row.get("external_bindings", []) or []:
                     if binding.get("system") != "yandex_contest":
@@ -1492,12 +1582,27 @@ async def _run_resync_submissions(
                     c_part, alias = ext.split(":", 1)
                     if str(c_part) == str(contest_id) and alias:
                         alias_to_aid[alias] = str(row.get("id"))
+                        if row.get("title"):
+                            alias_to_title[alias] = str(row["title"])
 
             await _op_update(
                 op_id,
                 problems_total=len(alias_to_aid),
                 stage="fetching_submissions",
             )
+            # Single-homework progress context for the ImportJob SSE row.
+            hw_title_for_progress = hw_json.get("title")
+            resync_progress_base = {
+                "homework_idx": 1,
+                "homework_total": 1,
+                "homework_title": hw_title_for_progress,
+            }
+            if job_id is not None:
+                await _update_job_progress(
+                    job_id,
+                    **resync_progress_base,
+                    stage="fetching_submissions",
+                )
             if not alias_to_aid:
                 msg = (
                     "no Yandex.Contest assignments found on this homework — "
@@ -1528,6 +1633,9 @@ async def _run_resync_submissions(
                 fwd_headers=fwd,
                 settings=settings,
                 op_id=op_id,
+                job_id=job_id,
+                alias_to_title=alias_to_title,
+                progress_base=resync_progress_base,
             )
 
         await _op_update(
@@ -1548,6 +1656,12 @@ async def _run_resync_submissions(
             sub_dedup=sub_stats["deduplicated"],
         )
         if job_id is not None:
+            hw_scanned = (
+                sub_stats["created"]
+                + sub_stats["deduplicated"]
+                + sub_stats["skipped"]
+                + sub_stats["failed"]
+            )
             await _finalize_import_job(
                 job_id=job_id,
                 config_id=str(cfg.id),
@@ -1557,6 +1671,27 @@ async def _run_resync_submissions(
                 skipped=sub_stats["skipped"],
                 failed=sub_stats["failed"],
                 errors=sub_errors[:10],
+                homeworks=[
+                    {
+                        "homework_id": str(homework_id),
+                        "title": hw_title_for_progress or f"ДЗ {homework_id}",
+                        "contest_id": contest_id,
+                        "scanned": hw_scanned,
+                        "created": sub_stats["created"],
+                        "deduplicated": sub_stats["deduplicated"],
+                        "problems": [
+                            {
+                                "title": v.get("title") or k,
+                                "scanned": v.get("scanned", 0),
+                                "created": v.get("created", 0),
+                                "deduplicated": v.get("deduplicated", 0),
+                            }
+                            for k, v in (
+                                sub_stats.get("by_alias") or {}
+                            ).items()
+                        ],
+                    }
+                ],
             )
     except Exception as exc:  # noqa: BLE001
         logger.exception(
@@ -1663,6 +1798,7 @@ async def _run_sync_all_imported_contests(
     total_failed = 0
     contests_done = 0
     errors: list[str] = []
+    homeworks_breakdown: list[dict[str, Any]] = []
 
     try:
         s2s = await service_auth_headers()
@@ -1765,6 +1901,7 @@ async def _run_sync_all_imported_contests(
                     continue
                 rows = asg_resp.json().get("data", []) or []
                 alias_to_aid: dict[str, str] = {}
+                alias_to_title: dict[str, str] = {}
                 for row in rows:
                     for binding in row.get("external_bindings", []) or []:
                         if binding.get("system") != "yandex_contest":
@@ -1775,16 +1912,23 @@ async def _run_sync_all_imported_contests(
                         c_part, alias = ext.split(":", 1)
                         if str(c_part) == str(contest_id) and alias:
                             alias_to_aid[alias] = str(row.get("id"))
+                            if row.get("title"):
+                                alias_to_title[alias] = str(row["title"])
                 if not alias_to_aid:
                     continue
 
-                await _update_job_progress(job_id, stage="fetching_submissions")
+                # Progress context threaded into the submission worker so
+                # the SSE row keeps showing which ДЗ we're on while the
+                # fetch/import counters tick.
+                progress_base = {
+                    "homework_idx": idx,
+                    "homework_total": homework_total,
+                    "homework_title": hw_title,
+                }
+                await _update_job_progress(
+                    job_id, **progress_base, stage="fetching_submissions"
+                )
 
-                # Reuse the existing per-contest worker — but pump our
-                # job-level progress as it ticks (it has its own Redis-
-                # backed ``op_id`` flow for the modal but we don't use
-                # that here; instead we sample its outcome and update
-                # the ImportJob row).
                 adapter = YandexContestAdapter()
                 sub_stats, sub_errors = await _import_submissions_for_aliases(
                     adapter=adapter,
@@ -1796,6 +1940,39 @@ async def _run_sync_all_imported_contests(
                     fwd_headers=fwd,
                     settings=settings,
                     op_id=None,
+                    job_id=job_id,
+                    alias_to_title=alias_to_title,
+                    progress_base=progress_base,
+                )
+                # Per-homework breakdown for the expandable run details.
+                hw_created = sub_stats["created"]
+                hw_dedup = sub_stats["deduplicated"]
+                hw_scanned = (
+                    hw_created
+                    + hw_dedup
+                    + sub_stats["skipped"]
+                    + sub_stats["failed"]
+                )
+                homeworks_breakdown.append(
+                    {
+                        "homework_id": hw_id_str,
+                        "title": hw_title or f"ДЗ {hw_id_str}",
+                        "contest_id": contest_id,
+                        "scanned": hw_scanned,
+                        "created": hw_created,
+                        "deduplicated": hw_dedup,
+                        "problems": [
+                            {
+                                "title": v.get("title") or k,
+                                "scanned": v.get("scanned", 0),
+                                "created": v.get("created", 0),
+                                "deduplicated": v.get("deduplicated", 0),
+                            }
+                            for k, v in (
+                                sub_stats.get("by_alias") or {}
+                            ).items()
+                        ],
+                    }
                 )
                 total_subs += sub_stats["created"]
                 total_dedup += sub_stats["deduplicated"]
@@ -1830,6 +2007,7 @@ async def _run_sync_all_imported_contests(
             skipped=total_skipped,
             failed=total_failed,
             errors=errors[:10],
+            homeworks=homeworks_breakdown,
         )
     except Exception as exc:  # noqa: BLE001
         logger.exception(

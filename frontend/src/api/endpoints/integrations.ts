@@ -51,17 +51,62 @@ export interface ConnectionStatus {
   latency_ms?: number;
 }
 
+/** Per-problem (assignment) breakdown inside a homework's sync result. */
+export interface SyncProblemBreakdown {
+  title: string;
+  scanned: number;
+  created: number;
+  deduplicated: number;
+}
+
+/** Per-homework breakdown of one sync run. */
+export interface SyncHomeworkBreakdown {
+  homework_id: string;
+  title: string;
+  contest_id?: number;
+  scanned: number;
+  created: number;
+  deduplicated: number;
+  problems: SyncProblemBreakdown[];
+}
+
 export interface ImportJob {
   id: string;
   integration_id: string;
   scope: Record<string, unknown>;
   trigger: 'manual' | 'scheduled' | 'webhook';
-  status: 'queued' | 'running' | 'completed' | 'failed';
-  progress: { completed: number; total: number; percent: number } | null;
+  status: 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
+  // ``progress`` is a free-form JSON the worker stamps as it goes. The
+  // legacy {completed,total,percent} shape is still honoured, but the YC
+  // sync worker writes richer fields (stage / homework_idx / counters).
+  progress:
+    | ({
+        completed?: number;
+        total?: number;
+        percent?: number;
+        stage?: string;
+        homework_idx?: number;
+        homework_total?: number;
+        homework_title?: string | null;
+        current_problem?: string;
+        submissions_fetched?: number;
+        submissions_imported?: number;
+      } & Record<string, unknown>)
+    | null;
   started_at: string | null;
   finished_at: string | null;
-  stats: { imported: number; skipped: number; failed: number } | null;
-  error: { title: string; detail?: string } | null;
+  stats:
+    | ({
+        imported: number;
+        deduplicated?: number;
+        skipped: number;
+        failed: number;
+        scanned?: number;
+        errors?: string[];
+        homeworks?: SyncHomeworkBreakdown[];
+      } & Record<string, unknown>)
+    | null;
+  error: { title?: string; detail?: string; errors?: string[] } | null;
 }
 
 export interface SyncSchedule {

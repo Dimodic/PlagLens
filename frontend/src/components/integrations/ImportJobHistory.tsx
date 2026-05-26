@@ -61,6 +61,7 @@ const STATUS_UI: Record<ImportJob['status'], StatusUi | null> = {
   running: { label: 'в работе', tone: 'text-primary' },
   completed: null,
   failed: { label: 'ошибка', tone: 'text-sev-high' },
+  cancelled: { label: 'отменено', tone: 'text-muted-foreground' },
 };
 
 function triggerLabel(t: ImportJob['trigger']): {
