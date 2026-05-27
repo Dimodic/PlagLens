@@ -74,7 +74,14 @@ class CourseService:
             base = await slugify(payload.name, fallback="course")
 
             async def _taken(s: str) -> bool:
-                return await self.courses.get_by_slug(user.tenant_id, s) is not None
+                # Include soft-deleted rows — a soft-deleted course still
+                # reserves its (tenant_id, slug) per the unique constraint.
+                res = await self.session.execute(
+                    select(Course.id)
+                    .where(Course.tenant_id == user.tenant_id, Course.slug == s)
+                    .limit(1)
+                )
+                return res.scalar_one_or_none() is not None
 
             slug = await unique_slug(base, exists=_taken)
         course = Course(
@@ -183,7 +190,15 @@ class CourseService:
         base = await slugify(clone_name, fallback="course")
 
         async def _taken(s: str) -> bool:
-            return await self.courses.get_by_slug(user.tenant_id, s) is not None
+            # Include soft-deleted rows: the unique (tenant_id, slug)
+            # constraint reserves a slug even after a soft delete, so the
+            # collision check must see them or the INSERT 500s on re-dup.
+            res = await self.session.execute(
+                select(Course.id)
+                .where(Course.tenant_id == user.tenant_id, Course.slug == s)
+                .limit(1)
+            )
+            return res.scalar_one_or_none() is not None
 
         new_slug = await unique_slug(base, exists=_taken)
         clone = Course(
