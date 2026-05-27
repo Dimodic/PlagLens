@@ -738,11 +738,22 @@ export default function SubmissionsListPage() {
                   {/* col: trailing — version + status badges + grader */}
                   <div className="flex items-center justify-end gap-2 whitespace-nowrap text-xs text-muted-foreground">
                     <span className="font-medium">v{s.version}</span>
-                    {s.is_graded && (
+                    {typeof s.score === 'number' ? (
+                      // Staff rows carry the real grade — show «8 / 10»
+                      // (or just «8» when the assignment has no max).
+                      <span
+                        className="font-medium text-emerald-600 dark:text-emerald-400"
+                        title="Оценка"
+                      >
+                        {formatScore(s.score, s.max_score)}
+                      </span>
+                    ) : s.is_graded ? (
+                      // Graded but no score exposed (student list) — keep
+                      // the neutral indicator.
                       <span className="text-emerald-600 dark:text-emerald-400">
                         проверено
                       </span>
-                    )}
+                    ) : null}
                     {flagged && <span className="text-sev-high">помечено</span>}
                     {s.is_late && (
                       <span className="text-sev-mid">
@@ -1050,4 +1061,14 @@ function ShareSlider({
 function formatPct(x: number): string {
   if (!Number.isFinite(x) || x <= 0) return '0%';
   return `${Math.round(x * 100)}%`;
+}
+
+/** Compact grade for a triage row: "8 / 10", "7.5 / 10", or just "8"
+ *  when the assignment defines no maximum. Whole numbers render without
+ *  a trailing ".0" so the common integer case stays clean. */
+function formatScore(score: number, maxScore?: number | null): string {
+  const fmt = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+  return typeof maxScore === 'number'
+    ? `${fmt(score)} / ${fmt(maxScore)}`
+    : fmt(score);
 }

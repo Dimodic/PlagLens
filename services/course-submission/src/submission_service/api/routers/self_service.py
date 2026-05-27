@@ -130,10 +130,24 @@ async def my_submissions(
         total=total,
     )
     out = [SubmissionOut.model_validate(s) for s in window]
-    # Mark graded rows from the eager-loaded grade relationship.
-    for model, src in zip(out, window):
+    # Mark graded rows from the eager-loaded grade relationship and, for
+    # staff only, surface the actual score so the triage queue can show
+    # the оценка ("8 / 10") in place of a generic "проверено" badge. The
+    # score is deliberately NOT exposed on the student self-service list:
+    # grade visibility there is gated by comment_visible_to_student + the
+    # assignment release schedule (enforced in my_grade), so a student
+    # keeps only the neutral "проверено" indicator until the teacher
+    # releases it.
+    is_staff = user.global_role in _STAFF_ROLES
+    for model, src in zip(out, window, strict=True):
         g = getattr(src, "grade", None)
-        model.is_graded = g is not None and g.score is not None
+        graded = g is not None and g.score is not None
+        model.is_graded = graded
+        if graded and is_staff:
+            model.score = float(g.score)
+            model.max_score = (
+                float(g.max_score) if g.max_score is not None else None
+            )
     # Denormalise course / homework / assignment titles for the window
     # so the list labels every row even when no course is selected (one
     # batch query, not per-row N+1). Applies to students too — it's

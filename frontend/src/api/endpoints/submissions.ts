@@ -51,7 +51,12 @@ export interface SubmissionBrief {
   external_verdict?: string | null;
   external_score?: number | null;
   selected_for_grading?: boolean;
+  /** Final grade — populated on staff triage rows so the list shows the
+   *  actual оценка instead of a "проверено" badge. Null when ungraded
+   *  (or on the student self-service list, where grade release is gated
+   *  server-side). */
   score?: number | null;
+  max_score?: number | null;
   /** Assistant this submission was round-robined to by the teacher's
    *  "distribute among assistants" action. ``name`` is denormalised so
    *  list rows can render "→ ФИО" without resolving the id. */

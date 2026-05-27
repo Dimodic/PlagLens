@@ -61,8 +61,16 @@ class SubmissionOut(BaseModel):
     homework_title: str | None = None
     course_name: str | None = None
     # True when a grade row with a score exists — lets the list show
-    # "проверено" without a second round-trip.
+    # the grade (or a "проверено" indicator) without a second round-trip.
     is_graded: bool = False
+    # Final grade, surfaced on staff triage rows so the queue shows the
+    # actual оценка ("8 / 10") instead of a generic "проверено" badge.
+    # Populated only on the staff inbox path — NEVER for the student
+    # self-service list, where grade visibility is gated by
+    # comment_visible_to_student + the assignment release schedule (see
+    # the my_grade endpoint). Null when ungraded or not authorised.
+    score: float | None = None
+    max_score: float | None = None
 
 
 class SubmissionDetail(SubmissionOut):
