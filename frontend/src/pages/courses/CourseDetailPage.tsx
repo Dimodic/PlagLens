@@ -21,6 +21,7 @@ import {
   Download,
   Loader2,
   MoreHorizontal,
+  Pencil,
   Plus,
   Settings,
 } from 'lucide-react';
@@ -422,7 +423,8 @@ export default function CourseDetailPage() {
                 setEdit((v) => ({ ...v, name: e.currentTarget.value }))
               }
               placeholder="Название курса"
-              className={`min-w-[6rem] max-w-full rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight outline-none [field-sizing:content] focus:border-solid focus:border-primary ${course.semester ? 'mt-2' : ''}`}
+              size={Math.max(12, edit.name.length + 2)}
+              className={`max-w-full rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight outline-none focus:border-solid focus:border-primary ${course.semester ? 'mt-2' : ''}`}
             />
           ) : (
             <h1
@@ -501,12 +503,14 @@ export default function CourseDetailPage() {
         ) : isOwner ? (
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              variant="outline"
+              variant="ghost"
+              size="icon"
               onClick={startEditing}
+              title="Редактировать"
+              aria-label="Редактировать"
               data-testid="course-detail-settings-button"
             >
-              <Settings className="mr-2 h-4 w-4" />
-              Редактировать
+              <Pencil className="h-4 w-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
