@@ -18,7 +18,7 @@ import {
   type CreateInvitationInput,
   type UpdateCourseInput,
 } from '@/api/endpoints/courses';
-import type { CourseRole, Operation } from '@/api/types';
+import type { CourseRole } from '@/api/types';
 
 export const courseKeys = {
   all: ['courses'] as const,
@@ -127,8 +127,14 @@ export function useUnarchiveCourse(id: string) {
 }
 
 export function useDuplicateCourse(id: string) {
-  return useMutation<Operation, unknown, void>({
+  const qc = useQueryClient();
+  // The endpoint is synchronous — it returns the fully-created clone, not
+  // an async Operation. Refresh the course lists so the copy shows up.
+  return useMutation<Course, unknown, void>({
     mutationFn: () => coursesApi.duplicate(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: courseKeys.all });
+    },
   });
 }
 

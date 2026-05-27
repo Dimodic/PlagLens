@@ -59,7 +59,6 @@ import type { Problem } from '@/api/types';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Page } from '@/components/layout/Page';
-import { AsyncOperationStatus } from '@/components/common/AsyncOperationStatus';
 import { PageSkeleton, SkeletonList } from '@/components/common/Skeleton';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -118,7 +117,6 @@ export default function CourseDetailPage() {
 
   const [confirmArchive, setConfirmArchive] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [opId, setOpId] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   // Inline edit of the course's own fields (name / dates / description),
   // edited IN PLACE on this page — the heading/description themselves
@@ -368,9 +366,11 @@ export default function CourseDetailPage() {
 
   const handleDuplicate = async () => {
     try {
-      const op = await duplicate.mutateAsync();
-      setOpId(op.id);
-      notify.info('Копирование запущено');
+      const clone = await duplicate.mutateAsync();
+      notify.success('Курс скопирован');
+      // Synchronous clone — go straight to it instead of polling a
+      // (non-existent) async operation.
+      navigate(`/courses/${clone.slug}`);
     } catch (e) {
       setProblem(parseProblem(e));
     }
@@ -588,12 +588,6 @@ export default function CourseDetailPage() {
       )}
 
       {problem && <ProblemAlert problem={problem} />}
-      {opId && (
-        <AsyncOperationStatus
-          operationId={opId}
-          onComplete={() => setOpId(null)}
-        />
-      )}
 
       {/* Tabs — four real tabs: ДЗ, Участники, Статистика, Подозрительные.
           Groups, Invitations, Dashboard, Exports, Scheduled exports and
