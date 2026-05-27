@@ -29,6 +29,12 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/courses/{id}/recent-activity", "reporting", "default"),
     Route("/api/v1/courses/{id}/scheduled-exports", "reporting", "default"),
     Route("/api/v1/courses/{id}/google-sheets-link", "reporting", "default"),
+    # Per-course Google Sheets binding (spreadsheet + tab) lives in the
+    # integration service: GET/POST/PATCH/DELETE …/google-sheets/link and
+    # …/google-sheets/link:validate. Distinct from the hyphenated
+    # reporting route above (different 3rd segment), and from the export
+    # write path in reporting.
+    Route("/api/v1/courses/{id}/google-sheets", "integration", "default"),
     Route("/api/v1/courses/{id}/exports", "reporting", "run"),
     Route("/api/v1/courses/{id}/suspicious-submissions", "plagiarism", "default"),
     Route("/api/v1/courses/{id}/ai", "ai-analysis", "default"),

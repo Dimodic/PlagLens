@@ -374,27 +374,60 @@ export const reportingApi = {
   deleteExport: (id: string) =>
     api.delete<void>(`/exports/${id}`).then((r) => r.data),
 
-  // ---- C. Google Sheets ----
+  // ---- C. Google Sheets (per-course link — integration service, via
+  //         the gateway route /courses/{id}/google-sheets). GET 404 ==
+  //         "не привязано" → null. Save is create-or-update: POST to
+  //         create, PATCH to change an existing link. ----
   getSheetsLink: (courseId: string) =>
     api
-      .get<GoogleSheetsLink | null>(
-        `/courses/${courseId}/google-sheets-link`,
-      )
+      .get<GoogleSheetsLink>(`/courses/${courseId}/google-sheets/link`)
+      .then((r) => r.data)
+      .catch((e) => {
+        if (
+          (e as { response?: { status?: number } })?.response?.status === 404
+        )
+          return null;
+        throw e;
+      }),
+
+  createSheetsLink: (
+    courseId: string,
+    body: {
+      spreadsheet_id: string;
+      sheet_name: string;
+      columns_mapping?: Record<string, string>;
+    },
+  ) =>
+    api
+      .post<GoogleSheetsLink>(`/courses/${courseId}/google-sheets/link`, body)
       .then((r) => r.data),
 
   setSheetsLink: (
     courseId: string,
     body: {
-      spreadsheet_id: string;
+      spreadsheet_id?: string;
       sheet_name?: string;
       columns_mapping?: Record<string, string>;
     },
   ) =>
     api
-      .patch<GoogleSheetsLink>(
-        `/courses/${courseId}/google-sheets-link`,
-        body,
-      )
+      .patch<GoogleSheetsLink>(`/courses/${courseId}/google-sheets/link`, body)
+      .then((r) => r.data),
+
+  deleteSheetsLink: (courseId: string) =>
+    api
+      .delete<void>(`/courses/${courseId}/google-sheets/link`)
+      .then((r) => r.data),
+
+  /** Server-side access check: does the configured service account /
+   *  teacher token actually have edit access to the linked spreadsheet? */
+  validateSheetsLink: (courseId: string) =>
+    api
+      .post<{
+        ok: boolean;
+        detail?: string | null;
+        metadata?: Record<string, unknown> | null;
+      }>(`/courses/${courseId}/google-sheets/link:validate`)
       .then((r) => r.data),
 
   syncSheets: (courseId: string) =>

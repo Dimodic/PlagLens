@@ -202,7 +202,7 @@ export function useSetSheetsLink(courseId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: {
-      spreadsheet_id: string;
+      spreadsheet_id?: string;
       sheet_name?: string;
       columns_mapping?: Record<string, string>;
     }) => reportingApi.setSheetsLink(courseId, body),
@@ -211,6 +211,40 @@ export function useSetSheetsLink(courseId: string) {
         queryKey: exportKeys.sheetsLink(courseId),
       });
     },
+  });
+}
+
+export function useCreateSheetsLink(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: {
+      spreadsheet_id: string;
+      sheet_name: string;
+      columns_mapping?: Record<string, string>;
+    }) => reportingApi.createSheetsLink(courseId, body),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: exportKeys.sheetsLink(courseId),
+      });
+    },
+  });
+}
+
+export function useDeleteSheetsLink(courseId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => reportingApi.deleteSheetsLink(courseId),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: exportKeys.sheetsLink(courseId),
+      });
+    },
+  });
+}
+
+export function useValidateSheetsLink(courseId: string) {
+  return useMutation({
+    mutationFn: () => reportingApi.validateSheetsLink(courseId),
   });
 }
 
