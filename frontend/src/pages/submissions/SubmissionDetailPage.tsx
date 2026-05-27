@@ -677,7 +677,14 @@ export default function SubmissionDetailPage() {
     ) {
       return true;
     }
-    return hasGlobalRole(user, ['teacher']);
+    // A global "assistant" is a grader too. Their JWT carries no
+    // course_roles (identity doesn't enrich them yet), so the course-role
+    // branch above misses — gate on the global role so the assistant gets
+    // the FULL review interface (grade rail, AI-анализ, inline comments,
+    // ‹/› peer nav), matching the teacher. The backend already authorises
+    // assistant grade-writes via its own global-role fallback
+    // (rbac._global_can_manage includes "assistant").
+    return hasGlobalRole(user, ['teacher', 'assistant']);
   }, [user, submission]);
 
   // Pre-early-return computations.
