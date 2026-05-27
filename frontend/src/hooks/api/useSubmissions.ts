@@ -108,6 +108,15 @@ export function useMySubmissions(filters: SubmissionListFilters = {}) {
   return useQuery({
     queryKey: submissionKeys.myList(filters),
     queryFn: () => submissionsApi.mySubmissions(filters),
+    // The assistant cabinet + «Все посылки» live on this query. Grades are
+    // set on a *different* page (submission detail), whose mutation
+    // invalidates this list while it's inactive. With the global
+    // `refetchOnMount: false`, returning to the cabinet would keep serving
+    // the stale cache (the "осталось 24" that only fixed itself on F5).
+    // Opt into refetch-on-mount: invalidation marks the query stale
+    // regardless of `staleTime`, so a freshly-graded submission drops out of
+    // the pile the instant the grader navigates back.
+    refetchOnMount: true,
   });
 }
 
