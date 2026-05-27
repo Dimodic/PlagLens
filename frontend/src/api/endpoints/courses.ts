@@ -164,7 +164,10 @@ export const coursesApi = {
     api.post<Course>(`/courses/${id}:unarchive`).then((r) => r.data),
 
   duplicate: (id: string) =>
-    api.post<Operation>(`/courses/${id}:duplicate`).then((r) => r.data),
+    // The endpoint requires a JSON body (CourseDuplicate — both
+    // new_slug / new_name are optional); send {} so it isn't rejected
+    // with 422 "body: field required".
+    api.post<Operation>(`/courses/${id}:duplicate`, {}).then((r) => r.data),
 
   joinByCode: (code: string) =>
     api.post<{ course_id: string }>('/courses:joinByCode', { code }).then((r) => r.data),
