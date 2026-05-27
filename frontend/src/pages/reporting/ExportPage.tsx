@@ -66,6 +66,7 @@ import { useMyCourses } from '@/hooks/api/useCourses';
 import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useAuth } from '@/auth/useAuth';
 import type {
   ExportJob,
   ExportStatus,
@@ -107,6 +108,10 @@ function parseSpreadsheetId(raw: string): string {
 export default function ExportPage() {
   useDocumentTitle('Экспорт');
   const notify = useNotifications();
+  const { user } = useAuth();
+  // Assistants can export but not (re)bind the course's sheet — binding
+  // is an owner/co_owner action (enforced server-side too).
+  const isAssistant = user?.global_role === 'assistant';
 
   const [courseId, setCourseId] = useState('');
   const [homeworkIds, setHomeworkIds] = useState<string[]>([]);
@@ -264,8 +269,9 @@ export default function ExportPage() {
           </div>
         </div>
 
-        {/* Linked sheet — set/edit inline, right where it's used. */}
-        {courseId && <SheetLinkInline courseId={courseId} />}
+        {/* Linked sheet — set/edit inline (owner/co_owner). Assistants
+            only export, so they don't see the binding editor. */}
+        {courseId && !isAssistant && <SheetLinkInline courseId={courseId} />}
 
         <div className="flex items-center justify-end gap-3">
           {!canWrite && courseId && (

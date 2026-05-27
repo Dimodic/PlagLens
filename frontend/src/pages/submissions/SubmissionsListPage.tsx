@@ -229,6 +229,9 @@ export default function SubmissionsListPage() {
   const notify = useNotifications();
   const isStaff =
     user?.global_role !== undefined && user.global_role !== 'student';
+  // Assistants triage all submissions in their courses but don't
+  // distribute — handing out work is an owner/teacher action.
+  const isAssistant = user?.global_role === 'assistant';
   const title = isStaff ? 'Посылки на проверку' : 'Мои посылки';
   useDocumentTitle(title);
   const [course, setCourse] = useState<string>('all');
@@ -624,8 +627,9 @@ export default function SubmissionsListPage() {
         <div className="flex-1" />
 
         {/* Distribute — needs a concrete course (so we know its
-            assistants). Disabled with a hint when the course has none. */}
-        {isStaff && course !== 'all' && (
+            assistants). Owner/teacher only — assistants don't hand out
+            work. Disabled with a hint when the course has none. */}
+        {isStaff && !isAssistant && course !== 'all' && (
           <Button
             variant="outline"
             size="sm"
