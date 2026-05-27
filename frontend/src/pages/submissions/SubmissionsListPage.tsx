@@ -681,7 +681,7 @@ export default function SubmissionsListPage() {
           </div>
         ) : (
           <div
-            className="grid divide-y divide-border/60"
+            className="grid gap-x-4 divide-y divide-border/60"
             style={{ gridTemplateColumns: rowGridCols }}
           >
             {filtered.map((s) => {
