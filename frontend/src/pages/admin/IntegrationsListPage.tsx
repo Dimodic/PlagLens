@@ -705,6 +705,23 @@ function OAuthProvidersPanel() {
                   </>
                 )}
               </div>
+              {p.provider_kind === 'google_sheets' && (
+                <div className="space-y-1 pt-1">
+                  <Link
+                    to="/integrations/google-sheets/setup"
+                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
+                    data-testid="integration-oauth-google-sheets-sa"
+                  >
+                    Сервисный аккаунт (JSON)
+                    <ChevronRight className="h-3 w-3" />
+                  </Link>
+                  <p className="text-xs text-muted-foreground">
+                    Самый простой путь: вставьте один JSON сервис-аккаунта —
+                    преподаватели делятся своей таблицей с его e-mail. OAuth ниже
+                    настраивать необязательно.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <Button

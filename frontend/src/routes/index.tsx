@@ -155,6 +155,7 @@ const UserCreatePage = lazy(() => import('@/pages/admin/UserCreatePage'));
 const UserDetailPage = lazy(() => import('@/pages/admin/UserDetailPage'));
 const IntegrationsListPage = lazy(() => import('@/pages/admin/IntegrationsListPage'));
 const OAuthProvidersPage = lazy(() => import('@/pages/admin/OAuthProvidersPage'));
+const LoginProvidersPage = lazy(() => import('@/pages/admin/LoginProvidersPage'));
 const IntegrationCreatePage = lazy(() => import('@/pages/admin/IntegrationCreatePage'));
 const IntegrationDetailPage = lazy(() => import('@/pages/admin/IntegrationDetailPage'));
 const YandexContestSetupPage = lazy(() => import('@/pages/integrations/YandexContestSetupPage'));
@@ -608,6 +609,19 @@ const protectedRoutes: RouteObject[] = [
             fallback={<NotFoundPage />}
           >
             <UserDetailPage />
+          </RoleGuard>
+        ),
+      },
+
+      // ----- Login providers (social sign-in OAuth) -----
+      {
+        path: 'admin/login-providers',
+        element: (
+          <RoleGuard
+            global={['admin']}
+            fallback={<NotFoundPage />}
+          >
+            <LoginProvidersPage />
           </RoleGuard>
         ),
       },

@@ -50,6 +50,7 @@ export type Screen =
   | 'a_home'
   | 'a_users'
   | 'a_audit'
+  | 'a_login'
   | 'a_integrations'
   | 'a_settings'
   | 'tenant'
@@ -131,6 +132,7 @@ export function resolveScreen(pathname: string, role: GlobalRole | undefined): S
   if (/^\/admin\/tenants\/(?!new$)[^/]+$/.test(p)) return 'tenant';
   if (p.startsWith('/admin/tenants')) return 'tenants';
   if (p.startsWith('/admin/audit')) return 'a_audit';
+  if (p.startsWith('/admin/login-providers')) return 'a_login';
   if (/^\/admin\/integrations\/(?!new$|webhooks$)[^/]+$/.test(p)) return 'integration';
   if (p.startsWith('/admin/integrations')) return 'a_integrations';
   if (p.startsWith('/admin/notifications')) return 'notifications';
