@@ -31,6 +31,7 @@ import {
   useDeleteCourse,
   useDuplicateCourse,
   useUnarchiveCourse,
+  useUpdateCourse,
 } from '@/hooks/api/useCourses';
 import { cn } from '@/components/ui/utils';
 import { HomeworkDrawer } from '@/components/courses/HomeworkDrawer';
@@ -77,6 +78,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import { formatDate, formatDateTime } from '@/utils/formatters';
 
@@ -96,6 +98,124 @@ const COURSE_TABS: readonly CourseTab[] = [
   'suspicious',
 ];
 
+function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+}
+
+/** Inline editor for the course's own fields — shown in place of the
+ *  header when the owner clicks «Редактировать». No CORS, no markdown
+ *  preview tab: just name, dates and a plain description box. */
+function CourseInlineEdit({
+  course,
+  onCancel,
+  onSaved,
+}: {
+  course: {
+    id: string;
+    name: string;
+    description?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+  };
+  onCancel: () => void;
+  onSaved: () => void;
+}) {
+  const notify = useNotifications();
+  const update = useUpdateCourse(course.id);
+  const [name, setName] = useState(course.name);
+  const [description, setDescription] = useState(course.description ?? '');
+  const [start, setStart] = useState(toDateInput(course.start_date));
+  const [end, setEnd] = useState(toDateInput(course.end_date));
+
+  const onSave = async () => {
+    if (!name.trim()) {
+      notify.error('Название не может быть пустым');
+      return;
+    }
+    try {
+      await update.mutateAsync({
+        name: name.trim(),
+        description,
+        start_date: start || null,
+        end_date: end || null,
+      });
+      notify.success('Сохранено');
+      onSaved();
+    } catch (e) {
+      notify.error(parseProblem(e).detail || 'Не удалось сохранить');
+    }
+  };
+
+  return (
+    <div
+      className="space-y-3 rounded-lg border border-border/60 p-4"
+      data-testid="course-inline-edit"
+    >
+      <div className="space-y-1.5">
+        <Label htmlFor="ce-name">Название</Label>
+        <Input
+          id="ce-name"
+          data-testid="course-edit-name"
+          value={name}
+          onChange={(e) => setName(e.currentTarget.value)}
+        />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <Label htmlFor="ce-start">Дата начала</Label>
+          <Input
+            id="ce-start"
+            type="date"
+            value={start}
+            onChange={(e) => setStart(e.currentTarget.value)}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="ce-end">Дата окончания</Label>
+          <Input
+            id="ce-end"
+            type="date"
+            value={end}
+            onChange={(e) => setEnd(e.currentTarget.value)}
+          />
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="ce-desc">Описание</Label>
+        <Textarea
+          id="ce-desc"
+          rows={4}
+          data-testid="course-edit-description"
+          placeholder="Описание курса…"
+          value={description}
+          onChange={(e) => setDescription(e.currentTarget.value)}
+        />
+      </div>
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          onClick={onCancel}
+          disabled={update.isPending}
+        >
+          Отмена
+        </Button>
+        <Button
+          type="button"
+          onClick={onSave}
+          disabled={update.isPending}
+          data-testid="course-edit-save"
+        >
+          {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Сохранить
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export default function CourseDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -112,6 +232,9 @@ export default function CourseDetailPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [opId, setOpId] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
+  // Inline edit of the course's own fields (name / dates / description),
+  // right on this page — replaces the separate «Настройки» route.
+  const [editing, setEditing] = useState(false);
   // Tab state lives in the URL (``?tab=members``) so the browser back
   // button works, deep-links remember which tab you were on, and old
   // sub-route bookmarks can redirect cleanly.
@@ -355,6 +478,14 @@ export default function CourseDetailPage() {
           horizontal rule under the heading. Keep only what helps the
           teacher orient: title, dates / member count, and the archived
           pill when it actually applies. */}
+      {editing ? (
+        <CourseInlineEdit
+          course={course}
+          onCancel={() => setEditing(false)}
+          onSaved={() => setEditing(false)}
+        />
+      ) : (
+        <>
       <div
         data-testid="course-detail-header"
         className="flex items-start gap-6"
@@ -395,14 +526,12 @@ export default function CourseDetailPage() {
         {isOwner && (
           <div className="flex items-center gap-2 shrink-0">
             <Button
-              asChild
               variant="outline"
+              onClick={() => setEditing(true)}
               data-testid="course-detail-settings-button"
             >
-              <Link to={`/courses/${course.slug}/settings`}>
-                <Settings className="mr-2 h-4 w-4" />
-                Настройки
-              </Link>
+              <Settings className="mr-2 h-4 w-4" />
+              Редактировать
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -464,6 +593,8 @@ export default function CourseDetailPage() {
         >
           {course.description}
         </p>
+      )}
+        </>
       )}
 
       {problem && <ProblemAlert problem={problem} />}

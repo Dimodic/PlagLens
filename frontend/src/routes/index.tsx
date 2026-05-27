@@ -123,7 +123,6 @@ const LLMCacheAdminPage = lazy(() => import('@/pages/admin/LLMCacheAdminPage'));
 const CoursesListPage = lazy(() => import('@/pages/courses/CoursesListPage'));
 const CourseCreatePage = lazy(() => import('@/pages/courses/CourseCreatePage'));
 const CourseDetailPage = lazy(() => import('@/pages/courses/CourseDetailPage'));
-const CourseSettingsPage = lazy(() => import('@/pages/courses/CourseSettingsPage'));
 const JoinByCodePage = lazy(() => import('@/pages/courses/JoinByCodePage'));
 const AssignmentDetailPage = lazy(() => import('@/pages/assignments/AssignmentDetailPage'));
 const AssignmentCreatePage = lazy(() => import('@/pages/assignments/AssignmentCreatePage'));
@@ -243,7 +242,9 @@ const protectedRoutes: RouteObject[] = [
       { path: 'courses/join', element: <JoinByCodePage /> },
       { path: 'courses/join/:code', element: <JoinByCodePage /> },
       { path: 'courses/:slug', element: <CourseDetailPage /> },
-      { path: 'courses/:slug/settings', element: <CourseSettingsPage /> },
+      // Settings folded into inline editing on the course page; keep the
+      // old path working for bookmarks by bouncing back to the course.
+      { path: 'courses/:slug/settings', element: <Navigate to=".." replace /> },
       // ↓ All these sub-pages were folded into the course-page tabs (or
       //   dropped outright per the user's "всё убирай" call). Redirect
       //   any old bookmarks to the new tabbed surface.
