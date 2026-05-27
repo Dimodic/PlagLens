@@ -60,7 +60,7 @@ async def my_submissions(
     ),
     latest_per_student: bool = Query(default=False),
     offset: int = Query(default=0, ge=0),
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50, ge=1, le=10_000),
 ) -> Page[SubmissionOut]:
     """Dual-mode list:
       - **student** → own submissions (filter by author_id).
