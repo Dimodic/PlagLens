@@ -33,6 +33,8 @@ export const submissionKeys = {
   feedback: (id: string) => ['submissions', id, 'feedback'] as const,
   flags: (id: string) => ['submissions', id, 'flags'] as const,
   history: (id: string) => ['submissions', id, 'history'] as const,
+  externalParticipants: (course_id: string) =>
+    ['submissions', 'external-participants', course_id] as const,
 };
 
 export function useSubmissions(
@@ -106,6 +108,22 @@ export function useMySubmissions(filters: SubmissionListFilters = {}) {
   return useQuery({
     queryKey: submissionKeys.myList(filters),
     queryFn: () => submissionsApi.mySubmissions(filters),
+  });
+}
+
+/** Unclaimed external (Yandex.Contest) participants imported into the
+ *  course. Backs the teacher's "generate claim codes" dialog, so it's
+ *  deferred until the dialog opens (`opts.enabled`). */
+export function useExternalParticipants(
+  course_id: string | undefined,
+  opts: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: submissionKeys.externalParticipants(course_id ?? ''),
+    queryFn: ({ signal }) =>
+      submissionsApi.externalParticipants(course_id as string, signal),
+    enabled: !!course_id && (opts.enabled ?? true),
+    staleTime: 30_000,
   });
 }
 

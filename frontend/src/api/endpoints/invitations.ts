@@ -46,6 +46,36 @@ export interface RedeemResult {
   requires_relogin: boolean;
 }
 
+// ---- Bulk bindings (Yandex.Contest participant → claim code) ----
+//
+// The teacher generates a one-time code per imported contest participant.
+// `role` ("student") and `binding_system` ("yandex_contest") are filled in
+// server-side, so the request only carries the course + participant list.
+// Idempotent: re-running returns the same code for an already-coded
+// participant.
+
+/** One participant to mint a code for. `display_name` mirrors the label
+ *  shown on the ghost author so the code list reads as ФИО → CODE. */
+export interface BulkBindingParticipant {
+  external_id: string;
+  display_name: string | null;
+}
+
+export interface BulkBindingsInput {
+  course_id: string;
+  participants: BulkBindingParticipant[];
+}
+
+export interface BulkBindingItem {
+  external_id: string;
+  display_name: string | null;
+  code: string;
+}
+
+export interface BulkBindingsResult {
+  items: BulkBindingItem[];
+}
+
 export const invitationsApi = {
   list: () => api.get<Invitation[]>('/invitations').then((r) => r.data),
   create: (input: CreateInvitationInput) =>
@@ -54,4 +84,8 @@ export const invitationsApi = {
     api.delete<void>(`/invitations/${id}`).then((r) => r.data),
   redeem: (code: string) =>
     api.post<RedeemResult>('/invitations:redeem', { code }).then((r) => r.data),
+  bulkBindings: (input: BulkBindingsInput) =>
+    api
+      .post<BulkBindingsResult>('/invitations:bulk-bindings', input)
+      .then((r) => r.data),
 };

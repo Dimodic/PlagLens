@@ -13,9 +13,11 @@ import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
   Copy,
+  Download,
   KeyRound,
   Loader2,
   MoreHorizontal,
+  Ticket,
   UserPlus,
   Users,
 } from 'lucide-react';
@@ -26,6 +28,9 @@ import {
   useRemoveMember,
 } from '@/hooks/api/useCourses';
 import { invitationsApi } from '@/api/endpoints/invitations';
+import type { BulkBindingItem } from '@/api/endpoints/invitations';
+import { useBulkBindings } from '@/hooks/api/useInvitations';
+import { useExternalParticipants } from '@/hooks/api/useSubmissions';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
@@ -87,6 +92,29 @@ const ROLE_TONE: Record<string, string> = {
 
 type RoleFilter = 'all' | 'staff' | 'student';
 
+/** Build a `ФИО,Код` CSV from the minted codes and trigger a download.
+ *  No new deps — just a Blob + a transient object URL. Values are quoted
+ *  so a comma in a ФИО can't shift columns. */
+function downloadCodesCsv(items: BulkBindingItem[]): void {
+  const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
+  const rows = [
+    'ФИО,Код',
+    ...items.map((it) => `${esc(it.display_name ?? it.external_id)},${esc(it.code)}`),
+  ];
+  // Prepend a BOM so Excel reads the Cyrillic as UTF-8.
+  const blob = new Blob(['﻿' + rows.join('\r\n')], {
+    type: 'text/csv;charset=utf-8',
+  });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'yandex-contest-codes.csv';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
   const notify = useNotifications();
   const { data: members, isLoading } = useCourseMembers(courseId);
@@ -127,6 +155,32 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
     onError: (e) =>
       notify.error(parseProblem(e).detail || 'Не удалось создать код'),
   });
+
+  // ---- Я.Контест codes: one claim code per imported participant. The
+  // teacher mints all codes at once and hands them out; the student
+  // enters theirs in «Активировать код» and their contest submissions
+  // attach to their account. Participants are fetched lazily on open.
+  const [ycOpen, setYcOpen] = useState(false);
+  const participants = useExternalParticipants(courseId, { enabled: ycOpen });
+  const bulkBindings = useBulkBindings();
+  const ycItems = bulkBindings.data?.items ?? null;
+  const generateYcCodes = () => {
+    const list = participants.data ?? [];
+    if (list.length === 0) return;
+    bulkBindings.mutate(
+      {
+        course_id: courseId,
+        participants: list.map((p) => ({
+          external_id: p.external_id,
+          display_name: p.display_name,
+        })),
+      },
+      {
+        onError: (e) =>
+          notify.error(parseProblem(e).detail || 'Не удалось создать коды'),
+      },
+    );
+  };
 
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -273,6 +327,18 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
             >
               <KeyRound className="mr-2 h-3.5 w-3.5" />
               Код
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                bulkBindings.reset();
+                setYcOpen(true);
+              }}
+              data-testid="course-members-yc-button"
+            >
+              <Ticket className="mr-2 h-3.5 w-3.5" />
+              Коды Я.Контеста
             </Button>
           </div>
         )}
@@ -634,6 +700,133 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   Создать код
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Я.Контест claim codes — mint one code per imported participant
+          and hand them out; students redeem in «Активировать код». */}
+      <Dialog
+        open={ycOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setYcOpen(false);
+            bulkBindings.reset();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Привязка участников Яндекс.Контеста</DialogTitle>
+          </DialogHeader>
+          <p className="text-xs text-muted-foreground">
+            Сгенерируйте код для каждого импортированного участника и раздайте
+            студентам. Студент введёт код в профиле → «Активировать код», и его
+            посылки из контеста привяжутся к аккаунту.
+          </p>
+
+          {participants.isLoading ? (
+            <div className="flex items-center py-6">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : participants.isError ? (
+            <ProblemAlert problem={parseProblem(participants.error)} />
+          ) : ycItems ? (
+            // ---- Result: ФИО → code rows + copy-all / CSV ----
+            <div className="space-y-3" data-testid="course-members-yc-result">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">
+                  Готово · {ycItems.length}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const blob = ycItems
+                        .map((it) => `${it.display_name ?? it.external_id}\t${it.code}`)
+                        .join('\n');
+                      void navigator.clipboard?.writeText(blob);
+                      notify.info('Скопировано');
+                    }}
+                  >
+                    <Copy className="mr-2 h-3.5 w-3.5" />
+                    Скопировать всё
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => downloadCodesCsv(ycItems)}
+                  >
+                    <Download className="mr-2 h-3.5 w-3.5" />
+                    Скачать CSV
+                  </Button>
+                </div>
+              </div>
+              <div className="flex max-h-[50vh] flex-col divide-y divide-border/60 overflow-y-auto">
+                {ycItems.map((it) => (
+                  <div
+                    key={it.external_id}
+                    className="flex items-center gap-3 py-2"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                      {it.display_name ?? it.external_id}
+                    </span>
+                    <code className="rounded-md border border-border bg-muted/40 px-2 py-1 font-mono text-sm tracking-wider">
+                      {it.code}
+                    </code>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 flex-none"
+                      title="Скопировать"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(it.code);
+                        notify.info('Скопировано');
+                      }}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <DialogFooter>
+                <Button type="button" onClick={() => setYcOpen(false)}>
+                  Готово
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (participants.data?.length ?? 0) === 0 ? (
+            <EmptyState title="Непривязанных участников нет." />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-foreground">
+                {participants.data?.length} непривязанных участников
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setYcOpen(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="button"
+                  onClick={generateYcCodes}
+                  disabled={bulkBindings.isPending}
+                  data-testid="course-members-yc-create"
+                >
+                  {bulkBindings.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Создать коды
                 </Button>
               </DialogFooter>
             </div>

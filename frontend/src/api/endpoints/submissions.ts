@@ -98,6 +98,16 @@ export function displayAuthor(s: SubmissionBrief): string {
   );
 }
 
+/** An imported external participant (e.g. Yandex.Contest) that hasn't yet
+ *  been claimed by a real PlagLens account. Their submissions hang off a
+ *  "ghost" author (`author_id = yc:<uid>`). Once a participant redeems a
+ *  claim code, they drop off this list. */
+export interface ExternalParticipant {
+  external_id: string;
+  display_name: string | null;
+  submission_count: number;
+}
+
 export interface SubmissionFile {
   id: string;
   submission_id: string;
@@ -302,6 +312,17 @@ export const submissionsApi = {
       )
       .then((r) => normalisePaginated(r.data));
   },
+
+  // Unclaimed external (Yandex.Contest) participants imported into the
+  // course — used by the teacher's "generate claim codes" dialog.
+  // Returns a plain array (no pagination envelope).
+  externalParticipants: (course_id: string, signal?: AbortSignal) =>
+    api
+      .get<ExternalParticipant[]>(
+        `/courses/${course_id}/submissions/external-participants`,
+        { signal },
+      )
+      .then((r) => r.data ?? []),
 
   get: (id: string, signal?: AbortSignal) =>
     api.get<Submission>(`/submissions/${id}`, { signal }).then((r) => r.data),

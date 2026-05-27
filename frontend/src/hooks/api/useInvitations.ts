@@ -2,6 +2,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   invitationsApi,
+  type BulkBindingsInput,
   type CreateInvitationInput,
   type Invitation,
 } from '@/api/endpoints/invitations';
@@ -35,5 +36,14 @@ export function useRevokeInvitation() {
 export function useRedeemInvitation() {
   return useMutation({
     mutationFn: (code: string) => invitationsApi.redeem(code),
+  });
+}
+
+/** Mint one claim code per imported (Yandex.Contest) participant. The
+ *  result is consumed directly by the caller (the codes are shown +
+ *  copied), so there's no cache to invalidate. */
+export function useBulkBindings() {
+  return useMutation({
+    mutationFn: (input: BulkBindingsInput) => invitationsApi.bulkBindings(input),
   });
 }
