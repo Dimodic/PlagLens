@@ -10,13 +10,22 @@
  * backend's `MemberRead` only carries `user_id` + `role`) stay.
  */
 import { useMemo, useState } from 'react';
-import { Loader2, MoreHorizontal, UserPlus, Users } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
+import {
+  Copy,
+  KeyRound,
+  Loader2,
+  MoreHorizontal,
+  UserPlus,
+  Users,
+} from 'lucide-react';
 import {
   useAddMember,
   useBulkInvite,
   useCourseMembers,
   useRemoveMember,
 } from '@/hooks/api/useCourses';
+import { invitationsApi } from '@/api/endpoints/invitations';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
@@ -104,6 +113,20 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
   const [bulkEmailsError, setBulkEmailsError] = useState<string | null>(null);
   const [bulkRole, setBulkRole] = useState<'student' | 'assistant'>('student');
   const [bulkMessage, setBulkMessage] = useState('');
+
+  // ---- Invite-by-code: a course-attached identity invitation. The
+  // teacher shares the short code; the joiner enters it in «Активировать
+  // код» (profile) and lands in THIS course (redeem attaches them).
+  const [codeOpen, setCodeOpen] = useState(false);
+  const [codeRole, setCodeRole] = useState<'student' | 'assistant'>('student');
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const createCode = useMutation({
+    mutationFn: () =>
+      invitationsApi.create({ role: codeRole, course_id: courseId }),
+    onSuccess: (inv) => setGeneratedCode(inv.code ?? null),
+    onError: (e) =>
+      notify.error(parseProblem(e).detail || 'Не удалось создать код'),
+  });
 
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all');
@@ -238,6 +261,18 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
             >
               <Users className="mr-2 h-3.5 w-3.5" />
               Пригласить
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setGeneratedCode(null);
+                setCodeOpen(true);
+              }}
+              data-testid="course-members-code-button"
+            >
+              <KeyRound className="mr-2 h-3.5 w-3.5" />
+              Код
             </Button>
           </div>
         )}
@@ -498,6 +533,111 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invite-by-code dialog — generates a course-attached code the
+          teacher shares; the joiner enters it in «Активировать код». */}
+      <Dialog
+        open={codeOpen}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCodeOpen(false);
+            setGeneratedCode(null);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Пригласить по коду</DialogTitle>
+          </DialogHeader>
+          {generatedCode ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Передайте этот код — человек введёт его в профиле
+                («Активировать код») и попадёт в этот курс.
+              </p>
+              <div className="flex items-center gap-2">
+                <code
+                  className="flex-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-lg font-semibold tracking-wider"
+                  data-testid="course-members-code-value"
+                >
+                  {generatedCode}
+                </code>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  title="Скопировать"
+                  onClick={() => {
+                    void navigator.clipboard?.writeText(generatedCode);
+                    notify.info('Скопировано');
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setGeneratedCode(null)}
+                >
+                  Создать ещё
+                </Button>
+                <Button type="button" onClick={() => setCodeOpen(false)}>
+                  Готово
+                </Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="course-members-code-role">Роль</Label>
+                <Select
+                  value={codeRole}
+                  onValueChange={(v) =>
+                    setCodeRole(v as 'student' | 'assistant')
+                  }
+                >
+                  <SelectTrigger
+                    id="course-members-code-role"
+                    data-testid="course-members-code-role"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="student">Студент</SelectItem>
+                    <SelectItem value="assistant">Ассистент</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Одноразовый код привязан к этому курсу — в отличие от
+                приглашения из админки.
+              </p>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setCodeOpen(false)}
+                >
+                  Отмена
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => createCode.mutate()}
+                  disabled={createCode.isPending}
+                  data-testid="course-members-code-create"
+                >
+                  {createCode.isPending && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Создать код
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
