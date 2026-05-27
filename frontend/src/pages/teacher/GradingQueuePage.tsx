@@ -8,24 +8,22 @@
  *     next unchecked submission of that group.
  *
  * Backed by GET /users/me/submissions (staff inbox) filtered to
- * ``assigned_grader_id = me`` and collapsed latest-per-student — the same
- * data the «Все посылки» triage uses, here rolled up into counts.
+ * ``assigned_grader_id = me`` and collapsed latest-per-student — always
+ * the assistant's OWN pile (handing-out work lives on «Все посылки»).
+ * The queue is narrowed by the same курс → ДЗ → задание cascade the
+ * triage uses, so the cabinet reads as a focused view of one's tasks.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, Sparkles } from 'lucide-react';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { FilterCombo } from '@/components/common/FilterCombo';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { cn } from '@/components/ui/utils';
 import { useMyCourses } from '@/hooks/api/useCourses';
+import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
+import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
@@ -49,15 +47,51 @@ export default function GradingQueuePage() {
   const coursesQ = useMyCourses();
   const courseItems = coursesQ.data?.data ?? [];
 
+  // курс → ДЗ → задание cascade (same as «Все посылки»). '' = «все».
   const [course, setCourse] = useState(''); // '' = все курсы
-  const [mineOnly, setMineOnly] = useState(true); // «Мои» vs «Все в курсе»
+  const [homework, setHomework] = useState('');
+  const [assignment, setAssignment] = useState('');
   const [groupBy, setGroupBy] = useState<'tasks' | 'students'>('tasks');
+
+  // Cascade resets: a new course wipes ДЗ + задание; a new ДЗ wipes the
+  // задание. Otherwise a stale id from a previous course filters to nothing.
+  useEffect(() => {
+    setHomework('');
+    setAssignment('');
+  }, [course]);
+  useEffect(() => {
+    setAssignment('');
+  }, [homework]);
+
+  // ДЗ / задание options for the picked course.
+  const hwQ = useHomeworksForCourse(course || undefined, { limit: 200 });
+  const asgQ = useAssignmentsByCourse(course || undefined, { limit: 500 });
+  const courseHomeworks = useMemo(() => hwQ.data?.data ?? [], [hwQ.data]);
+  const courseAssignments = useMemo(() => asgQ.data?.data ?? [], [asgQ.data]);
+
+  // Assignments of the picked ДЗ — the задание picker's options + the
+  // id scope sent to the list when no single задание is picked.
+  const homeworkAssignments = useMemo(() => {
+    if (!homework) return [];
+    return courseAssignments
+      .filter(
+        (a) => a.homework_id != null && String(a.homework_id) === homework,
+      )
+      .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+  }, [homework, courseAssignments]);
+  const effectiveAsgIds = useMemo<string[]>(() => {
+    if (assignment) return [assignment];
+    if (homework) return homeworkAssignments.map((a) => String(a.id));
+    return [];
+  }, [assignment, homework, homeworkAssignments]);
 
   const { data, isPending } = useMySubmissions({
     limit: 5000,
     offset: 0,
     ...(course ? { course_id: course } : {}),
-    ...(mineOnly && myId ? { assigned_grader_id: myId } : {}),
+    ...(effectiveAsgIds.length > 0 ? { assignment_ids: effectiveAsgIds } : {}),
+    // The cabinet is always the assistant's OWN pile.
+    ...(myId ? { assigned_grader_id: myId } : {}),
     latest_per_student: true,
   });
   const subs = useMemo(() => data?.data ?? [], [data]);
@@ -70,6 +104,7 @@ export default function GradingQueuePage() {
   const courseName = course
     ? courseItems.find((c) => String(c.id) === course)?.name ?? 'курс'
     : null;
+  const hasFilter = !!(course || homework || assignment);
 
   const firstUngraded = subs.find((s) => !s.is_graded);
   const startReview = () => {
@@ -116,7 +151,7 @@ export default function GradingQueuePage() {
             <div className="mt-1 text-4xl font-semibold tabular-nums">
               {remaining}
               <span className="ml-2 text-base font-normal text-muted-foreground">
-                из {total} {mineOnly ? 'назначенных' : 'в курсе'}
+                из {total} назначенных
               </span>
             </div>
           </div>
@@ -145,51 +180,44 @@ export default function GradingQueuePage() {
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <h2 className="text-base font-semibold">Очередь</h2>
-          <Select
-            value={course || '__all__'}
-            onValueChange={(v) => setCourse(v === '__all__' ? '' : v)}
-          >
-            <SelectTrigger
-              className="h-9 w-[220px]"
-              data-testid="assistant-course"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="__all__">Все курсы</SelectItem>
-              {courseItems.map((c) => (
-                <SelectItem key={c.id} value={String(c.id)}>
-                  {c.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <div className="inline-flex items-center rounded-full bg-muted/40 p-0.5 text-sm">
-            <button
-              type="button"
-              onClick={() => setMineOnly(true)}
-              className={cn(
-                'rounded-full px-3 py-1 transition-colors',
-                mineOnly
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              Мои
-            </button>
-            <button
-              type="button"
-              onClick={() => setMineOnly(false)}
-              className={cn(
-                'rounded-full px-3 py-1 transition-colors',
-                !mineOnly
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              Все в курсе
-            </button>
-          </div>
+          {/* курс → ДЗ → задание cascade (same controls as «Все посылки»). */}
+          <FilterCombo
+            value={course}
+            onChange={setCourse}
+            allLabel="Все курсы"
+            searchPlaceholder="Найти курс…"
+            testId="assistant-course"
+            options={courseItems.map((c) => ({
+              value: String(c.id),
+              label: c.name,
+            }))}
+          />
+          {course && courseHomeworks.length > 0 && (
+            <FilterCombo
+              value={homework}
+              onChange={setHomework}
+              allLabel="Все ДЗ курса"
+              searchPlaceholder="Найти ДЗ…"
+              testId="assistant-hw"
+              options={courseHomeworks.map((hw) => ({
+                value: String(hw.id),
+                label: hw.title,
+              }))}
+            />
+          )}
+          {homework && homeworkAssignments.length > 1 && (
+            <FilterCombo
+              value={assignment}
+              onChange={setAssignment}
+              allLabel="Все задачи ДЗ"
+              searchPlaceholder="Найти задачу…"
+              testId="assistant-task"
+              options={homeworkAssignments.map((a) => ({
+                value: String(a.id),
+                label: a.title,
+              }))}
+            />
+          )}
           <div className="flex-1" />
           <div className="inline-flex items-center gap-3 text-sm">
             <button
@@ -226,9 +254,9 @@ export default function GradingQueuePage() {
             className="py-10 text-center text-sm text-muted-foreground"
             data-testid="assistant-empty"
           >
-            {mineOnly
-              ? 'На вас пока ничего не распределено.'
-              : 'Посылок нет.'}
+            {hasFilter
+              ? 'Ничего не найдено по фильтру.'
+              : 'На вас пока ничего не распределено.'}
           </div>
         ) : (
           <ul className="flex flex-col divide-y divide-border/60">

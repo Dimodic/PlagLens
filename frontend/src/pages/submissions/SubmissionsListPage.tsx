@@ -36,6 +36,7 @@ import {
 } from '@/components/ui/command';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Pagination } from '@/components/common/Pagination';
+import { FilterCombo } from '@/components/common/FilterCombo';
 import {
   Dialog,
   DialogContent,
@@ -136,91 +137,6 @@ function FilterGroup({
         })}
       </div>
     </div>
-  );
-}
-
-/** Combobox styled identically to the course picker (outline button +
- *  ChevronsUpDown + Popover/Command list). Used for the ДЗ and task
- *  filters so all three read as one consistent control bar instead of
- *  a styled-button-next-to-a-raw-<select> mismatch. ``value === ''``
- *  means the "all" sentinel option is selected. */
-function FilterCombo({
-  value,
-  onChange,
-  options,
-  allLabel,
-  searchPlaceholder,
-  testId,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-  allLabel: string;
-  searchPlaceholder?: string;
-  testId?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  const selected = options.find((o) => o.value === value);
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          role="combobox"
-          aria-expanded={open}
-          className="h-9 min-w-[220px] justify-between"
-          data-testid={testId}
-        >
-          <span className="truncate">
-            {value === '' ? allLabel : selected?.label ?? allLabel}
-          </span>
-          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[280px] p-0">
-        <Command>
-          <CommandInput placeholder={searchPlaceholder ?? 'Найти…'} />
-          <CommandList>
-            <CommandEmpty>Ничего не найдено.</CommandEmpty>
-            <CommandGroup>
-              <CommandItem
-                value={allLabel}
-                onSelect={() => {
-                  onChange('');
-                  setOpen(false);
-                }}
-              >
-                <Check
-                  className={cn(
-                    'mr-2 h-4 w-4',
-                    value === '' ? 'opacity-100' : 'opacity-0',
-                  )}
-                />
-                {allLabel}
-              </CommandItem>
-              {options.map((o) => (
-                <CommandItem
-                  key={o.value}
-                  value={o.label}
-                  onSelect={() => {
-                    onChange(o.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      'mr-2 h-4 w-4',
-                      value === o.value ? 'opacity-100' : 'opacity-0',
-                    )}
-                  />
-                  <span className="truncate">{o.label}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
-      </PopoverContent>
-    </Popover>
   );
 }
 
