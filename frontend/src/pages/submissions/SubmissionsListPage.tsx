@@ -76,7 +76,7 @@ function getInitials(name: string): string {
 function MiniAvatar({ name }: { name: string }) {
   const initials = getInitials(name);
   return (
-    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+    <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
       {initials}
     </span>
   );
@@ -462,17 +462,19 @@ export default function SubmissionsListPage() {
   // `grid-cols-subgrid` span, so the tracks resolve ONCE across all rows
   // and line up in fixed invisible columns. (Per-row grids drifted: the
   // `auto` trailing track sized to each row's own badges, which stole a
-  // different slice from the `fr` columns every row — so the task / ДЗ /
-  // course cells jumped left/right between rows. The name looked stable
-  // only because it's anchored left after the fixed-width avatar.)
-  // Columns: avatar | student | task | [ДЗ] | [курс] | trailing | chevron.
-  // The ДЗ / course tracks drop out when that dimension is already pinned
-  // by a filter (no point repeating «КНАД…» on every row).
+  // different slice from the `fr` columns every row — so the cells jumped
+  // left/right between rows.)
+  // Columns: student (avatar + name) | task | [ДЗ] | [курс] | trailing |
+  // chevron. The avatar lives INSIDE the student cell with a small flex
+  // gap, not in its own track — that keeps a predictable, roomy space
+  // between the icon and the ФИО regardless of subgrid gutter quirks, and
+  // the fixed-width avatar still lines every name up at the same x. The
+  // ДЗ / course tracks drop out when that dimension is already pinned by
+  // a filter (no point repeating «КНАД…» on every row).
   const showCourseCol = course === 'all';
   const showHwCol = !homework;
   const rowGridCols = [
-    '1.75rem', // avatar
-    'minmax(110px, 1.4fr)', // student
+    'minmax(160px, 1.6fr)', // student (avatar + name)
     'minmax(150px, 1.9fr)', // task
     showHwCol ? 'minmax(110px, 1.2fr)' : null, // ДЗ
     showCourseCol ? 'minmax(110px, 1fr)' : null, // курс
@@ -713,11 +715,13 @@ export default function SubmissionsListPage() {
                   data-testid={`submission-table-row-${s.id}`}
                   className="group col-span-full grid grid-cols-subgrid items-center gap-x-4 px-3 py-3 text-sm transition-colors hover:bg-muted/30"
                 >
-                  {/* col: avatar */}
-                  <MiniAvatar name={studentName} />
-                  {/* col: student */}
-                  <div className="min-w-0 truncate font-medium text-foreground">
-                    {studentName}
+                  {/* col: student — avatar + ФИО, with a roomy flex gap
+                      between them so the icon never crowds the name. */}
+                  <div className="flex min-w-0 items-center gap-3">
+                    <MiniAvatar name={studentName} />
+                    <span className="truncate font-medium text-foreground">
+                      {studentName}
+                    </span>
                   </div>
                   {/* col: task */}
                   <div className="min-w-0 truncate text-xs text-muted-foreground">
