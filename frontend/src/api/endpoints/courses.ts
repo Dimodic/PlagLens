@@ -170,8 +170,12 @@ export const coursesApi = {
     api.post<{ course_id: string }>('/courses:joinByCode', { code }).then((r) => r.data),
 
   // ---- owners ----
+  // NB: this endpoint returns a *bare array* (``list[OwnerRead]``), not a
+  // ``{data, pagination}`` envelope — owners are a tiny set. Typing it as
+  // Paginated and reading ``.data.data`` was the bug behind the dead
+  // "Распределить" button (grader pool came back empty).
   listOwners: (id: string) =>
-    api.get<Paginated<CourseOwner>>(`/courses/${id}/owners`).then((r) => r.data),
+    api.get<CourseOwner[]>(`/courses/${id}/owners`).then((r) => r.data),
   addOwner: (id: string, user_id: string) =>
     api.post<CourseOwner>(`/courses/${id}/owners`, { user_id }).then((r) => r.data),
   removeOwner: (id: string, user_id: string) =>

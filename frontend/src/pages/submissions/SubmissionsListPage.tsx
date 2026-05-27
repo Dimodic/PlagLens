@@ -139,6 +139,91 @@ function FilterGroup({
   );
 }
 
+/** Combobox styled identically to the course picker (outline button +
+ *  ChevronsUpDown + Popover/Command list). Used for the ДЗ and task
+ *  filters so all three read as one consistent control bar instead of
+ *  a styled-button-next-to-a-raw-<select> mismatch. ``value === ''``
+ *  means the "all" sentinel option is selected. */
+function FilterCombo({
+  value,
+  onChange,
+  options,
+  allLabel,
+  searchPlaceholder,
+  testId,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+  allLabel: string;
+  searchPlaceholder?: string;
+  testId?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="h-9 min-w-[220px] justify-between"
+          data-testid={testId}
+        >
+          <span className="truncate">
+            {value === '' ? allLabel : selected?.label ?? allLabel}
+          </span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[280px] p-0">
+        <Command>
+          <CommandInput placeholder={searchPlaceholder ?? 'Найти…'} />
+          <CommandList>
+            <CommandEmpty>Ничего не найдено.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem
+                value={allLabel}
+                onSelect={() => {
+                  onChange('');
+                  setOpen(false);
+                }}
+              >
+                <Check
+                  className={cn(
+                    'mr-2 h-4 w-4',
+                    value === '' ? 'opacity-100' : 'opacity-0',
+                  )}
+                />
+                {allLabel}
+              </CommandItem>
+              {options.map((o) => (
+                <CommandItem
+                  key={o.value}
+                  value={o.label}
+                  onSelect={() => {
+                    onChange(o.value);
+                    setOpen(false);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      'mr-2 h-4 w-4',
+                      value === o.value ? 'opacity-100' : 'opacity-0',
+                    )}
+                  />
+                  <span className="truncate">{o.label}</span>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export default function SubmissionsListPage() {
   const { user } = useAuth();
   const notify = useNotifications();
@@ -217,7 +302,7 @@ export default function SubmissionsListPage() {
   );
   const assistants = useMemo(() => {
     const pool = new Map<string, { id: string; name: string }>();
-    for (const o of ownersQ.data?.data ?? []) {
+    for (const o of ownersQ.data ?? []) {
       pool.set(o.user_id, {
         id: o.user_id,
         name:
@@ -452,42 +537,36 @@ export default function SubmissionsListPage() {
 
         {/* ДЗ picker — only once a concrete course is picked. Empty =
             «Все ДЗ курса». Picking a ДЗ narrows the list and scopes the
-            distribute action. Native <select> — short list, no need for
-            the heavier Popover+Command combo. */}
+            distribute action. Same combobox style as the course picker
+            so the control bar reads as one consistent surface. */}
         {isStaff && course !== 'all' && courseHomeworks.length > 0 && (
-          <select
+          <FilterCombo
             value={homework}
-            onChange={(e) => setHomework(e.currentTarget.value)}
-            className="h-9 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
-            data-testid="my-submissions-hw-picker"
-            aria-label="ДЗ"
-          >
-            <option value="">Все ДЗ курса</option>
-            {courseHomeworks.map((hw) => (
-              <option key={hw.id} value={String(hw.id)}>
-                {hw.title}
-              </option>
-            ))}
-          </select>
+            onChange={setHomework}
+            allLabel="Все ДЗ курса"
+            searchPlaceholder="Найти ДЗ…"
+            testId="my-submissions-hw-picker"
+            options={courseHomeworks.map((hw) => ({
+              value: String(hw.id),
+              label: hw.title,
+            }))}
+          />
         )}
 
         {/* Task picker — only when a ДЗ with >1 task is picked. Empty =
             «Все задачи ДЗ». */}
         {isStaff && homework && homeworkAssignments.length > 1 && (
-          <select
+          <FilterCombo
             value={assignment}
-            onChange={(e) => setAssignment(e.currentTarget.value)}
-            className="h-9 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
-            data-testid="my-submissions-task-picker"
-            aria-label="Задача"
-          >
-            <option value="">Все задачи ДЗ</option>
-            {homeworkAssignments.map((a) => (
-              <option key={a.id} value={String(a.id)}>
-                {a.title}
-              </option>
-            ))}
-          </select>
+            onChange={setAssignment}
+            allLabel="Все задачи ДЗ"
+            searchPlaceholder="Найти задачу…"
+            testId="my-submissions-task-picker"
+            options={homeworkAssignments.map((a) => ({
+              value: String(a.id),
+              label: a.title,
+            }))}
+          />
         )}
 
         <div className="flex-1" />
