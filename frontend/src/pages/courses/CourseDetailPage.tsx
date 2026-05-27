@@ -78,7 +78,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import { formatDate, formatDateTime } from '@/utils/formatters';
 
@@ -104,118 +103,6 @@ function toDateInput(iso: string | null | undefined): string {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
-/** Inline editor for the course's own fields — shown in place of the
- *  header when the owner clicks «Редактировать». No CORS, no markdown
- *  preview tab: just name, dates and a plain description box. */
-function CourseInlineEdit({
-  course,
-  onCancel,
-  onSaved,
-}: {
-  course: {
-    id: string;
-    name: string;
-    description?: string | null;
-    start_date?: string | null;
-    end_date?: string | null;
-  };
-  onCancel: () => void;
-  onSaved: () => void;
-}) {
-  const notify = useNotifications();
-  const update = useUpdateCourse(course.id);
-  const [name, setName] = useState(course.name);
-  const [description, setDescription] = useState(course.description ?? '');
-  const [start, setStart] = useState(toDateInput(course.start_date));
-  const [end, setEnd] = useState(toDateInput(course.end_date));
-
-  const onSave = async () => {
-    if (!name.trim()) {
-      notify.error('Название не может быть пустым');
-      return;
-    }
-    try {
-      await update.mutateAsync({
-        name: name.trim(),
-        description,
-        start_date: start || null,
-        end_date: end || null,
-      });
-      notify.success('Сохранено');
-      onSaved();
-    } catch (e) {
-      notify.error(parseProblem(e).detail || 'Не удалось сохранить');
-    }
-  };
-
-  return (
-    <div
-      className="space-y-3 rounded-lg border border-border/60 p-4"
-      data-testid="course-inline-edit"
-    >
-      <div className="space-y-1.5">
-        <Label htmlFor="ce-name">Название</Label>
-        <Input
-          id="ce-name"
-          data-testid="course-edit-name"
-          value={name}
-          onChange={(e) => setName(e.currentTarget.value)}
-        />
-      </div>
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className="space-y-1.5">
-          <Label htmlFor="ce-start">Дата начала</Label>
-          <Input
-            id="ce-start"
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.currentTarget.value)}
-          />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="ce-end">Дата окончания</Label>
-          <Input
-            id="ce-end"
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.currentTarget.value)}
-          />
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label htmlFor="ce-desc">Описание</Label>
-        <Textarea
-          id="ce-desc"
-          rows={4}
-          data-testid="course-edit-description"
-          placeholder="Описание курса…"
-          value={description}
-          onChange={(e) => setDescription(e.currentTarget.value)}
-        />
-      </div>
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          onClick={onCancel}
-          disabled={update.isPending}
-        >
-          Отмена
-        </Button>
-        <Button
-          type="button"
-          onClick={onSave}
-          disabled={update.isPending}
-          data-testid="course-edit-save"
-        >
-          {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Сохранить
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 export default function CourseDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -233,8 +120,45 @@ export default function CourseDetailPage() {
   const [opId, setOpId] = useState<string | null>(null);
   const [problem, setProblem] = useState<Problem | null>(null);
   // Inline edit of the course's own fields (name / dates / description),
-  // right on this page — replaces the separate «Настройки» route.
+  // edited IN PLACE on this page — the heading/description themselves
+  // become editable, no separate form card or «Настройки» route.
   const [editing, setEditing] = useState(false);
+  const [edit, setEdit] = useState({
+    name: '',
+    description: '',
+    start: '',
+    end: '',
+  });
+  const updateCourse = useUpdateCourse(course?.id ?? '');
+  const onSaveCourse = async () => {
+    if (!course) return;
+    if (!edit.name.trim()) {
+      notify.error('Название не может быть пустым');
+      return;
+    }
+    try {
+      await updateCourse.mutateAsync({
+        name: edit.name.trim(),
+        description: edit.description,
+        start_date: edit.start || null,
+        end_date: edit.end || null,
+      });
+      notify.success('Сохранено');
+      setEditing(false);
+    } catch (e) {
+      notify.error(parseProblem(e).detail || 'Не удалось сохранить');
+    }
+  };
+  const startEditing = () => {
+    if (!course) return;
+    setEdit({
+      name: course.name,
+      description: course.description ?? '',
+      start: toDateInput(course.start_date),
+      end: toDateInput(course.end_date),
+    });
+    setEditing(true);
+  };
   // Tab state lives in the URL (``?tab=members``) so the browser back
   // button works, deep-links remember which tab you were on, and old
   // sub-route bookmarks can redirect cleanly.
@@ -478,14 +402,6 @@ export default function CourseDetailPage() {
           horizontal rule under the heading. Keep only what helps the
           teacher orient: title, dates / member count, and the archived
           pill when it actually applies. */}
-      {editing ? (
-        <CourseInlineEdit
-          course={course}
-          onCancel={() => setEditing(false)}
-          onSaved={() => setEditing(false)}
-        />
-      ) : (
-        <>
       <div
         data-testid="course-detail-header"
         className="flex items-start gap-6"
@@ -496,38 +412,97 @@ export default function CourseDetailPage() {
               {course.semester}
             </div>
           )}
-          <h1
-            data-testid="course-detail-title"
-            className={`text-2xl font-semibold tracking-tight ${course.semester ? 'mt-2' : ''}`}
-          >
-            {course.name}
-          </h1>
-          {(course.status === 'archived' ||
-            course.start_date ||
-            typeof course.members_count === 'number') && (
-            <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-              {course.status === 'archived' && (
-                <span data-testid="course-detail-status">
-                  {statusBadge(course.status)}
-                </span>
-              )}
-              {course.start_date && (
-                <span>
-                  {formatDate(course.start_date)} –{' '}
-                  {formatDate(course.end_date ?? null)}
-                </span>
-              )}
-              {typeof course.members_count === 'number' && (
-                <span>{course.members_count} участников</span>
-              )}
+          {editing ? (
+            // Heading turns editable in place — same size/weight, just an
+            // underline so it's clearly a field.
+            <input
+              data-testid="course-edit-name"
+              value={edit.name}
+              onChange={(e) =>
+                setEdit((v) => ({ ...v, name: e.currentTarget.value }))
+              }
+              placeholder="Название курса"
+              className={`w-full border-b border-border/60 bg-transparent text-2xl font-semibold tracking-tight outline-none focus:border-primary ${course.semester ? 'mt-2' : ''}`}
+            />
+          ) : (
+            <h1
+              data-testid="course-detail-title"
+              className={`text-2xl font-semibold tracking-tight ${course.semester ? 'mt-2' : ''}`}
+            >
+              {course.name}
+            </h1>
+          )}
+          {editing ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="date"
+                data-testid="course-edit-start"
+                value={edit.start}
+                onChange={(e) =>
+                  setEdit((v) => ({ ...v, start: e.currentTarget.value }))
+                }
+                className="border-b border-border/60 bg-transparent outline-none focus:border-primary"
+              />
+              <span>–</span>
+              <input
+                type="date"
+                data-testid="course-edit-end"
+                value={edit.end}
+                onChange={(e) =>
+                  setEdit((v) => ({ ...v, end: e.currentTarget.value }))
+                }
+                className="border-b border-border/60 bg-transparent outline-none focus:border-primary"
+              />
             </div>
+          ) : (
+            (course.status === 'archived' ||
+              course.start_date ||
+              typeof course.members_count === 'number') && (
+              <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                {course.status === 'archived' && (
+                  <span data-testid="course-detail-status">
+                    {statusBadge(course.status)}
+                  </span>
+                )}
+                {course.start_date && (
+                  <span>
+                    {formatDate(course.start_date)} –{' '}
+                    {formatDate(course.end_date ?? null)}
+                  </span>
+                )}
+                {typeof course.members_count === 'number' && (
+                  <span>{course.members_count} участников</span>
+                )}
+              </div>
+            )
           )}
         </div>
-        {isOwner && (
+        {isOwner && editing ? (
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant="ghost"
+              onClick={() => setEditing(false)}
+              disabled={updateCourse.isPending}
+              data-testid="course-edit-cancel"
+            >
+              Отмена
+            </Button>
+            <Button
+              onClick={onSaveCourse}
+              disabled={updateCourse.isPending}
+              data-testid="course-edit-save"
+            >
+              {updateCourse.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Сохранить
+            </Button>
+          </div>
+        ) : isOwner ? (
           <div className="flex items-center gap-2 shrink-0">
             <Button
               variant="outline"
-              onClick={() => setEditing(true)}
+              onClick={startEditing}
               data-testid="course-detail-settings-button"
             >
               <Settings className="mr-2 h-4 w-4" />
@@ -581,20 +556,31 @@ export default function CourseDetailPage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
-        )}
+        ) : null}
       </div>
 
-      {course.description && (
-        // Description as plain prose — no card chrome, no border, no muted
-        // panel. Reads as the syllabus blurb it actually is.
-        <p
-          data-testid="course-detail-description"
-          className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground"
-        >
-          {course.description}
-        </p>
-      )}
-        </>
+      {editing ? (
+        // Description edits in place — a borderless textarea styled like
+        // the prose it replaces.
+        <textarea
+          data-testid="course-edit-description"
+          rows={3}
+          value={edit.description}
+          onChange={(e) =>
+            setEdit((v) => ({ ...v, description: e.currentTarget.value }))
+          }
+          placeholder="Описание курса…"
+          className="w-full resize-none bg-transparent text-sm leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+        />
+      ) : (
+        course.description && (
+          <p
+            data-testid="course-detail-description"
+            className="text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground"
+          >
+            {course.description}
+          </p>
+        )
       )}
 
       {problem && <ProblemAlert problem={problem} />}
