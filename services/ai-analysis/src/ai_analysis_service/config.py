@@ -32,6 +32,11 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "RS256"
     JWT_AUDIENCE: str = "plaglens"
 
+    # Shared service-to-service secret (same value across services). Guards
+    # internal endpoints called off-request, e.g. reporting's grade-export
+    # column matcher (/api/v1/internal/match-columns).
+    SERVICE_AUTH_SECRET: str = "service-auth-shared-secret-change-me"
+
     # ----------------------- LLM defaults ---------------------------------
     # Settings precedence per spec:
     #   1) ProviderConfig row (per-tenant; admin-managed via /admin/ai/providers).

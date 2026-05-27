@@ -237,7 +237,7 @@ async def grades_match_preview(
     # GS5 hook — let the LLM try the homeworks the number heuristic missed.
     missing = [c for c in columns if c["column_index"] is None]
     if missing:
-        resolved = llm_resolve_columns(missing, header_cells)
+        resolved = await llm_resolve_columns(missing, header_cells, p.tenant_id)
         for c in columns:
             ci = resolved.get(c["homework_id"])
             if c["column_index"] is None and ci is not None:

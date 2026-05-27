@@ -10,6 +10,7 @@ from . import (
     budgets,
     curate,
     health,
+    internal_match,
     operations,
     reports,
 )
@@ -27,5 +28,6 @@ def build_router() -> APIRouter:
     router.include_router(admin_cache.router, tags=["admin-cache"])
     router.include_router(budgets.router, tags=["budgets"])
     router.include_router(operations.router, tags=["operations"])
+    router.include_router(internal_match.router, tags=["internal"])
     router.include_router(health.router, tags=["health"])
     return router

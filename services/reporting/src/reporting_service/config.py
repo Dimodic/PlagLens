@@ -106,6 +106,10 @@ class Settings(BaseSettings):
     # identity's ``/auth/service-token`` (with ``tenant_id`` + ``as_user_id``
     # body). Shared secret matches the same env across services.
     identity_service_base_url: str = "http://identity:8000"
+    # The grade-export column matcher asks ai-analysis to place the ДЗ its
+    # number heuristic couldn't (admin-configured LLM); s2s, guarded by the
+    # shared secret. Best-effort — failures fall back to the heuristic.
+    ai_analysis_base_url: str = "http://ai-analysis:8000"
     service_auth_secret: str = "service-auth-shared-secret-change-me"
 
     operation_id_prefix: str = "op_"

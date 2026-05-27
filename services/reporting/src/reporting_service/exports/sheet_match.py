@@ -228,14 +228,49 @@ def match_rows(
     return out
 
 
-def llm_resolve_columns(
-    unresolved: list[dict[str, Any]], header_cells: list[dict[str, Any]]
+async def llm_resolve_columns(
+    unresolved: list[dict[str, Any]],
+    header_cells: list[dict[str, Any]],
+    tenant_id: str,
 ) -> dict[str, int]:
-    """Hook for the admin-configured lightweight LLM (GS5): given the
-    homeworks the number heuristic couldn't place and the sheet header,
-    return ``{homework_id: column_index}`` for any it can resolve.
+    """Ask ai-analysis (the admin-configured lightweight LLM) to place the
+    homeworks the number heuristic couldn't, returning ``{homework_id:
+    column_index}`` for any it resolves confidently.
 
-    No-op until GS5 wires the model in — the heuristic + manual override
-    fully cover the common case, so an empty result just leaves those
-    homeworks unmatched for the teacher to fix."""
-    return {}
+    Best-effort: a missing provider / key / network error / non-JSON
+    answer all yield ``{}`` so the heuristic + the teacher's manual
+    override remain the source of truth. Never raises."""
+    if not unresolved or not header_cells or not tenant_id:
+        return {}
+    settings = get_settings()
+    payload = {
+        "tenant_id": tenant_id,
+        "homeworks": [
+            {"id": u["homework_id"], "title": u.get("title")} for u in unresolved
+        ],
+        "headers": [
+            {"index": c["index"], "text": c.get("text")} for c in header_cells
+        ],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as client:
+            r = await client.post(
+                f"{settings.ai_analysis_base_url}/api/v1/internal/match-columns",
+                json=payload,
+                headers={"X-Service-Secret": settings.service_auth_secret},
+            )
+        if r.status_code >= 400:
+            return {}
+        raw = (r.json() or {}).get("mapping") or {}
+    except (httpx.HTTPError, ValueError):
+        return {}
+    valid = {int(c["index"]) for c in header_cells if c.get("index") is not None}
+    out: dict[str, int] = {}
+    for k, v in raw.items() if isinstance(raw, dict) else []:
+        try:
+            col = int(v)
+        except (TypeError, ValueError):
+            continue
+        if col in valid:
+            out[str(k)] = col
+    return out
