@@ -20,6 +20,7 @@ import {
   FileText,
   Table2,
   FileSpreadsheet,
+  ClipboardCheck,
   Plug,
   Sparkles,
   Settings2,
@@ -60,9 +61,12 @@ interface NavSection {
 // Larger glyphs to match the Kaggle-style enlarged nav rows.
 const ic = (Icon: typeof LayoutGrid) => <Icon className="h-[22px] w-[22px]" />;
 
-function deriveRole(role: GlobalRole | undefined): 'student' | 'teacher' | 'admin' {
+function deriveRole(
+  role: GlobalRole | undefined,
+): 'student' | 'teacher' | 'assistant' | 'admin' {
   if (role === 'student') return 'student';
   if (role === 'admin') return 'admin';
+  if (role === 'assistant') return 'assistant';
   return 'teacher';
 }
 
@@ -72,7 +76,7 @@ function deriveRole(role: GlobalRole | undefined): 'student' | 'teacher' | 'admi
  * on the section root.
  */
 function buildSections(
-  role: 'student' | 'teacher' | 'admin',
+  role: 'student' | 'teacher' | 'assistant' | 'admin',
   isSuperAdmin: boolean,
   t: (k: string) => string,
 ): NavSection[] {
@@ -115,7 +119,25 @@ function buildSections(
     }];
   }
 
-  // Teacher / assistant sidebar — only routes they actually have access
+  if (role === 'assistant') {
+    // Assistant cabinet: the grading queue is home; plus their courses,
+    // the all-submissions feed (scoped to their courses) and export —
+    // the teacher workspace minus the owner-only tools (integrations,
+    // course management).
+    return [
+      {
+        label: t('nav.workspace'),
+        items: [
+          { id: 'grading', screenId: 'grading', label: 'Кабинет', icon: ic(ClipboardCheck), to: '/grading' },
+          { id: 'courses', screenId: 'courses', label: t('nav.courses'), icon: ic(LayoutGrid), to: '/courses' },
+          { id: 'submissions', screenId: 'submissions', label: 'Все посылки', icon: ic(Table2), to: '/me/submissions' },
+          { id: 'reports', screenId: 'reports', label: t('nav.reports'), icon: ic(FileSpreadsheet), to: '/reports' },
+        ],
+      },
+    ];
+  }
+
+  // Teacher sidebar — only routes they actually have access
   // to. `/activity` and `/llm` are admin/super_admin-only (RoleGuard
   // silently redirects), so they must NOT appear here — showing a nav
   // item that "doesn't go where it says" is a UX trap. "Мои задания"
