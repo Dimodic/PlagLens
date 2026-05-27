@@ -135,9 +135,10 @@ async def my_submissions(
         g = getattr(src, "grade", None)
         model.is_graded = g is not None and g.score is not None
     # Denormalise course / homework / assignment titles for the window
-    # so the cross-course triage list labels every row even when no
-    # course is selected (one batch query, not per-row N+1).
-    if user.global_role in _STAFF_ROLES and out:
+    # so the list labels every row even when no course is selected (one
+    # batch query, not per-row N+1). Applies to students too — it's
+    # their own submissions' assignment titles, nothing sensitive.
+    if out:
         await _enrich_titles(session, out)
     return Page[SubmissionOut](data=out, pagination=info)
 

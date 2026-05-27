@@ -307,6 +307,9 @@ class SubmissionRepository:
     ) -> list[Submission]:
         stmt = (
             select(Submission)
+            # Eager-load grade so the API can compute ``is_graded``
+            # without an async lazy-load (mirrors the staff inbox).
+            .options(selectinload(Submission.grade))
             .where(Submission.author_id == author_id)
             .where(Submission.tenant_id == tenant_id)
             .where(Submission.deleted_at.is_(None))

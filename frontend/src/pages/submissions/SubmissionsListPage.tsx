@@ -457,6 +457,26 @@ export default function SubmissionsListPage() {
   const all = useMemo(() => data?.data ?? [], [data]);
   const filtered = all;
 
+  // Grid columns for the row: avatar | student | task | [ДЗ] | [курс] |
+  // trailing | chevron. Each is fixed-width so the columns line up
+  // vertically and the course name stops jumping left/right. The ДЗ
+  // and course columns drop out when that dimension is already pinned
+  // by a filter (no point repeating «КНАД…» on every row when you've
+  // selected it above).
+  const showCourseCol = course === 'all';
+  const showHwCol = !homework;
+  const rowGridCols = [
+    '1.75rem', // avatar
+    'minmax(110px, 1.4fr)', // student
+    'minmax(150px, 1.9fr)', // task
+    showHwCol ? 'minmax(110px, 1.2fr)' : null, // ДЗ
+    showCourseCol ? 'minmax(110px, 1fr)' : null, // курс
+    'auto', // trailing (version + badges)
+    '1rem', // chevron
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   const statusItems: { id: StatusFilter; label: string }[] = [
     { id: 'all', label: 'Все' },
     { id: 'flagged', label: 'Помечено' },
@@ -683,64 +703,53 @@ export default function SubmissionsListPage() {
                   key={s.id}
                   to={`/submissions/${s.id}`}
                   data-testid={`submission-table-row-${s.id}`}
-                  className="group flex items-center gap-4 px-3 py-3 transition-colors hover:bg-muted/30"
+                  className="group grid items-center gap-x-4 px-3 py-3 text-sm transition-colors hover:bg-muted/30"
+                  style={{ gridTemplateColumns: rowGridCols }}
                 >
+                  {/* col: avatar */}
                   <MiniAvatar name={studentName} />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-foreground">
-                      {studentName}
-                    </div>
-                    <div className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {/* Задача · ДЗ · Курс · v — every row is now
-                          self-describing even before a filter is set
-                          (titles come denormalised from the backend). */}
-                      {asgTitle && (
-                        <span className="text-foreground/70">{asgTitle}</span>
-                      )}
-                      {hwTitle && (
-                        <>
-                          {asgTitle && ' · '}
-                          {hwTitle}
-                        </>
-                      )}
-                      {cLabel && (
-                        <>
-                          {(asgTitle || hwTitle) && ' · '}
-                          {cLabel}
-                        </>
-                      )}
-                      {(asgTitle || hwTitle || cLabel) && ' · '}
-                      <span className="font-medium">v{s.version}</span>
-                      {s.is_graded && (
-                        <>
-                          {' · '}
-                          <span className="text-emerald-600 dark:text-emerald-400">
-                            проверено
-                          </span>
-                        </>
-                      )}
-                      {flagged && (
-                        <>
-                          {' · '}
-                          <span className="text-sev-high">помечено</span>
-                        </>
-                      )}
-                      {s.is_late && (
-                        <>
-                          {' · '}
-                          <span className="text-sev-mid">
-                            опоздание{s.late_kind === 'hard' ? ' (hard)' : ''}
-                          </span>
-                        </>
-                      )}
-                    </div>
+                  {/* col: student */}
+                  <div className="min-w-0 truncate font-medium text-foreground">
+                    {studentName}
                   </div>
-                  {isStaff && s.assigned_grader_name && (
-                    <span className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground sm:inline-flex">
-                      <Users className="h-3 w-3" />
-                      {s.assigned_grader_name}
-                    </span>
+                  {/* col: task */}
+                  <div className="min-w-0 truncate text-xs text-muted-foreground">
+                    {asgTitle ?? '—'}
+                  </div>
+                  {/* col: ДЗ (hidden when a homework is already picked) */}
+                  {showHwCol && (
+                    <div className="min-w-0 truncate text-xs text-muted-foreground">
+                      {hwTitle ?? '—'}
+                    </div>
                   )}
+                  {/* col: course (hidden when a course is already picked) */}
+                  {showCourseCol && (
+                    <div className="min-w-0 truncate text-xs text-muted-foreground">
+                      {cLabel ?? '—'}
+                    </div>
+                  )}
+                  {/* col: trailing — version + status badges + grader */}
+                  <div className="flex items-center justify-end gap-2 whitespace-nowrap text-xs text-muted-foreground">
+                    <span className="font-medium">v{s.version}</span>
+                    {s.is_graded && (
+                      <span className="text-emerald-600 dark:text-emerald-400">
+                        проверено
+                      </span>
+                    )}
+                    {flagged && <span className="text-sev-high">помечено</span>}
+                    {s.is_late && (
+                      <span className="text-sev-mid">
+                        опоздание{s.late_kind === 'hard' ? ' (hard)' : ''}
+                      </span>
+                    )}
+                    {isStaff && s.assigned_grader_name && (
+                      <span className="hidden items-center gap-1 sm:inline-flex">
+                        <Users className="h-3 w-3" />
+                        {s.assigned_grader_name}
+                      </span>
+                    )}
+                  </div>
+                  {/* col: chevron */}
                   <ChevronRight className="h-4 w-4 flex-none text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
                 </Link>
               );
