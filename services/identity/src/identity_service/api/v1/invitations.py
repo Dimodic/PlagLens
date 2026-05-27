@@ -352,6 +352,17 @@ async def redeem_invitation(
                 title="Course service rejected the join",
                 detail=str(exc),
             ) from exc
+        # An assistant course-grant also confers the platform "assistant"
+        # persona. ``assistant`` is a GLOBAL role here — it drives the
+        # grading-cabinet shell, the "/" home redirect and the staff
+        # submission inbox; a bare course-role row would leave the redeemer
+        # stuck in the student UI. Elevate only from ``student`` so we never
+        # demote a teacher/admin who happens to assist in another course.
+        # The JWT role claim is captured at login, so flag a re-login.
+        if course_role == "assistant" and target_user.global_role == "student":
+            target_user.global_role = "assistant"
+            role_applied = "assistant"
+            requires_relogin = True
     elif inv.role == "teacher":
         # Tenant-wide role bump. Only allowed up to teacher; never to admin
         # (those go through the admin role-assign UI, not codes).
