@@ -422,7 +422,7 @@ export default function CourseDetailPage() {
                 setEdit((v) => ({ ...v, name: e.currentTarget.value }))
               }
               placeholder="Название курса"
-              className={`w-full rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight outline-none focus:border-primary focus:border-solid ${course.semester ? 'mt-2' : ''}`}
+              className={`min-w-[6rem] max-w-full rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight outline-none [field-sizing:content] focus:border-solid focus:border-primary ${course.semester ? 'mt-2' : ''}`}
             />
           ) : (
             <h1
@@ -564,13 +564,13 @@ export default function CourseDetailPage() {
         // the prose it replaces.
         <textarea
           data-testid="course-edit-description"
-          rows={3}
+          rows={2}
           value={edit.description}
           onChange={(e) =>
             setEdit((v) => ({ ...v, description: e.currentTarget.value }))
           }
           placeholder="Описание курса…"
-          className="w-full resize-none rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-muted-foreground outline-none placeholder:text-muted-foreground/50 focus:border-solid focus:border-primary"
+          className="w-full max-w-2xl resize-none rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-muted-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground/50 focus:border-solid focus:border-primary"
         />
       ) : (
         course.description && (
