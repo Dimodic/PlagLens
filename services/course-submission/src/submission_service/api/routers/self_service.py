@@ -89,6 +89,30 @@ async def my_submissions(
             latest_per_student=latest_per_student,
             limit=10_000,
         )
+        # Assistants are course-scoped staff (unlike teachers/admins who
+        # see the whole tenant): restrict the inbox to the courses they
+        # actually belong to, so they never see other courses' work.
+        if user.global_role == "assistant":
+            from sqlalchemy import select as _select
+
+            from course_service.models import CourseMember, CourseOwner
+
+            member_ids = (
+                await session.execute(
+                    _select(CourseMember.course_id).where(
+                        CourseMember.user_id == user.user_id
+                    )
+                )
+            ).scalars().all()
+            owner_ids = (
+                await session.execute(
+                    _select(CourseOwner.course_id).where(
+                        CourseOwner.user_id == user.user_id
+                    )
+                )
+            ).scalars().all()
+            allowed = {str(c) for c in (*member_ids, *owner_ids)}
+            all_items = [s for s in all_items if s.course_id in allowed]
     else:
         all_items = await repo.list_for_user(
             author_id=user.user_id,
