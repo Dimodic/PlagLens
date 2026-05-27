@@ -57,6 +57,14 @@ export interface SubmissionBrief {
    *  list rows can render "→ ФИО" without resolving the id. */
   assigned_grader_id?: string | null;
   assigned_grader_name?: string | null;
+  /** Denormalised titles from the staff-inbox endpoint so a row can
+   *  show "Задача · ДЗ · Курс" even in the cross-course view (no
+   *  per-course assignment fetch needed). */
+  assignment_title?: string | null;
+  homework_title?: string | null;
+  course_name?: string | null;
+  /** True when a grade row with a score exists (staff inbox). */
+  is_graded?: boolean;
 }
 
 export interface Submission extends SubmissionBrief {

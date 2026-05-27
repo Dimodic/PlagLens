@@ -129,10 +129,73 @@ async def my_submissions(
         offset=offset,
         total=total,
     )
-    return Page[SubmissionOut](
-        data=[SubmissionOut.model_validate(s) for s in window],
-        pagination=info,
-    )
+    out = [SubmissionOut.model_validate(s) for s in window]
+    # Mark graded rows from the eager-loaded grade relationship.
+    for model, src in zip(out, window):
+        g = getattr(src, "grade", None)
+        model.is_graded = g is not None and g.score is not None
+    # Denormalise course / homework / assignment titles for the window
+    # so the cross-course triage list labels every row even when no
+    # course is selected (one batch query, not per-row N+1).
+    if user.global_role in _STAFF_ROLES and out:
+        await _enrich_titles(session, out)
+    return Page[SubmissionOut](data=out, pagination=info)
+
+
+async def _enrich_titles(session: Any, rows: list[SubmissionOut]) -> None:
+    """Fill ``assignment_title`` / ``homework_title`` / ``course_name`` on
+    a page of inbox rows via three small ``IN`` lookups against the
+    course schema (same DB — the service is the merged course+submission
+    process)."""
+    from sqlalchemy import select as _select
+
+    from course_service.models import Assignment, Course, Homework
+
+    asg_ids: set[int] = set()
+    for r in rows:
+        try:
+            asg_ids.add(int(r.assignment_id))
+        except (TypeError, ValueError):
+            continue
+    if not asg_ids:
+        return
+    asg_rows = (
+        await session.execute(
+            _select(Assignment).where(Assignment.id.in_(asg_ids))
+        )
+    ).scalars().all()
+    asg_map: dict[str, Assignment] = {str(a.id): a for a in asg_rows}
+
+    hw_ids = {a.homework_id for a in asg_rows if a.homework_id is not None}
+    hw_map: dict[str, str] = {}
+    if hw_ids:
+        hw_rows = (
+            await session.execute(
+                _select(Homework).where(Homework.id.in_(hw_ids))
+            )
+        ).scalars().all()
+        hw_map = {str(h.id): h.title for h in hw_rows}
+
+    course_ids = {str(a.course_id) for a in asg_rows}
+    course_map: dict[str, str] = {}
+    if course_ids:
+        course_rows = (
+            await session.execute(
+                _select(Course).where(
+                    Course.id.in_([int(c) for c in course_ids if c.isdigit()])
+                )
+            )
+        ).scalars().all()
+        course_map = {str(c.id): c.name for c in course_rows}
+
+    for r in rows:
+        a = asg_map.get(r.assignment_id)
+        if a is None:
+            continue
+        r.assignment_title = a.title
+        if a.homework_id is not None:
+            r.homework_title = hw_map.get(str(a.homework_id))
+        r.course_name = course_map.get(str(a.course_id))
 
 
 @router.get("/users/me/submissions/{submission_id}", response_model=SubmissionOut)

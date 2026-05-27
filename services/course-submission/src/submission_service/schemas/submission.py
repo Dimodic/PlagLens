@@ -53,6 +53,16 @@ class SubmissionOut(BaseModel):
     assigned_grader_id: str | None = None
     assigned_grader_name: str | None = None
     deleted_at: datetime | None = None
+    # Denormalised course/homework/assignment titles so the cross-course
+    # triage list can label every row ("Задача · ДЗ · Курс") without the
+    # client fetching assignments per-course. Populated by the inbox
+    # endpoint via a batch lookup; null on surfaces that don't enrich.
+    assignment_title: str | None = None
+    homework_title: str | None = None
+    course_name: str | None = None
+    # True when a grade row with a score exists — lets the list show
+    # "проверено" without a second round-trip.
+    is_graded: bool = False
 
 
 class SubmissionDetail(SubmissionOut):

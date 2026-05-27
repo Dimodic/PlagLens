@@ -667,14 +667,17 @@ export default function SubmissionsListPage() {
                 ? nameById.get(s.author_id)
                 : undefined;
               const studentName = fromMap ?? displayAuthor(s);
-              const cLabel = s.course_id
-                ? courseNameById.get(s.course_id) ?? null
-                : null;
-              // Task title (and its ДЗ) for the meta line — resolved
-              // from the course's assignments. Only populated once a
-              // course is picked (that's when we fetch assignments).
-              const asgTitle = asgTitleById.get(String(s.assignment_id));
-              const hwTitle = hwTitleByAsgId.get(String(s.assignment_id));
+              // Titles come denormalised from the backend now (works in
+              // the cross-course view too); fall back to the per-course
+              // client maps / course list only if the row predates the
+              // enrichment.
+              const asgTitle =
+                s.assignment_title ?? asgTitleById.get(String(s.assignment_id));
+              const hwTitle =
+                s.homework_title ?? hwTitleByAsgId.get(String(s.assignment_id));
+              const cLabel =
+                s.course_name ??
+                (s.course_id ? courseNameById.get(s.course_id) ?? null : null);
               return (
                 <Link
                   key={s.id}
@@ -688,17 +691,34 @@ export default function SubmissionsListPage() {
                       {studentName}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground truncate">
+                      {/* Задача · ДЗ · Курс · v — every row is now
+                          self-describing even before a filter is set
+                          (titles come denormalised from the backend). */}
                       {asgTitle && (
+                        <span className="text-foreground/70">{asgTitle}</span>
+                      )}
+                      {hwTitle && (
                         <>
-                          <span className="text-foreground/70">
-                            {asgTitle}
-                          </span>
-                          {hwTitle && <> · {hwTitle}</>}
-                          {' · '}
+                          {asgTitle && ' · '}
+                          {hwTitle}
                         </>
                       )}
-                      {!asgTitle && cLabel && <>{cLabel} · </>}
+                      {cLabel && (
+                        <>
+                          {(asgTitle || hwTitle) && ' · '}
+                          {cLabel}
+                        </>
+                      )}
+                      {(asgTitle || hwTitle || cLabel) && ' · '}
                       <span className="font-medium">v{s.version}</span>
+                      {s.is_graded && (
+                        <>
+                          {' · '}
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            проверено
+                          </span>
+                        </>
+                      )}
                       {flagged && (
                         <>
                           {' · '}
