@@ -44,6 +44,13 @@ def _ensure_owner_or_co_owner(p: Principal, course_id: str) -> None:
         return
     if p.course_role(course_id) in ("owner", "co_owner"):
         return
+    # Identity doesn't yet enrich JWTs with per-course roles, so a teacher who
+    # owns this course arrives with an empty course_roles map and would be
+    # wrongly rejected. Fall back to the global role (mirrors course-submission's
+    # _global_can_manage). Only applies when no course_roles were supplied — once
+    # JWTs carry them, the per-course check above is authoritative.
+    if not p.course_roles and p.global_role == "teacher":
+        return
     raise ProblemException(403, "FORBIDDEN", "Forbidden", "owner / co_owner required")
 
 
@@ -388,7 +395,14 @@ async def get_link(
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
 ) -> GoogleSheetsLinkOut:
-    if p.course_role(course_id) not in ("owner", "co_owner", "assistant") and not p.is_admin and not p.is_super_admin:
+    _can_read = (
+        p.is_admin
+        or p.is_super_admin
+        or p.course_role(course_id) in ("owner", "co_owner", "assistant")
+        # No course_roles in the JWT yet — trust the global staff role.
+        or (not p.course_roles and p.global_role in ("teacher", "assistant"))
+    )
+    if not _can_read:
         raise ProblemException(403, "FORBIDDEN", "Forbidden", "owner / co_owner / assistant required")
     repo = GoogleSheetsLinkRepo(session)
     link = await repo.get_by_course(course_id)
