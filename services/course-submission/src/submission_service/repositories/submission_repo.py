@@ -380,18 +380,35 @@ class SubmissionRepository:
         rows = list((await self.session.execute(stmt)).scalars().all())
         if not latest_per_student:
             return rows
-        # Submitted-at-desc means the first occurrence of each
-        # (assignment, author) pair is already the latest version. Walk
-        # the list once and keep just those.
-        seen: set[tuple[str, str | None]] = set()
-        out: list[Submission] = []
+        # Collapse to one row per (assignment, author) — and pick the SAME
+        # "current submission" that distribute / grading use: OK-verdict
+        # attempt first, then newest by submitted_at. Picking purely by
+        # submitted_at here (while distribute ranks ok_rank → submitted_at
+        # in list_latest_per_student*) meant a student who retried *after*
+        # getting OK showed their later non-OK row in the queue, which
+        # distribute never assigned — so the row looked unassigned
+        # ("распределил, но не все"). Choose the canonical representative,
+        # then sort survivors newest-first for display (unchanged order,
+        # same group count → pagination total is unaffected).
+        def _ok_rank(r: Submission) -> int:
+            return (
+                1
+                if (r.external_verdict or "").lower() in self._OK_VERDICTS
+                else 0
+            )
+
+        best: dict[tuple[str, str | None], Submission] = {}
         for r in rows:
             key = (r.assignment_id, r.author_id)
-            if key in seen:
-                continue
-            seen.add(key)
-            out.append(r)
-        return out
+            cur = best.get(key)
+            if cur is None or (_ok_rank(r), r.submitted_at) > (
+                _ok_rank(cur),
+                cur.submitted_at,
+            ):
+                best[key] = r
+        return sorted(
+            best.values(), key=lambda s: s.submitted_at, reverse=True
+        )
 
     # ---------- writes ----------
 
