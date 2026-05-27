@@ -893,16 +893,28 @@ function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="iov-redirect-uri">redirect_uri</Label>
-            <Input
-              id="iov-redirect-uri"
-              value={redirectUri}
-              onChange={(e) => setRedirectUri(e.currentTarget.value)}
-              autoComplete="off"
-              data-testid="integration-oauth-edit-redirect-uri"
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="iov-redirect-uri"
+                value={redirectUri}
+                readOnly
+                className="font-mono text-xs"
+                data-testid="integration-oauth-edit-redirect-uri"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => void navigator.clipboard?.writeText(redirectUri)}
+                title="Скопировать"
+                aria-label="Скопировать redirect URI"
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground">
-              Скопируйте этот же URL в настройки приложения у провайдера —
-              иначе он отклонит OAuth-запрос.
+              Это наш фиксированный адрес — только скопируйте его в настройки
+              приложения у провайдера. Менять не нужно.
             </p>
           </div>
           <div className="space-y-1.5">
