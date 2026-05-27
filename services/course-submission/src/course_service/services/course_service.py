@@ -190,12 +190,14 @@ class CourseService:
         base = await slugify(clone_name, fallback="course")
 
         async def _taken(s: str) -> bool:
-            # Include soft-deleted rows: the unique (tenant_id, slug)
-            # constraint reserves a slug even after a soft delete, so the
-            # collision check must see them or the INSERT 500s on re-dup.
+            # Check against the CLONE's tenant (= source.tenant_id), not the
+            # acting user's — an admin duplicating a course lives in a
+            # different tenant. Include soft-deleted rows: the unique
+            # (tenant_id, slug) constraint reserves a slug even after a soft
+            # delete, so the check must see them or the INSERT 500s on re-dup.
             res = await self.session.execute(
                 select(Course.id)
-                .where(Course.tenant_id == user.tenant_id, Course.slug == s)
+                .where(Course.tenant_id == source.tenant_id, Course.slug == s)
                 .limit(1)
             )
             return res.scalar_one_or_none() is not None
