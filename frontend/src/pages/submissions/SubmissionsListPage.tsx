@@ -457,12 +457,17 @@ export default function SubmissionsListPage() {
   const all = useMemo(() => data?.data ?? [], [data]);
   const filtered = all;
 
-  // Grid columns for the row: avatar | student | task | [ДЗ] | [курс] |
-  // trailing | chevron. Each is fixed-width so the columns line up
-  // vertically and the course name stops jumping left/right. The ДЗ
-  // and course columns drop out when that dimension is already pinned
-  // by a filter (no point repeating «КНАД…» on every row when you've
-  // selected it above).
+  // One shared grid for the whole list — NOT a grid per row. The column
+  // template lives on the parent container and every row is a
+  // `grid-cols-subgrid` span, so the tracks resolve ONCE across all rows
+  // and line up in fixed invisible columns. (Per-row grids drifted: the
+  // `auto` trailing track sized to each row's own badges, which stole a
+  // different slice from the `fr` columns every row — so the task / ДЗ /
+  // course cells jumped left/right between rows. The name looked stable
+  // only because it's anchored left after the fixed-width avatar.)
+  // Columns: avatar | student | task | [ДЗ] | [курс] | trailing | chevron.
+  // The ДЗ / course tracks drop out when that dimension is already pinned
+  // by a filter (no point repeating «КНАД…» on every row).
   const showCourseCol = course === 'all';
   const showHwCol = !homework;
   const rowGridCols = [
@@ -675,7 +680,10 @@ export default function SubmissionsListPage() {
               : 'Посылок нет.'}
           </div>
         ) : (
-          <div className="flex flex-col divide-y divide-border/60">
+          <div
+            className="grid divide-y divide-border/60"
+            style={{ gridTemplateColumns: rowGridCols }}
+          >
             {filtered.map((s) => {
               // Manual review flag (set in the submission-review UI).
               const flagged = !!s.flags?.manually_flagged;
@@ -703,8 +711,7 @@ export default function SubmissionsListPage() {
                   key={s.id}
                   to={`/submissions/${s.id}`}
                   data-testid={`submission-table-row-${s.id}`}
-                  className="group grid items-center gap-x-4 px-3 py-3 text-sm transition-colors hover:bg-muted/30"
-                  style={{ gridTemplateColumns: rowGridCols }}
+                  className="group col-span-full grid grid-cols-subgrid items-center gap-x-4 px-3 py-3 text-sm transition-colors hover:bg-muted/30"
                 >
                   {/* col: avatar */}
                   <MiniAvatar name={studentName} />
