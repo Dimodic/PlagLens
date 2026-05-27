@@ -53,6 +53,11 @@ async def my_submissions(
     assignment_ids: list[str] | None = Query(default=None),
     language: str | None = None,
     assigned_grader_id: str | None = None,
+    review_status: str | None = Query(
+        default=None,
+        description="Staff triage bucket: 'flagged' (manually flagged) | "
+        "'pending' (no grade yet) | 'graded' (score set).",
+    ),
     latest_per_student: bool = Query(default=False),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=200),
@@ -93,6 +98,28 @@ async def my_submissions(
             language=language,
             limit=10_000,
         )
+    # Review-status bucket (staff triage). Applied here (not in SQL) so
+    # the count + pagination reflect the filter — the JSON ``flags`` and
+    # the one-to-one ``grade`` relationship are awkward to filter in the
+    # shared query, and the working set is already bounded. Definitions:
+    #   • flagged — teacher set the manual flag in the review UI
+    #   • graded  — a grade row exists with a score
+    #   • pending — everything else (not yet graded)
+    if review_status in ("flagged", "pending", "graded"):
+
+        def _is_graded(s: Any) -> bool:
+            g = getattr(s, "grade", None)
+            return g is not None and g.score is not None
+
+        if review_status == "flagged":
+            all_items = [
+                s for s in all_items if bool((s.flags or {}).get("manually_flagged"))
+            ]
+        elif review_status == "graded":
+            all_items = [s for s in all_items if _is_graded(s)]
+        else:  # pending
+            all_items = [s for s in all_items if not _is_graded(s)]
+
     total = len(all_items)
     window = all_items[offset : offset + limit]
     info = PageInfo(

@@ -190,6 +190,10 @@ export interface SubmissionListFilters extends ListParams {
    *  ДЗ filter fans a homework out to its assignment ids). Serialised
    *  as repeated ``assignment_ids=`` query params. */
   assignment_ids?: string[];
+  /** Staff inbox only — triage bucket: 'flagged' (manual review flag) |
+   *  'pending' (no grade yet) | 'graded' (score set). Server-side so
+   *  the total + pagination reflect the filter. */
+  review_status?: 'flagged' | 'pending' | 'graded';
   /** Staff inbox only — collapse v1/v2/v3… per (assignment, author)
    *  into a single most-recent row. Without it, the inbox total counts
    *  every version separately and looks 10× larger than reality. */
@@ -227,6 +231,7 @@ function appendFilters(
   if (f.max_score !== undefined) base.max_score = f.max_score;
   if (f.version !== undefined) base.version = f.version;
   if (f.assigned_grader_id) base.assigned_grader_id = f.assigned_grader_id;
+  if (f.review_status) base.review_status = f.review_status;
   if (f.latest_per_student) base.latest_per_student = 'true';
   return base;
 }

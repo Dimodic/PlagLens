@@ -60,18 +60,11 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/auth/useAuth';
 import { cn } from '@/components/ui/utils';
 import { displayAuthor } from '@/api/endpoints/submissions';
-import type {
-  SubmissionBrief,
-  SubmissionStatus,
-} from '@/api/endpoints/submissions';
+import type { SubmissionStatus } from '@/api/endpoints/submissions';
 
+// Tab ids kept stable for the FilterGroup; mapped to the backend's
+// review_status bucket at the fetch site. 'running' = «не проверено».
 type StatusFilter = 'all' | 'flagged' | 'running' | 'checked';
-
-function statusKey(s: SubmissionBrief): StatusFilter {
-  if (s.flags?.suspicious || s.flags?.manually_flagged) return 'flagged';
-  if (s.status === 'processing' || s.status === 'received') return 'running';
-  return 'checked';
-}
 
 function getInitials(name: string): string {
   const parts = (name ?? '?').trim().split(/\s+/).filter(Boolean);
@@ -429,6 +422,18 @@ export default function SubmissionsListPage() {
     }
   };
 
+  // Status tab → server-side review_status bucket. Doing this on the
+  // backend (not client-side over one page) is what makes the count +
+  // pagination honest — «помечено: 0» now means 0 pages, not 2.
+  const reviewStatus: 'flagged' | 'pending' | 'graded' | undefined =
+    filter === 'flagged'
+      ? 'flagged'
+      : filter === 'running'
+        ? 'pending'
+        : filter === 'checked'
+          ? 'graded'
+          : undefined;
+
   const { data, isPending } = useMySubmissions({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
@@ -439,25 +444,23 @@ export default function SubmissionsListPage() {
     ...(isStaff && assignedFilter === 'mine' && user?.id
       ? { assigned_grader_id: user.id }
       : {}),
+    ...(isStaff && reviewStatus ? { review_status: reviewStatus } : {}),
     // Staff triage queue counts distinct (assignment, student) pairs,
     // not raw version rows — v1/v2/v3 of the same submission collapse
     // into one row so the total doesn't lie by an order of magnitude.
     ...(isStaff ? { latest_per_student: true } : {}),
   });
 
+  // The status filter is server-side now, so the page list IS the
+  // filtered list — no extra client-side narrowing (which previously
+  // only filtered the visible 50 rows and left a phantom page 2).
   const all = useMemo(() => data?.data ?? [], [data]);
-
-  const filtered = useMemo(() => {
-    return all.filter((s) => {
-      if (filter !== 'all' && statusKey(s) !== filter) return false;
-      return true;
-    });
-  }, [all, filter]);
+  const filtered = all;
 
   const statusItems: { id: StatusFilter; label: string }[] = [
     { id: 'all', label: 'Все' },
     { id: 'flagged', label: 'Помечено' },
-    { id: 'running', label: 'Обработка' },
+    { id: 'running', label: 'Не проверено' },
     { id: 'checked', label: 'Проверено' },
   ];
 
@@ -654,8 +657,8 @@ export default function SubmissionsListPage() {
         ) : (
           <div className="flex flex-col divide-y divide-border/60">
             {filtered.map((s) => {
-              const flagged = statusKey(s) === 'flagged';
-              const running = statusKey(s) === 'running';
+              // Manual review flag (set in the submission-review UI).
+              const flagged = !!s.flags?.manually_flagged;
               // Prefer ФИО from the identity service over the
               // submission row's `author_label` / `author_id` (which is
               // often an external login like "hse-compsocsci-2543" for
@@ -695,18 +698,11 @@ export default function SubmissionsListPage() {
                         </>
                       )}
                       {!asgTitle && cLabel && <>{cLabel} · </>}
-                      <span className="font-medium">v{s.version}</span> ·{' '}
-                      {s.language}
+                      <span className="font-medium">v{s.version}</span>
                       {flagged && (
                         <>
                           {' · '}
                           <span className="text-sev-high">помечено</span>
-                        </>
-                      )}
-                      {running && (
-                        <>
-                          {' · '}
-                          <span className="text-primary">обработка</span>
                         </>
                       )}
                       {s.is_late && (

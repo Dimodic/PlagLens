@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from submission_service.models.submission import (
     Submission,
@@ -349,6 +350,10 @@ class SubmissionRepository:
         """
         stmt = (
             select(Submission)
+            # Eager-load the grade so the API layer can bucket rows by
+            # "проверено / не проверено" (grade present + score set)
+            # without an async lazy-load per row.
+            .options(selectinload(Submission.grade))
             .where(Submission.tenant_id == tenant_id)
             .where(Submission.deleted_at.is_(None))
             .order_by(Submission.submitted_at.desc())
