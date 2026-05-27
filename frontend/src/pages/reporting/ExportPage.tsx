@@ -9,7 +9,6 @@
  * columns the heuristic isn't sure about). CSV lives in the «…» menu.
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   AlertTriangle,
   Download,
@@ -36,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
   Select,
@@ -50,13 +50,17 @@ import { HomeworkMultiSelect } from '@/components/reporting/HomeworkMultiSelect'
 import {
   useCancelExport,
   useCreateExport,
+  useCreateSheetsLink,
   useDeleteExport,
+  useDeleteSheetsLink,
   useDownloadExport,
   useExports,
   useGoogleSheetsLink,
   useGradesMatch,
   useGradesWrite,
   useRetryExport,
+  useSetSheetsLink,
+  useValidateSheetsLink,
 } from '@/hooks/api/useReporting';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
@@ -93,6 +97,13 @@ function colLetter(i: number): string {
 
 const SKIP = '__skip__';
 
+/** Accept a full ``…/spreadsheets/d/<id>/edit`` URL or a bare id. */
+function parseSpreadsheetId(raw: string): string {
+  const t = raw.trim();
+  const m = t.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : t;
+}
+
 export default function ExportPage() {
   useDocumentTitle('Экспорт');
   const notify = useNotifications();
@@ -106,9 +117,7 @@ export default function ExportPage() {
   const { data: homeworks, isLoading: hwLoading } = useHomeworksForCourse(
     courseId || undefined,
   );
-  const { data: link, isLoading: linkLoading } = useGoogleSheetsLink(
-    courseId || undefined,
-  );
+  const { data: link } = useGoogleSheetsLink(courseId || undefined);
   const create = useCreateExport();
 
   const courseItems = courses?.data ?? [];
@@ -255,41 +264,8 @@ export default function ExportPage() {
           </div>
         </div>
 
-        {/* Linked sheet status — bound once in course settings. */}
-        {courseId && !linkLoading && (
-          <div className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-sm">
-            {hasLink ? (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <FileSpreadsheet className="h-4 w-4 flex-none" />
-                <span className="truncate">
-                  Таблица курса · лист{' '}
-                  <span className="font-medium text-foreground">
-                    {link?.sheet_name || 'Оценки'}
-                  </span>
-                </span>
-                <Link
-                  to={`/courses/${courseId}/settings`}
-                  className="ml-auto flex-none text-xs text-primary hover:underline"
-                >
-                  изменить
-                </Link>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <AlertTriangle className="h-4 w-4 flex-none text-sev-mid" />
-                <span>
-                  Для этого курса не привязана Google-таблица.
-                </span>
-                <Link
-                  to={`/courses/${courseId}/settings`}
-                  className="ml-auto flex-none text-xs text-primary hover:underline"
-                >
-                  Привязать в настройках
-                </Link>
-              </div>
-            )}
-          </div>
-        )}
+        {/* Linked sheet — set/edit inline, right where it's used. */}
+        {courseId && <SheetLinkInline courseId={courseId} />}
 
         <div className="flex items-center justify-end gap-3">
           {!canWrite && courseId && (
@@ -372,6 +348,216 @@ export default function ExportPage() {
         busy={create.isPending}
       />
     </Page>
+  );
+}
+
+/* ----------------------------------------------------------------- */
+/* Inline per-course sheet binding (lives here, where it's used)      */
+/* ----------------------------------------------------------------- */
+
+function SheetLinkInline({ courseId }: { courseId: string }) {
+  const notify = useNotifications();
+  const { data: link, isLoading } = useGoogleSheetsLink(courseId);
+  const create = useCreateSheetsLink(courseId);
+  const update = useSetSheetsLink(courseId);
+  const remove = useDeleteSheetsLink(courseId);
+  const validate = useValidateSheetsLink(courseId);
+
+  const [editing, setEditing] = useState(false);
+  const [sheetInput, setSheetInput] = useState('');
+  const [tab, setTab] = useState('');
+
+  const hasLink = !!link?.spreadsheet_id;
+  useEffect(() => {
+    if (link) {
+      setSheetInput(link.spreadsheet_id ?? '');
+      setTab(link.sheet_name ?? '');
+    }
+  }, [link?.spreadsheet_id, link?.sheet_name]);
+
+  const busy = create.isPending || update.isPending || remove.isPending;
+  const showEditor = editing || !hasLink;
+
+  const onSave = async () => {
+    const sid = parseSpreadsheetId(sheetInput);
+    if (!sid) {
+      notify.error('Укажите ссылку или ID Google-таблицы');
+      return;
+    }
+    try {
+      if (hasLink) {
+        await update.mutateAsync({
+          spreadsheet_id: sid,
+          sheet_name: tab || undefined,
+        });
+      } else {
+        await create.mutateAsync({
+          spreadsheet_id: sid,
+          sheet_name: tab || 'Оценки',
+        });
+      }
+      notify.success('Таблица привязана к курсу');
+      setEditing(false);
+    } catch (e) {
+      notify.error(
+        (e as { response?: { data?: { detail?: string } } })?.response?.data
+          ?.detail || 'Не удалось сохранить',
+      );
+    }
+  };
+
+  const onValidate = async () => {
+    try {
+      const r = await validate.mutateAsync();
+      if (r.ok) notify.success('Доступ к таблице есть');
+      else notify.error(r.detail || 'Нет доступа к таблице');
+    } catch {
+      notify.error('Не удалось проверить доступ');
+    }
+  };
+
+  const onRemove = async () => {
+    if (!confirm('Отвязать таблицу от курса?')) return;
+    try {
+      await remove.mutateAsync();
+      setEditing(false);
+      setSheetInput('');
+      setTab('');
+      notify.success('Таблица отвязана');
+    } catch {
+      notify.error('Не удалось отвязать');
+    }
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <div
+      className="rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5 text-sm"
+      data-testid="export-sheet-link"
+    >
+      {!showEditor ? (
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <FileSpreadsheet className="h-4 w-4 flex-none" />
+          <span className="truncate">
+            Таблица курса · лист{' '}
+            <span className="font-medium text-foreground">
+              {link?.sheet_name || 'Оценки'}
+            </span>
+          </span>
+          <button
+            type="button"
+            className="ml-auto flex-none text-xs text-primary hover:underline"
+            onClick={() => setEditing(true)}
+            data-testid="export-sheet-edit"
+          >
+            изменить
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            {hasLink ? (
+              <FileSpreadsheet className="h-4 w-4 flex-none" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 flex-none text-sev-mid" />
+            )}
+            <span className="text-xs">
+              {hasLink
+                ? 'Изменить таблицу курса'
+                : 'Google-таблица для оценок не привязана — вставьте ссылку:'}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <div className="min-w-[240px] flex-1 space-y-1">
+              <Label htmlFor="export-sheet-id" className="text-xs">
+                Ссылка или ID таблицы
+              </Label>
+              <Input
+                id="export-sheet-id"
+                data-testid="export-sheet-id"
+                placeholder="https://docs.google.com/spreadsheets/d/…"
+                value={sheetInput}
+                onChange={(e) => setSheetInput(e.currentTarget.value)}
+              />
+            </div>
+            <div className="w-[140px] space-y-1">
+              <Label htmlFor="export-sheet-tab" className="text-xs">
+                Лист
+              </Label>
+              <Input
+                id="export-sheet-tab"
+                data-testid="export-sheet-tab"
+                placeholder="Оценки"
+                value={tab}
+                onChange={(e) => setTab(e.currentTarget.value)}
+              />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Поделитесь таблицей с сервисным аккаунтом PlagLens (на
+            редактирование).
+          </p>
+          <div className="flex items-center gap-2">
+            {hasLink && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={onRemove}
+                disabled={busy}
+                data-testid="export-sheet-remove"
+              >
+                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                Отвязать
+              </Button>
+            )}
+            {hasLink && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onValidate}
+                disabled={validate.isPending}
+                data-testid="export-sheet-validate"
+              >
+                {validate.isPending && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                )}
+                Проверить
+              </Button>
+            )}
+            <div className="flex-1" />
+            {hasLink && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setEditing(false);
+                  setSheetInput(link?.spreadsheet_id ?? '');
+                  setTab(link?.sheet_name ?? '');
+                }}
+                disabled={busy}
+              >
+                Отмена
+              </Button>
+            )}
+            <Button
+              type="button"
+              size="sm"
+              onClick={onSave}
+              disabled={!sheetInput.trim() || busy}
+              data-testid="export-sheet-save"
+            >
+              {busy && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {hasLink ? 'Сохранить' : 'Привязать'}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
