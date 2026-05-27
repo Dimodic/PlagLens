@@ -8,7 +8,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...common.events import publish_user_event
-from ...common.ids import invitation_id, user_id
+from ...common.ids import binding_id, invitation_id, user_id
 from ...common.invite_code import new_code, normalize_code
 from ...common.problem import ProblemException
 from ...common.security import hash_password, hash_token, new_opaque_token
@@ -20,12 +20,16 @@ from ...deps import (
     optional_current_user,
     require_global_role,
 )
-from ...models import Invitation, User
+from ...models import ExternalBinding, Invitation, User
+from ...repositories.external_bindings import ExternalBindingRepository
 from ...repositories.invitations import InvitationRepository
 from ...repositories.tenants import TenantRepository
 from ...repositories.users import UserRepository
 from ...schemas.invitations import (
     InvitationAccept,
+    InvitationBulkBindingItem,
+    InvitationBulkBindings,
+    InvitationBulkBindingsResult,
     InvitationCreate,
     InvitationCreated,
     InvitationOut,
@@ -160,6 +164,90 @@ async def create_invitation(
             role=inv.role,
         )
     return InvitationCreated(**_to_out(inv).model_dump(), token=plain)
+
+
+@router.post(
+    ":bulk-bindings",
+    response_model=InvitationBulkBindingsResult,
+    status_code=status.HTTP_201_CREATED,
+    summary="Bulk-mint per-participant claim codes (admin / teacher)",
+)
+async def bulk_binding_invitations(
+    payload: InvitationBulkBindings,
+    user: CurrentUser = Depends(require_global_role("admin", "teacher")),
+    session: AsyncSession = Depends(get_session),
+) -> InvitationBulkBindingsResult:
+    """Create one binding-carrying invitation per imported participant.
+
+    Each row is a normal invitation (so the existing ``:redeem`` flow applies)
+    but carries ``binding_system`` / ``binding_external_id`` — redeeming it
+    links the participant's external identity to the redeemer and backfills
+    their imported submissions. Codes never expire in practice (1-year TTL)
+    since the teacher hands them out over a term.
+
+    Idempotent on re-run: a participant that already has a live (non-revoked,
+    non-accepted) binding-invitation for the same ``(tenant, external_id)``
+    reuses that code instead of minting a duplicate.
+    """
+    repo = InvitationRepository(session)
+    bindings_repo = ExternalBindingRepository(session)
+    tenant_id_scope = user.tenant_id
+
+    # Pre-load existing live binding-invitations for this tenant so re-runs
+    # return the same code instead of spawning duplicates (one query, then a
+    # dict lookup per participant).
+    existing_rows = await repo.list_binding_invitations(
+        tenant_id=tenant_id_scope, binding_system=payload.binding_system
+    )
+    existing_by_ext: dict[str, Invitation] = {
+        r.binding_external_id: r
+        for r in existing_rows
+        if r.binding_external_id is not None
+    }
+
+    items: list[InvitationBulkBindingItem] = []
+    for participant in payload.participants:
+        prior = existing_by_ext.get(participant.external_id)
+        if prior is not None and prior.code:
+            items.append(
+                InvitationBulkBindingItem(
+                    external_id=participant.external_id,
+                    display_name=participant.display_name,
+                    code=prior.code,
+                )
+            )
+            continue
+        # Already linked to a real account? Skip minting — nothing to claim.
+        already_bound = await bindings_repo.get_by_external(
+            payload.binding_system, participant.external_id
+        )
+        if already_bound is not None:
+            continue
+        plain = new_opaque_token(prefix="inv_")
+        inv = Invitation(
+            id=invitation_id(),
+            tenant_id=tenant_id_scope,
+            # email is NOT NULL — synthesise a placeholder. No email is sent
+            # for binding codes (handed out in person / via the roster UI).
+            email="",
+            role=payload.role,
+            course_id=payload.course_id,
+            token_hash=hash_token(plain),
+            code=new_code(),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=365),
+            created_by=user.id,
+            binding_system=payload.binding_system,
+            binding_external_id=participant.external_id,
+        )
+        await _persist_with_unique_code(session, repo, inv)
+        items.append(
+            InvitationBulkBindingItem(
+                external_id=participant.external_id,
+                display_name=participant.display_name,
+                code=inv.code or "",
+            )
+        )
+    return InvitationBulkBindingsResult(items=items)
 
 
 @router.get("", response_model=list[InvitationOut], summary="My invitations")
@@ -332,6 +420,7 @@ async def redeem_invitation(
     course_id: str | None = inv.course_id
     course_role: str | None = None
     requires_relogin = False
+    claimed_count: int | None = None
 
     if inv.course_id:
         # Course membership grant. course_id-bearing invitations always carry
@@ -373,13 +462,59 @@ async def redeem_invitation(
             target_user.global_role = "teacher"
             role_applied = "teacher"
             requires_relogin = True
-    else:
-        # role=assistant/student without course_id — not actionable on its own.
+    elif not (inv.binding_system and inv.binding_external_id):
+        # role=assistant/student without course_id AND without a binding —
+        # not actionable on its own. A binding-only code (external-identity
+        # claim) is handled below, so don't reject those here.
         raise ProblemException(
             status=409,
             code="CONFLICT",
             title="This code grants a course role but has no course attached",
         )
+
+    # External-identity binding (e.g. Yandex.Contest participant claim).
+    # Runs after any course/role grant so the redeemer is a fully-fledged
+    # member first, then we attach the binding and backfill their imports.
+    if inv.binding_system and inv.binding_external_id:
+        bindings = ExternalBindingRepository(session)
+        existing = await bindings.get_by_external(
+            inv.binding_system, inv.binding_external_id
+        )
+        if existing is not None and existing.user_id != target_user.id:
+            raise ProblemException(
+                status=409,
+                code="CONFLICT",
+                title="This participant is already linked to another account",
+            )
+        if existing is None:
+            await bindings.add(
+                ExternalBinding(
+                    id=binding_id(),
+                    user_id=target_user.id,
+                    system=inv.binding_system,
+                    external_id=inv.binding_external_id,
+                    display_name=None,
+                )
+            )
+        # else: already bound to THIS user — idempotent, skip re-insert.
+
+        # Backfill the participant's imported submissions to the user. A
+        # transport / upstream failure surfaces as 502 so the redeemer can
+        # retry (the binding row above is committed with the request, so a
+        # retry takes the idempotent path).
+        try:
+            claimed_count = await CourseMembershipClient().claim_external_submissions(
+                user_id=target_user.id,
+                tenant_id=target_user.tenant_id,
+                external_author_id=inv.binding_external_id,
+            )
+        except CourseClientError as exc:
+            raise ProblemException(
+                status=502,
+                code="UPSTREAM_UNAVAILABLE",
+                title="Course service rejected the submission claim",
+                detail=str(exc),
+            ) from exc
 
     await repo.mark_accepted(inv.id, target_user.id)
 
@@ -392,6 +527,9 @@ async def redeem_invitation(
             "role_applied": role_applied,
             "course_id": course_id,
             "course_role": course_role,
+            "binding_system": inv.binding_system,
+            "binding_external_id": inv.binding_external_id,
+            "claimed_submissions": claimed_count,
         },
         tenant_id=target_user.tenant_id,
         subject=f"users/{target_user.id}",
@@ -403,4 +541,5 @@ async def redeem_invitation(
         course_id=course_id,
         course_role=course_role,
         requires_relogin=requires_relogin,
+        claimed_submissions=claimed_count,
     )

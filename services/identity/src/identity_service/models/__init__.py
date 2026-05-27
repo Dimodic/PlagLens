@@ -302,6 +302,13 @@ class Invitation(Base):
     # within a tenant. Nullable so legacy invitations (pre-migration 0004)
     # don't carry one — those still work via the long token URL.
     code: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    # Optional external-binding payload. When set, redeeming the code also
+    # creates an ``ExternalBinding`` for the redeemer and backfills the
+    # matching imported submissions (e.g. Yandex.Contest participant claim).
+    # ``binding_system`` mirrors ExternalBinding.system (e.g. "yandex_contest")
+    # and ``binding_external_id`` the participant key (e.g. "yc:126352134").
+    binding_system: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    binding_external_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     accepted_by: Mapped[Optional[str]] = mapped_column(String(40), nullable=True)
     accepted_at: Mapped[Optional[datetime]] = mapped_column(

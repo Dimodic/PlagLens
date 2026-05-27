@@ -112,6 +112,29 @@ class DistributeResult(BaseModel):
     skipped: int  # already-assigned latest-per-student rows left untouched
 
 
+class ClaimExternalRequest(BaseModel):
+    """Body of POST /submissions:claim-external (admin/service token).
+
+    Reassigns a Yandex.Contest participant's imported submissions to a real
+    PlagLens user. ``user_id`` is the target; ``external_author_id`` is the
+    ``yc:<uid>`` key carried by the imported rows. The tenant is taken from
+    the caller's token, never the body.
+    """
+
+    user_id: str = Field(min_length=1)
+    external_author_id: str = Field(min_length=1)
+
+
+class ClaimExternalResult(BaseModel):
+    claimed: int
+
+
+class ExternalParticipantOut(BaseModel):
+    external_id: str
+    display_name: str | None = None
+    submission_count: int
+
+
 class ManualUploadMetadata(BaseModel):
     """Multipart form fields wrapped in a Pydantic model for validation."""
 

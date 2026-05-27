@@ -33,6 +33,7 @@ from submission_service.common.rbac import (
 )
 from submission_service.repositories.submission_repo import SubmissionRepository
 from submission_service.schemas.submission import (
+    ExternalParticipantOut,
     FlagPayload,
     SubmissionDetail,
     SubmissionFileOut,
@@ -96,6 +97,31 @@ def _paginate(
 
 
 # ---------- A. read ----------
+
+
+@router.get(
+    "/courses/{course_id}/submissions/external-participants",
+    response_model=list[ExternalParticipantOut],
+)
+async def list_external_participants(
+    course_id: str,
+    user: CurrentUser,
+    session: SessionDep,
+) -> list[ExternalParticipantOut]:
+    """Unclaimed Yandex.Contest participants in a course (staff only).
+
+    Lists imported participants whose ``author_id`` is still ``yc:<uid>`` (not
+    yet linked to a PlagLens user), with a submission count — the roster the
+    teacher works from to hand out per-participant claim codes. Path nests
+    under ``/courses/{id}/submissions`` so the gateway routes it to this
+    service (the bare ``/courses/{id}`` prefix goes to course-service).
+    """
+    ensure_course_staff(user, course_id)
+    repo = SubmissionRepository(session)
+    rows = await repo.list_external_participants(
+        tenant_id=user.tenant_id, course_id=course_id
+    )
+    return [ExternalParticipantOut(**r) for r in rows]
 
 
 @router.get(

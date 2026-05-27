@@ -62,9 +62,54 @@ class InvitationRedeem(BaseModel):
     code: str = Field(min_length=1, max_length=16)
 
 
+class BulkBindingParticipant(BaseModel):
+    """One imported participant to mint a claim code for."""
+
+    external_id: str = Field(min_length=1, max_length=255)
+    display_name: str | None = None
+
+
+class InvitationBulkBindings(BaseModel):
+    """Body of POST /invitations:bulk-bindings.
+
+    Mints one binding-carrying invitation code per participant so each
+    imported Yandex.Contest entrant can self-link to their PlagLens account.
+    """
+
+    course_id: str = Field(min_length=1)
+    role: str = "student"
+    binding_system: str = "yandex_contest"
+    participants: list[BulkBindingParticipant] = Field(default_factory=list)
+
+    @field_validator("course_id", mode="before")
+    @classmethod
+    def _coerce_course_id(cls, v: Any) -> Any:
+        # Course IDs arrive as ints from the frontend / course-service; store
+        # them as strings (mirrors InvitationCreate).
+        if v is None or isinstance(v, str):
+            return v
+        if isinstance(v, int | float):
+            return str(int(v))
+        return v
+
+
+class InvitationBulkBindingItem(BaseModel):
+    external_id: str
+    display_name: str | None = None
+    code: str
+
+
+class InvitationBulkBindingsResult(BaseModel):
+    items: list[InvitationBulkBindingItem]
+
+
 class InvitationRedeemResult(BaseModel):
     invitation_id: str
     role_applied: str | None = None  # populated when global_role was promoted
     course_id: str | None = None
     course_role: str | None = None
     requires_relogin: bool = False  # true when global_role changed
+    # Number of imported submissions backfilled to the redeemer when the code
+    # carried an external binding (e.g. Yandex.Contest participant claim).
+    # None when the code had no binding.
+    claimed_submissions: int | None = None

@@ -35,6 +35,8 @@ from submission_service.schemas.submission import (
     BatchImportRequestIn,
     BatchImportResult,
     BatchImportResultItem,
+    ClaimExternalRequest,
+    ClaimExternalResult,
     DistributeRequest,
     DistributeResult,
     SelectionRule,
@@ -578,6 +580,37 @@ async def distribute_submissions(
     return DistributeResult(
         assigned=assigned, graders=len(active), skipped=skipped
     )
+
+
+# ---- external-identity claim (Yandex.Contest participant → user) ----
+
+
+@router.post("/submissions:claim-external", response_model=ClaimExternalResult)
+async def claim_external_submissions(
+    payload: ClaimExternalRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> ClaimExternalResult:
+    """Backfill an external participant's imported submissions to a user.
+
+    Called service-to-service by identity when a student redeems a binding
+    claim code. The caller mints an **admin**-impersonation JWT, so we gate on
+    ``global_role == admin``. The tenant comes from the token (never the body)
+    and scopes the bulk UPDATE, so identity can only ever rewrite rows inside
+    the redeemer's own tenant. Lives under ``/submissions:claim-external``
+    (not ``/users/{id}/...``) so the gateway routes it here, not to identity.
+    Synchronous bulk UPDATE → returns the count directly.
+    """
+    if not user.is_admin:
+        raise forbidden("Admin role required")
+    repo = SubmissionRepository(session)
+    claimed = await repo.claim_external(
+        tenant_id=user.tenant_id,
+        user_id=payload.user_id,
+        external_author_id=payload.external_author_id,
+    )
+    await session.commit()
+    return ClaimExternalResult(claimed=claimed)
 
 
 # ---- read-side: GET /operations/{id} for clients to poll ----

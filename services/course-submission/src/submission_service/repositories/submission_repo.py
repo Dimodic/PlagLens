@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import and_, case, func, select
+from sqlalchemy import and_, case, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -248,6 +248,67 @@ class SubmissionRepository:
             sub.assigned_grader_name = grader_name
         await self.session.flush()
         return len(rows)
+
+    # ---------- external-identity claim (Yandex.Contest etc.) ----------
+
+    async def claim_external(
+        self, *, tenant_id: str, user_id: str, external_author_id: str
+    ) -> int:
+        """Reassign imported submissions from an external participant to a user.
+
+        Bulk-updates every ``yandex_contest`` submission in ``tenant_id`` whose
+        ``author_id`` equals the external key (e.g. ``yc:126352134``) to the
+        real ``user_id``. Returns the number of rows reassigned. Idempotent:
+        a second call matches nothing (author_id is now ``usr_...``) → 0.
+        """
+        result = await self.session.execute(
+            update(Submission)
+            .where(
+                Submission.tenant_id == tenant_id,
+                Submission.source == "yandex_contest",
+                Submission.author_id == external_author_id,
+            )
+            .values(author_id=user_id)
+        )
+        await self.session.flush()
+        return result.rowcount or 0
+
+    async def list_external_participants(
+        self, *, tenant_id: str, course_id: str
+    ) -> list[dict[str, Any]]:
+        """Unclaimed Yandex.Contest participants in a course.
+
+        A participant is "unclaimed" iff their ``author_id`` still carries the
+        ``yc:`` prefix (claiming rewrites it to the user's ``usr_...`` id).
+        Groups the live imported rows by (author_id, author_label) and counts
+        submissions. Returns ``{external_id, display_name, submission_count}``
+        sorted by display label for a stable roster view.
+        """
+        stmt = (
+            select(
+                Submission.author_id,
+                Submission.author_label,
+                func.count(Submission.id),
+            )
+            .where(
+                Submission.tenant_id == tenant_id,
+                Submission.course_id == course_id,
+                Submission.source == "yandex_contest",
+                Submission.deleted_at.is_(None),
+                Submission.author_id.like("yc:%"),
+            )
+            .group_by(Submission.author_id, Submission.author_label)
+            .order_by(Submission.author_label.asc())
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [
+            {
+                "external_id": author_id,
+                "display_name": author_label,
+                "submission_count": int(count),
+            }
+            for (author_id, author_label, count) in rows
+        ]
 
     async def list_best_per_student(
         self, *, assignment_id: str, tenant_id: str

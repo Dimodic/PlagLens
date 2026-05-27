@@ -101,3 +101,41 @@ class CourseMembershipClient:
         raise CourseClientError(
             f"course-submission returned {resp.status_code}: {resp.text[:300]}"
         )
+
+    async def claim_external_submissions(
+        self,
+        *,
+        user_id: str,
+        tenant_id: str,
+        external_author_id: str,
+    ) -> int:
+        """Backfill imported submissions from an external participant to a user.
+
+        Mirrors :meth:`add_member`: mints an admin-impersonation JWT and POSTs
+        to course-submission's collection-level claim action. The endpoint
+        reassigns every ``yandex_contest`` submission whose ``author_id`` equals
+        ``external_author_id`` (in the token's tenant) to ``user_id`` and
+        returns ``{"claimed": N}``. We surface ``N`` (default 0). The path
+        ``/submissions:claim-external`` is what the gateway routes to
+        submission — ``/users/{id}/...`` would route to identity instead.
+        """
+        url = f"{self._base_url}/api/v1/submissions:claim-external"
+        token = self._service_token(tenant_id=tenant_id, as_user_id=user_id)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {token}",
+        }
+        payload = {"user_id": user_id, "external_author_id": external_author_id}
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+        except Exception as exc:
+            raise CourseClientError(f"transport failed: {exc}") from exc
+        if 200 <= resp.status_code < 300:
+            try:
+                return int(resp.json().get("claimed", 0))
+            except Exception:
+                return 0
+        raise CourseClientError(
+            f"course-submission returned {resp.status_code}: {resp.text[:300]}"
+        )
