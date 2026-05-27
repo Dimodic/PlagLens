@@ -327,6 +327,7 @@ class SubmissionRepository:
         tenant_id: str,
         course_id: str | None = None,
         assignment_id: str | None = None,
+        assignment_ids: list[str] | None = None,
         language: str | None = None,
         assigned_grader_id: str | None = None,
         latest_per_student: bool = False,
@@ -357,6 +358,11 @@ class SubmissionRepository:
             stmt = stmt.where(Submission.course_id == course_id)
         if assignment_id is not None:
             stmt = stmt.where(Submission.assignment_id == assignment_id)
+        # Narrow to a whole homework's worth of assignments. Used by the
+        # triage queue's ДЗ filter — a homework fans out to N assignment
+        # ids and we want all their submissions in one query.
+        if assignment_ids:
+            stmt = stmt.where(Submission.assignment_id.in_(assignment_ids))
         if language is not None:
             stmt = stmt.where(Submission.language == language)
         if assigned_grader_id is not None:

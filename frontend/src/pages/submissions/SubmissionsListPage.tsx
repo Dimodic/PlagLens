@@ -47,7 +47,13 @@ import {
   useDistributeSubmissions,
   useMySubmissions,
 } from '@/hooks/api/useSubmissions';
-import { useCourses, useCourseMembers } from '@/hooks/api/useCourses';
+import {
+  useCourses,
+  useCourseMembers,
+  useCourseOwners,
+} from '@/hooks/api/useCourses';
+import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
+import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -141,6 +147,12 @@ export default function SubmissionsListPage() {
   const title = isStaff ? 'Посылки на проверку' : 'Мои посылки';
   useDocumentTitle(title);
   const [course, setCourse] = useState<string>('all');
+  // ДЗ + task scope. '' = «все ДЗ курса» / «все задачи ДЗ». Picking a
+  // ДЗ narrows the list to its assignments AND becomes the implicit
+  // scope for the distribute action; picking a task narrows further to
+  // that one assignment.
+  const [homework, setHomework] = useState<string>('');
+  const [assignment, setAssignment] = useState<string>('');
   const [filter, setFilter] = useState<StatusFilter>('all');
   // Staff-only: "все" vs "только мои" (this assistant's distributed pile).
   const [assignedFilter, setAssignedFilter] = useState<'all' | 'mine'>('all');
@@ -153,7 +165,18 @@ export default function SubmissionsListPage() {
   // offset.
   useEffect(() => {
     setPage(1);
-  }, [course, filter, assignedFilter]);
+  }, [course, homework, assignment, filter, assignedFilter]);
+
+  // ДЗ/task scope resets cascade: changing the course wipes both;
+  // changing the ДЗ wipes the task. Otherwise a stale id from a
+  // previous course would silently filter to nothing.
+  useEffect(() => {
+    setHomework('');
+    setAssignment('');
+  }, [course]);
+  useEffect(() => {
+    setAssignment('');
+  }, [homework]);
 
   // Fetch all active courses for the picker — backend returns them in
   // a single request, no need to derive them from the submissions list
@@ -186,16 +209,92 @@ export default function SubmissionsListPage() {
     for (const u of usersQ.data?.data ?? []) m.set(u.id, u.display_name);
     return m;
   }, [usersQ.data]);
-  const assistants = useMemo(
-    () =>
-      (membersQ.data?.data ?? [])
-        .filter((m) => m.role === 'assistant')
-        .map((m) => ({
-          id: m.user_id,
-          name: nameById.get(m.user_id) ?? m.user_id,
-        })),
-    [membersQ.data, nameById],
+  // Owners + co-owners come from a separate course-service table. The
+  // grader pool is owner + co_owner + assistant, so a teacher with no
+  // assistants can still distribute (e.g. onto themselves).
+  const ownersQ = useCourseOwners(
+    isStaff && course !== 'all' ? course : undefined,
   );
+  const assistants = useMemo(() => {
+    const pool = new Map<string, { id: string; name: string }>();
+    for (const o of ownersQ.data?.data ?? []) {
+      pool.set(o.user_id, {
+        id: o.user_id,
+        name:
+          o.user?.display_name ?? nameById.get(o.user_id) ?? o.user_id,
+      });
+    }
+    for (const m of membersQ.data?.data ?? []) {
+      if (m.role !== 'assistant') continue;
+      pool.set(m.user_id, {
+        id: m.user_id,
+        name: nameById.get(m.user_id) ?? m.user_id,
+      });
+    }
+    return [...pool.values()];
+  }, [ownersQ.data, membersQ.data, nameById]);
+
+  // ---- Course homeworks + assignments (for the ДЗ / task pickers) ----
+  const courseHwQ = useHomeworksForCourse(
+    isStaff && course !== 'all' ? course : undefined,
+    { limit: 200 },
+  );
+  const courseAsgQ = useAssignmentsByCourse(
+    isStaff && course !== 'all' ? course : undefined,
+    { limit: 500 },
+  );
+  const courseHomeworks = useMemo(
+    () => courseHwQ.data?.data ?? [],
+    [courseHwQ.data],
+  );
+  const courseAssignments = useMemo(
+    () => courseAsgQ.data?.data ?? [],
+    [courseAsgQ.data],
+  );
+  // alias maps for per-row labels.
+  const asgTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of courseAssignments) m.set(String(a.id), a.title);
+    return m;
+  }, [courseAssignments]);
+  const hwTitleById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const hw of courseHomeworks) m.set(String(hw.id), hw.title);
+    return m;
+  }, [courseHomeworks]);
+  // assignment_id → its homework title (for the per-row meta line).
+  const hwTitleByAsgId = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const a of courseAssignments) {
+      if (a.homework_id == null) continue;
+      const t = hwTitleById.get(String(a.homework_id));
+      if (t) m.set(String(a.id), t);
+    }
+    return m;
+  }, [courseAssignments, hwTitleById]);
+  // Assignments belonging to the picked ДЗ (empty when no ДЗ picked).
+  const homeworkAsgIds = useMemo(() => {
+    if (!homework) return [] as string[];
+    return courseAssignments
+      .filter((a) => a.homework_id != null && String(a.homework_id) === homework)
+      .map((a) => String(a.id));
+  }, [homework, courseAssignments]);
+  // Tasks within the picked ДЗ — the task picker's options.
+  const homeworkAssignments = useMemo(() => {
+    if (!homework) return [];
+    return courseAssignments
+      .filter((a) => a.homework_id != null && String(a.homework_id) === homework)
+      .sort((a, b) => a.title.localeCompare(b.title, 'ru'));
+  }, [homework, courseAssignments]);
+  // Effective assignment-id scope sent to the list + distribute:
+  //   • a single task picked → just that id
+  //   • a ДЗ picked (no task) → all its assignment ids
+  //   • neither → undefined (whole course)
+  const effectiveAsgIds = useMemo<string[]>(() => {
+    if (assignment) return [assignment];
+    if (homework) return homeworkAsgIds;
+    return [];
+  }, [assignment, homework, homeworkAsgIds]);
 
   // Distribute is a bulk write — open a richer dialog where the
   // teacher sets per-assistant weights (skip an assistant entirely by
@@ -203,17 +302,41 @@ export default function SubmissionsListPage() {
   // than committing to a single equal split.
   const distribute = useDistributeSubmissions();
   const [distributeOpen, setDistributeOpen] = useState(false);
-  const handleDistribute = async (graders: { id: string; name: string; weight: number }[]) => {
+  const handleDistribute = async (
+    graders: { id: string; name: string; weight: number }[],
+  ) => {
     if (course === 'all' || graders.length === 0) return;
     try {
-      const res = await distribute.mutateAsync({
-        course_id: course,
-        graders,
-      });
-      notify.success(
-        `Распределено ${res.assigned} посылок между ${res.graders} ассистентами` +
-          (res.skipped > 0 ? ` (${res.skipped} уже были назначены)` : ''),
-      );
+      // Scope: per-assignment when a ДЗ / task is picked (the backend's
+      // :distribute takes exactly one assignment_id, so a multi-task ДЗ
+      // fans out N parallel calls); otherwise distribute the whole
+      // course at once.
+      if (effectiveAsgIds.length > 0) {
+        const results = await Promise.all(
+          effectiveAsgIds.map((aid) =>
+            distribute.mutateAsync({ assignment_id: aid, graders }),
+          ),
+        );
+        const assigned = results.reduce((a, r) => a + r.assigned, 0);
+        const skipped = results.reduce((a, r) => a + r.skipped, 0);
+        const gradersCount = results[0]?.graders ?? graders.length;
+        const scopeLabel = assignment
+          ? asgTitleById.get(assignment) ?? 'задача'
+          : hwTitleById.get(homework) ?? 'ДЗ';
+        notify.success(
+          `«${scopeLabel}»: распределено ${assigned} посылок между ${gradersCount} грейдерами` +
+            (skipped > 0 ? ` (${skipped} уже были назначены)` : ''),
+        );
+      } else {
+        const res = await distribute.mutateAsync({
+          course_id: course,
+          graders,
+        });
+        notify.success(
+          `Распределено ${res.assigned} посылок между ${res.graders} грейдерами` +
+            (res.skipped > 0 ? ` (${res.skipped} уже были назначены)` : ''),
+        );
+      }
       setDistributeOpen(false);
     } catch {
       notify.error('Не удалось распределить посылки');
@@ -225,6 +348,9 @@ export default function SubmissionsListPage() {
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
     ...(course !== 'all' ? { course_id: course } : {}),
+    ...(effectiveAsgIds.length > 0
+      ? { assignment_ids: effectiveAsgIds }
+      : {}),
     ...(isStaff && assignedFilter === 'mine' && user?.id
       ? { assigned_grader_id: user.id }
       : {}),
@@ -324,6 +450,46 @@ export default function SubmissionsListPage() {
           </PopoverContent>
         </Popover>
 
+        {/* ДЗ picker — only once a concrete course is picked. Empty =
+            «Все ДЗ курса». Picking a ДЗ narrows the list and scopes the
+            distribute action. Native <select> — short list, no need for
+            the heavier Popover+Command combo. */}
+        {isStaff && course !== 'all' && courseHomeworks.length > 0 && (
+          <select
+            value={homework}
+            onChange={(e) => setHomework(e.currentTarget.value)}
+            className="h-9 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="my-submissions-hw-picker"
+            aria-label="ДЗ"
+          >
+            <option value="">Все ДЗ курса</option>
+            {courseHomeworks.map((hw) => (
+              <option key={hw.id} value={String(hw.id)}>
+                {hw.title}
+              </option>
+            ))}
+          </select>
+        )}
+
+        {/* Task picker — only when a ДЗ with >1 task is picked. Empty =
+            «Все задачи ДЗ». */}
+        {isStaff && homework && homeworkAssignments.length > 1 && (
+          <select
+            value={assignment}
+            onChange={(e) => setAssignment(e.currentTarget.value)}
+            className="h-9 min-w-[200px] rounded-md border border-input bg-background px-3 text-sm"
+            data-testid="my-submissions-task-picker"
+            aria-label="Задача"
+          >
+            <option value="">Все задачи ДЗ</option>
+            {homeworkAssignments.map((a) => (
+              <option key={a.id} value={String(a.id)}>
+                {a.title}
+              </option>
+            ))}
+          </select>
+        )}
+
         <div className="flex-1" />
 
         {/* Distribute — needs a concrete course (so we know its
@@ -336,8 +502,10 @@ export default function SubmissionsListPage() {
             disabled={distribute.isPending || assistants.length === 0}
             title={
               assistants.length === 0
-                ? 'В курсе нет ассистентов'
-                : undefined
+                ? 'В курсе нет грейдеров (преподавателей / ассистентов)'
+                : effectiveAsgIds.length > 0
+                  ? undefined
+                  : 'Распределит все посылки курса. Выберите ДЗ выше, чтобы сузить.'
             }
             data-testid="submissions-distribute"
           >
@@ -346,7 +514,7 @@ export default function SubmissionsListPage() {
             ) : (
               <Users className="mr-2 h-4 w-4" />
             )}
-            Распределить между ассистентами
+            Распределить
           </Button>
         )}
 
@@ -420,6 +588,11 @@ export default function SubmissionsListPage() {
               const cLabel = s.course_id
                 ? courseNameById.get(s.course_id) ?? null
                 : null;
+              // Task title (and its ДЗ) for the meta line — resolved
+              // from the course's assignments. Only populated once a
+              // course is picked (that's when we fetch assignments).
+              const asgTitle = asgTitleById.get(String(s.assignment_id));
+              const hwTitle = hwTitleByAsgId.get(String(s.assignment_id));
               return (
                 <Link
                   key={s.id}
@@ -433,7 +606,16 @@ export default function SubmissionsListPage() {
                       {studentName}
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {cLabel && <>{cLabel} · </>}
+                      {asgTitle && (
+                        <>
+                          <span className="text-foreground/70">
+                            {asgTitle}
+                          </span>
+                          {hwTitle && <> · {hwTitle}</>}
+                          {' · '}
+                        </>
+                      )}
+                      {!asgTitle && cLabel && <>{cLabel} · </>}
                       <span className="font-medium">v{s.version}</span> ·{' '}
                       {s.language}
                       {flagged && (

@@ -186,6 +186,10 @@ export interface SubmissionListFilters extends ListParams {
   version?: number;
   /** Staff inbox only — narrow to one assistant's distributed pile. */
   assigned_grader_id?: string;
+  /** Staff inbox only — narrow to a whole homework's assignments (the
+   *  ДЗ filter fans a homework out to its assignment ids). Serialised
+   *  as repeated ``assignment_ids=`` query params. */
+  assignment_ids?: string[];
   /** Staff inbox only — collapse v1/v2/v3… per (assignment, author)
    *  into a single most-recent row. Without it, the inbox total counts
    *  every version separately and looks 10× larger than reality. */
@@ -261,10 +265,23 @@ export const submissionsApi = {
       .then((r) => normalisePaginated(r.data)),
 
   mySubmissions: (filters: SubmissionListFilters & { course_id?: string } = {}) => {
-    const base = appendFilters(buildListParams(filters), filters);
+    const base: Record<string, unknown> = appendFilters(
+      buildListParams(filters),
+      filters,
+    );
     if (filters.course_id) base.course_id = filters.course_id;
+    // assignment_ids is an array. ``paramsSerializer: { indexes: null }``
+    // makes axios emit repeated keys without brackets
+    // (assignment_ids=1&assignment_ids=2) — what FastAPI's
+    // ``list[str] = Query()`` expects.
+    if (filters.assignment_ids && filters.assignment_ids.length > 0) {
+      base.assignment_ids = filters.assignment_ids;
+    }
     return api
-      .get<Paginated<SubmissionBrief> | SubmissionBrief[]>('/users/me/submissions', { params: base })
+      .get<Paginated<SubmissionBrief> | SubmissionBrief[]>(
+        '/users/me/submissions',
+        { params: base, paramsSerializer: { indexes: null } },
+      )
       .then((r) => normalisePaginated(r.data));
   },
 

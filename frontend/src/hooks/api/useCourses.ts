@@ -170,6 +170,22 @@ export function useCourseMembers(
   });
 }
 
+/** Course owners + co-owners. Separate from members because the course
+ *  service models ownership in its own table (``/courses/{id}/owners``),
+ *  not as a member role. Used by the submissions triage queue to build
+ *  the full grader pool (owner + co_owner + assistant) for the
+ *  "Распределить между ассистентами" action. */
+export function useCourseOwners(
+  id: string | undefined,
+  opts: { enabled?: boolean } = {},
+) {
+  return useQuery({
+    queryKey: courseKeys.owners(id ?? ''),
+    queryFn: () => coursesApi.listOwners(id as string),
+    enabled: !!id && (opts.enabled ?? true),
+  });
+}
+
 export function useAddMember(id: string) {
   const qc = useQueryClient();
   return useMutation({
