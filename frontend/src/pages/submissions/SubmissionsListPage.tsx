@@ -740,23 +740,22 @@ export default function SubmissionsListPage() {
                     </div>
                   )}
                   {/* col: trailing — version + status badges + grader */}
-                  <div className="flex items-center justify-end gap-2 whitespace-nowrap text-xs text-muted-foreground">
-                    <span className="font-medium">v{s.version}</span>
+                  <div className="flex items-center justify-end gap-2.5 whitespace-nowrap text-xs text-muted-foreground">
+                    <span>v{s.version}</span>
                     {typeof s.score === 'number' ? (
-                      // Staff rows carry the real grade — show «8 / 10»
-                      // (or just «8» when the assignment has no max).
+                      // Grade as a distinct neutral chip — a bordered tag
+                      // reads as «a score», not as part of the «v3» token,
+                      // and drops the shouty green.
                       <span
-                        className="font-medium text-emerald-600 dark:text-emerald-400"
+                        className="rounded-md border border-border px-1.5 py-0.5 font-medium tabular-nums text-foreground"
                         title="Оценка"
                       >
                         {formatScore(s.score, s.max_score)}
                       </span>
                     ) : s.is_graded ? (
                       // Graded but no score exposed (student list) — keep
-                      // the neutral indicator.
-                      <span className="text-emerald-600 dark:text-emerald-400">
-                        проверено
-                      </span>
+                      // a neutral indicator.
+                      <span>проверено</span>
                     ) : null}
                     {flagged && <span className="text-sev-high">помечено</span>}
                     {s.is_late && (
