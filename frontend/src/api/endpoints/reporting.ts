@@ -98,6 +98,43 @@ export interface GoogleSheetsLink {
   last_sync_error?: string | null;
 }
 
+/** One ДЗ's proposed placement into a sheet column (grades-match). */
+export interface GradesMatchColumn {
+  homework_id: string;
+  title: string;
+  number: number | null;
+  column_index: number | null;
+  header_text?: string | number | null;
+  source: 'number' | 'llm' | 'none';
+  confidence: 'high' | 'medium' | 'none';
+}
+
+export interface GradesMatchStudent {
+  author_id: string;
+  name: string;
+  row_index: number | null;
+  /** homework_id → aggregated grade for that ДЗ (null = not graded). */
+  values: Record<string, number | null>;
+}
+
+export interface GradesMatchResult {
+  spreadsheet_id: string;
+  sheet_name: string;
+  header_row: number;
+  name_col: number;
+  header: (string | number | null)[];
+  columns: GradesMatchColumn[];
+  students: GradesMatchStudent[];
+  unmatched_homeworks: string[];
+  unmatched_students: string[];
+}
+
+export interface GradesWriteResult {
+  written_cells: number;
+  students_written: number;
+  sheet_name: string;
+}
+
 /** One cell in a previewed worksheet. ``v`` is the value as Google
  *  reports it (string / number / bool); ``note`` is the corner-triangle
  *  cell note when present. */
@@ -428,6 +465,43 @@ export const reportingApi = {
         detail?: string | null;
         metadata?: Record<string, unknown> | null;
       }>(`/courses/${courseId}/google-sheets/link:validate`)
+      .then((r) => r.data),
+
+  /** Propose where each ДЗ's grades land in the linked sheet (ДЗ →
+   *  column by number, ФИО → row). Read-only preview the teacher edits
+   *  before committing the write. */
+  gradesMatch: (
+    courseId: string,
+    body: {
+      homework_ids: string[];
+      spreadsheet_id: string;
+      sheet_name?: string;
+    },
+  ) =>
+    api
+      .post<GradesMatchResult>(
+        `/courses/${courseId}/exports/google-sheets/grades-match`,
+        body,
+      )
+      .then((r) => r.data),
+
+  /** Commit the write using the teacher-confirmed column/row map.
+   *  Values are re-fetched server-side. */
+  gradesWrite: (
+    courseId: string,
+    body: {
+      homework_ids: string[];
+      spreadsheet_id: string;
+      sheet_name: string;
+      column_map: Record<string, number>;
+      row_map: Record<string, number>;
+    },
+  ) =>
+    api
+      .post<GradesWriteResult>(
+        `/courses/${courseId}/exports/google-sheets/grades-write`,
+        body,
+      )
       .then((r) => r.data),
 
   syncSheets: (courseId: string) =>

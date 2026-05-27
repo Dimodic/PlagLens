@@ -248,6 +248,28 @@ export function useValidateSheetsLink(courseId: string) {
   });
 }
 
+export function useGradesMatch(courseId: string) {
+  return useMutation({
+    mutationFn: (body: {
+      homework_ids: string[];
+      spreadsheet_id: string;
+      sheet_name?: string;
+    }) => reportingApi.gradesMatch(courseId, body),
+  });
+}
+
+export function useGradesWrite(courseId: string) {
+  return useMutation({
+    mutationFn: (body: {
+      homework_ids: string[];
+      spreadsheet_id: string;
+      sheet_name: string;
+      column_map: Record<string, number>;
+      row_map: Record<string, number>;
+    }) => reportingApi.gradesWrite(courseId, body),
+  });
+}
+
 export function useSyncSheets(courseId: string) {
   const qc = useQueryClient();
   return useMutation({
