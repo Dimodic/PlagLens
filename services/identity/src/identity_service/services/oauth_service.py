@@ -315,22 +315,105 @@ class OAuthService:
 
         # If this is a *link* flow, dispatch — never create a new session here.
         if link_user_id:
-            return await self._finalize_link(
+            result = await self._finalize_link(
                 user_id_str=link_user_id,
                 profile=profile,
             )
+        else:
+            # 3) Resolve tenant.
+            tenant = await self._resolve_tenant(tenant_slug)
 
-        # 3) Resolve tenant.
-        tenant = await self._resolve_tenant(tenant_slug)
+            # 4) Find-or-create-or-prompt-link.
+            result = await self._login_or_provision(
+                profile=profile,
+                tenant_id=tenant.id,
+                redirect_url=redirect_url,
+                ip=ip,
+                user_agent=user_agent,
+            )
 
-        # 4) Find-or-create-or-prompt-link.
-        return await self._login_or_provision(
-            profile=profile,
-            tenant_id=tenant.id,
-            redirect_url=redirect_url,
-            ip=ip,
-            user_agent=user_agent,
-        )
+        # A Yandex login/link auto-claims the user's imported Yandex.Contest
+        # submissions: the importer keys participants by Yandex uid
+        # (``author_id='yc:<uid>'``) and our OAuth subject IS that uid, so a
+        # Yandex sign-in attaches them with zero friction. Best-effort — never
+        # blocks auth. Skipped for the email-match prompt (no session yet; it's
+        # picked up on the user's next Yandex login).
+        if (
+            profile.provider == "yandex"
+            and result.user is not None
+            and not result.link_required
+        ):
+            await self._auto_link_yandex_contest(
+                result.user, profile.provider_user_id
+            )
+        return result
+
+    async def _auto_link_yandex_contest(
+        self, user: User, yandex_uid: str
+    ) -> None:
+        """Attach a Yandex login to its imported Yandex.Contest submissions.
+
+        The contest importer stores each participant as ``author_id='yc:<uid>'``
+        (the Yandex uid), and an OAuth login's subject is that same uid — so we
+        can backfill the participant's submissions onto the freshly
+        authenticated user and record an ``ExternalBinding``. Strictly
+        best-effort: any failure (course-submission down, etc.) is logged and
+        swallowed so it can never block authentication. Won't override a
+        participant already linked to a *different* account.
+        """
+        external_id = f"yc:{yandex_uid}"
+        try:
+            from ..common.ids import binding_id
+            from ..models import ExternalBinding
+            from ..repositories.external_bindings import (
+                ExternalBindingRepository,
+            )
+            from ..services.course_client import (
+                CourseClientError,
+                CourseMembershipClient,
+            )
+
+            bindings = ExternalBindingRepository(self.s)
+            existing = await bindings.get_by_external(
+                "yandex_contest", external_id
+            )
+            if existing is not None and existing.user_id != user.id:
+                # Already claimed by someone else (e.g. via a claim code) —
+                # don't silently steal it from an auto-link.
+                return
+            try:
+                claimed = await CourseMembershipClient().claim_external_submissions(
+                    user_id=user.id,
+                    tenant_id=user.tenant_id,
+                    external_author_id=external_id,
+                )
+            except CourseClientError as exc:
+                logger.warning(
+                    "YC auto-link claim failed user=%s: %s", user.id, exc
+                )
+                return
+            if existing is None:
+                await bindings.add(
+                    ExternalBinding(
+                        id=binding_id(),
+                        user_id=user.id,
+                        system="yandex_contest",
+                        external_id=external_id,
+                        display_name=user.display_name,
+                    )
+                )
+            if claimed:
+                logger.info(
+                    "auto-linked %s YC submissions to user=%s via Yandex OAuth",
+                    claimed,
+                    user.id,
+                )
+        except Exception:  # noqa: BLE001 — must never block auth
+            logger.warning(
+                "YC auto-link unexpected error user=%s",
+                user.id,
+                exc_info=True,
+            )
 
     # ----------------------------------------------------------------- #
     # LINK (authenticated user — secondary "add provider" flow)
