@@ -36,6 +36,10 @@ interface QueueGroup {
   remaining: number;
   /** id of the first unchecked submission in the group — the jump target. */
   next?: string;
+  /** ordered ids of the group's UNCHECKED submissions — the review queue
+   *  handed to the submission page when this group (or the whole pile) is
+   *  opened, so its ‹/› counter reads "X из <remaining>". */
+  ids: string[];
 }
 
 export default function GradingQueuePage() {
@@ -106,11 +110,6 @@ export default function GradingQueuePage() {
     : null;
   const hasFilter = !!(course || homework || assignment);
 
-  const firstUngraded = subs.find((s) => !s.is_graded);
-  const startReview = () => {
-    if (firstUngraded) navigate(`/submissions/${firstUngraded.id}`);
-  };
-
   const groups = useMemo<QueueGroup[]>(() => {
     const m = new Map<string, QueueGroup>();
     for (const s of subs) {
@@ -123,10 +122,11 @@ export default function GradingQueuePage() {
         label = s.homework_title ?? s.assignment_title ?? 'Без ДЗ';
         key = label;
       }
-      const g = m.get(key) ?? { key, label, total: 0, remaining: 0 };
+      const g = m.get(key) ?? { key, label, total: 0, remaining: 0, ids: [] };
       g.total += 1;
       if (!s.is_graded) {
         g.remaining += 1;
+        g.ids.push(s.id);
         if (!g.next) g.next = s.id;
       }
       m.set(key, g);
@@ -136,6 +136,22 @@ export default function GradingQueuePage() {
         b.remaining - a.remaining || a.label.localeCompare(b.label, 'ru'),
     );
   }, [subs, groupBy]);
+
+  // The whole remaining pile in grouped display order — the queue handed to
+  // the review page so its ‹/› counter reads "X из <remaining>". Stored in
+  // sessionStorage on entry (the review page walks it; survives refresh) and
+  // rebuilt every time the assistant re-enters — since this is recomputed
+  // from the freshly-fetched pile, it shrinks 24 → 22 as they grade.
+  const reviewAllIds = useMemo(() => groups.flatMap((g) => g.ids), [groups]);
+  const beginReview = (ids: string[]) => {
+    if (ids.length === 0) return;
+    try {
+      sessionStorage.setItem('plaglens.review.queue', JSON.stringify(ids));
+    } catch {
+      /* sessionStorage unavailable — review page falls back to the peer feed */
+    }
+    navigate(`/submissions/${ids[0]}`);
+  };
 
   return (
     <Page width="regular" data-testid="assistant-cabinet">
@@ -156,8 +172,8 @@ export default function GradingQueuePage() {
             </div>
           </div>
           <Button
-            onClick={startReview}
-            disabled={!firstUngraded}
+            onClick={() => beginReview(reviewAllIds)}
+            disabled={reviewAllIds.length === 0}
             data-testid="assistant-start-review"
           >
             <Sparkles className="mr-2 h-4 w-4" />
@@ -264,8 +280,8 @@ export default function GradingQueuePage() {
               <li key={g.key}>
                 <button
                   type="button"
-                  disabled={!g.next}
-                  onClick={() => g.next && navigate(`/submissions/${g.next}`)}
+                  disabled={g.ids.length === 0}
+                  onClick={() => beginReview(g.ids)}
                   className="group flex w-full items-center gap-4 px-3 py-3.5 text-left transition-colors hover:bg-muted/30 disabled:cursor-default disabled:opacity-60"
                   data-testid={`assistant-queue-row`}
                 >

@@ -243,6 +243,10 @@ export function useSetGrade(id: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: submissionKeys.grade(id) });
       qc.invalidateQueries({ queryKey: submissionKeys.detail(id) });
+      // Refresh the assistant cabinet's "remaining to check" pile (myList)
+      // so a freshly-graded submission drops out of it on the next visit —
+      // that's what makes the review queue shrink 24 → 22 on re-entry.
+      qc.invalidateQueries({ queryKey: ['submissions', 'me'] });
       invalidateGradeRollups(qc);
     },
   });
@@ -266,6 +270,8 @@ export function useDeleteGrade(id: string) {
     mutationFn: () => submissionsApi.deleteGrade(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: submissionKeys.grade(id) });
+      // Un-grading returns the submission to the assistant's pile.
+      qc.invalidateQueries({ queryKey: ['submissions', 'me'] });
       invalidateGradeRollups(qc);
     },
   });

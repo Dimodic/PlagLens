@@ -120,10 +120,28 @@ export default function SubmissionDetailPage() {
   // carries latest). We then locate the position by author_id so the
   // ‹ / › buttons still walk to the next *student*, not into the void.
   const { data: peers } = useLatestPerStudent(submission?.assignment_id);
-  const peerIds = useMemo(
-    () => (peers?.data ?? []).map((s) => s.id),
-    [peers],
-  );
+  // Review-session queue handed over by the assistant cabinet: an ordered
+  // snapshot of the grader's REMAINING-to-check submission ids, written to
+  // sessionStorage when they pressed «Начать проверку». When the current
+  // submission is part of it, ‹/› walks THAT queue and the counter reads
+  // "X из <remaining>" (1/24 → 2/24; then 1/22 after two are graded and the
+  // assistant re-enters — the cabinet rebuilds the queue from its
+  // freshly-fetched pile). Survives ‹/› navigation + refresh. Falls back to
+  // the assignment-wide latest-per-student feed for the teacher flow (or an
+  // assistant who opened a submission outside a review session).
+  const reviewQueue = useMemo<string[]>(() => {
+    try {
+      const raw = sessionStorage.getItem('plaglens.review.queue');
+      const arr = raw ? (JSON.parse(raw) as unknown) : null;
+      return Array.isArray(arr) ? (arr as string[]) : [];
+    } catch {
+      return [];
+    }
+  }, [id]);
+  const peerIds = useMemo(() => {
+    if (id && reviewQueue.includes(id)) return reviewQueue;
+    return (peers?.data ?? []).map((s) => s.id);
+  }, [peers, reviewQueue, id]);
   const peerIndex = useMemo(() => {
     if (!id) return -1;
     const direct = peerIds.indexOf(id);
