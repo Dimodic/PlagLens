@@ -420,7 +420,7 @@ export default function CourseDetailPage() {
               data-testid="course-edit-name"
               value={edit.name}
               onChange={(e) =>
-                setEdit((v) => ({ ...v, name: e.currentTarget.value }))
+                setEdit((v) => ({ ...v, name: e.target.value }))
               }
               placeholder="Название курса"
               size={Math.max(12, edit.name.length + 2)}
@@ -441,7 +441,7 @@ export default function CourseDetailPage() {
                 data-testid="course-edit-start"
                 value={edit.start}
                 onChange={(e) =>
-                  setEdit((v) => ({ ...v, start: e.currentTarget.value }))
+                  setEdit((v) => ({ ...v, start: e.target.value }))
                 }
                 className="rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-0.5 outline-none focus:border-solid focus:border-primary"
               />
@@ -451,7 +451,7 @@ export default function CourseDetailPage() {
                 data-testid="course-edit-end"
                 value={edit.end}
                 onChange={(e) =>
-                  setEdit((v) => ({ ...v, end: e.currentTarget.value }))
+                  setEdit((v) => ({ ...v, end: e.target.value }))
                 }
                 className="rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-0.5 outline-none focus:border-solid focus:border-primary"
               />
@@ -571,7 +571,7 @@ export default function CourseDetailPage() {
           rows={2}
           value={edit.description}
           onChange={(e) =>
-            setEdit((v) => ({ ...v, description: e.currentTarget.value }))
+            setEdit((v) => ({ ...v, description: e.target.value }))
           }
           placeholder="Описание курса…"
           className="w-full max-w-2xl resize-none rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-muted-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground/50 focus:border-solid focus:border-primary"
@@ -886,7 +886,7 @@ export default function CourseDetailPage() {
               <Input
                 id="course-yc-import-contest-id"
                 value={ycContestId}
-                onChange={(e) => setYcContestId(e.currentTarget.value)}
+                onChange={(e) => setYcContestId(e.target.value)}
                 placeholder="73433"
                 inputMode="numeric"
                 autoFocus
