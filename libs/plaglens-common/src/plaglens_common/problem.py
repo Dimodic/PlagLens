@@ -208,6 +208,15 @@ def make_handlers() -> dict[type[Exception], Any]:
             )
             for err in exc.errors()
         ]
+        # Log the offending fields (Pydantic v2 errors carry loc/type/msg
+        # and the rejected ``input`` value) so a 422 is diagnosable from
+        # the service logs instead of only the client's toast.
+        logger.warning(
+            "422 validation failed: %s %s errors=%s",
+            getattr(request, "method", "?"),
+            getattr(getattr(request, "url", None), "path", "?"),
+            exc.errors(),
+        )
         return problem_response(
             request,
             status=422,

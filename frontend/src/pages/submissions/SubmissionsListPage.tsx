@@ -66,6 +66,13 @@ import type { SubmissionStatus } from '@/api/endpoints/submissions';
 // review_status bucket at the fetch site. 'running' = «не проверено».
 type StatusFilter = 'all' | 'flagged' | 'running' | 'checked';
 
+// Shape of an RFC7807 problem body (subset) for surfacing server-side
+// validation reasons in the distribute error toast.
+type ProblemBody = {
+  detail?: string;
+  errors?: { field?: string; message?: string }[];
+};
+
 function getInitials(name: string): string {
   const parts = (name ?? '?').trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return '?';
@@ -416,8 +423,23 @@ export default function SubmissionsListPage() {
         );
       }
       setDistributeOpen(false);
-    } catch {
-      notify.error('Не удалось распределить посылки');
+    } catch (e) {
+      // Surface the server's reason (RFC7807 problem: field errors or a
+      // detail string) instead of a blanket message, so a 422 says WHAT
+      // was rejected rather than just "failed".
+      const data = (e as { response?: { data?: ProblemBody } })?.response
+        ?.data;
+      const fieldMsg =
+        Array.isArray(data?.errors) && data.errors.length > 0
+          ? data.errors
+              .map((x) => [x.field, x.message].filter(Boolean).join(': '))
+              .join('; ')
+          : data?.detail;
+      notify.error(
+        fieldMsg
+          ? `Не удалось распределить: ${fieldMsg}`
+          : 'Не удалось распределить посылки',
+      );
       setDistributeOpen(false);
     }
   };
