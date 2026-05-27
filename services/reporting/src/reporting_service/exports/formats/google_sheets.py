@@ -55,6 +55,21 @@ def parse_a1(reference: str) -> tuple[int, int]:
     return int(digits) - 1, col - 1
 
 
+def col_to_letters(col: int) -> str:
+    """0-indexed column → spreadsheet letters. ``0`` → ``A``, ``26`` → ``AA``."""
+    letters = ""
+    n = col + 1
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        letters = chr(ord("A") + rem) + letters
+    return letters
+
+
+def a1_of(row: int, col: int) -> str:
+    """0-indexed ``(row, col)`` → A1 reference. ``(4, 1)`` → ``B5``."""
+    return f"{col_to_letters(col)}{row + 1}"
+
+
 # ---------------------------------------------------------------------------
 # Client protocol + impls
 # ---------------------------------------------------------------------------
@@ -76,6 +91,13 @@ class GoogleSheetsClient(Protocol):
         *,
         max_rows: int = 200,
         max_cols: int = 40,
+    ) -> dict[str, Any]: ...
+
+    async def write_cells(
+        self,
+        spreadsheet_id: str,
+        sheet_title: str,
+        cells: list[dict[str, Any]],
     ) -> dict[str, Any]: ...
 
 
@@ -149,6 +171,35 @@ class InMemoryGoogleSheetsClient:
             "spreadsheet_id": spreadsheet_id,
             "title": spreadsheet_id,
             "worksheets": worksheets,
+        }
+
+    async def write_cells(
+        self,
+        spreadsheet_id: str,
+        sheet_title: str,
+        cells: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        grid = self.spreadsheets.setdefault(spreadsheet_id, {}).setdefault(
+            sheet_title, []
+        )
+        notes_written = 0
+        for cell in cells:
+            r, c = int(cell["row"]), int(cell["col"])
+            while len(grid) <= r:
+                grid.append([])
+            while len(grid[r]) <= c:
+                grid[r].append("")
+            grid[r][c] = cell.get("value", "")
+            if cell.get("note"):
+                self.notes.setdefault(spreadsheet_id, {}).setdefault(
+                    sheet_title, []
+                ).append({"row": r, "col": c, "note": str(cell["note"])})
+                notes_written += 1
+        self.last_sync_at[spreadsheet_id] = datetime.utcnow()
+        return {
+            "updated_cells": len(cells),
+            "sheet": sheet_title,
+            "notes_written": notes_written,
         }
 
 
@@ -302,6 +353,50 @@ class GoogleApiClient:
             .execute()
         )
         return _parse_preview(meta, max_rows=max_rows, max_cols=max_cols)
+
+    async def write_cells(
+        self,
+        spreadsheet_id: str,
+        sheet_title: str,
+        cells: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Write scattered single cells (no contiguous-block overwrite),
+        so grades slot into the teacher's existing roster without
+        clobbering neighbouring columns/rows. Notes ride along."""
+        if self._fallback is not None:
+            return await self._fallback.write_cells(
+                spreadsheet_id, sheet_title, cells
+            )
+        # pragma: no cover - integration path
+        data = [
+            {
+                "range": f"{sheet_title}!{a1_of(int(c['row']), int(c['col']))}",
+                "values": [[c.get("value", "")]],
+            }
+            for c in cells
+        ]
+        resp = (
+            self._impl.spreadsheets()
+            .values()
+            .batchUpdate(
+                spreadsheetId=spreadsheet_id,
+                body={"valueInputOption": "RAW", "data": data},
+            )
+            .execute()
+        )
+        notes = [
+            {"row": int(c["row"]), "col": int(c["col"]), "note": c["note"]}
+            for c in cells
+            if c.get("note")
+        ]
+        if notes:
+            try:
+                resp["notes_written"] = self._write_notes(
+                    spreadsheet_id, sheet_title, notes
+                )
+            except Exception:  # noqa: BLE001
+                resp["notes_written"] = 0
+        return resp
 
 
 def _parse_preview(  # pragma: no cover - exercised via real client
