@@ -102,9 +102,6 @@ export default function AssignmentSubmissionsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild variant="ghost">
-            <Link to={`/assignments/${id}`}>К заданию</Link>
-          </Button>
           <Button asChild variant="outline">
             <Link to={`/assignments/${id}/deadlines`}>Дедлайны</Link>
           </Button>

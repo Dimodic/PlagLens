@@ -13,6 +13,7 @@ import { submissionKeys } from '@/hooks/api/useSubmissions';
 import {
   Sparkles,
   Loader2,
+  Check,
   ChevronLeft,
   ChevronRight,
   FileText,
@@ -159,6 +160,15 @@ export default function SubmissionDetailPage() {
     peerIndex >= 0 && peerIndex < peerIds.length - 1
       ? peerIds[peerIndex + 1]
       : null;
+  // On the LAST submission «Следующая» becomes «Завершить» (active, not a
+  // dead disabled button). It sends the grader to the assistant cabinet when
+  // walking a review queue, otherwise back to the assignment.
+  const onReviewQueue = !!id && reviewQueue.includes(id);
+  const finishTarget = onReviewQueue
+    ? '/grading'
+    : assignment
+      ? `/assignments/${assignment.id}`
+      : '/';
 
   // Prefetch the previous + next submissions (detail + files + first
   // file's text) as soon as we know which they are. By the time the
@@ -1045,11 +1055,6 @@ export default function SubmissionDetailPage() {
               Запустить анализ
             </Button>
           )}
-          {assignment && (
-            <Button asChild variant="ghost">
-              <Link to={`/assignments/${assignment.id}`}>← К заданию</Link>
-            </Button>
-          )}
         </div>
       </div>
 
@@ -1110,7 +1115,10 @@ export default function SubmissionDetailPage() {
       <div
         className={
           isTeacher
-            ? 'grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]'
+            ? // min-h pins the row so the grade rail collapsing from the form
+              // to the compact read-only display on save doesn't shrink the
+              // page and yank the ‹/› nav upward under the grader's cursor.
+              'grid gap-8 lg:min-h-[440px] lg:grid-cols-[minmax(0,1fr)_300px]'
             : ''
         }
       >
@@ -1496,18 +1504,27 @@ export default function SubmissionDetailPage() {
           >
             {peerIndex >= 0 ? `${peerIndex + 1} из ${peerIds.length}` : null}
           </span>
-          <Button
-            size="lg"
-            disabled={!nextPeerId}
-            onClick={() =>
-              nextPeerId && navigate(`/submissions/${nextPeerId}`)
-            }
-            data-testid="submission-peer-next"
-            className="min-w-[180px] justify-end"
-          >
-            Следующая
-            <ChevronRight className="ml-2 h-5 w-5" />
-          </Button>
+          {nextPeerId ? (
+            <Button
+              size="lg"
+              onClick={() => navigate(`/submissions/${nextPeerId}`)}
+              data-testid="submission-peer-next"
+              className="min-w-[180px] justify-end"
+            >
+              Следующая
+              <ChevronRight className="ml-2 h-5 w-5" />
+            </Button>
+          ) : (
+            <Button
+              size="lg"
+              onClick={() => navigate(finishTarget)}
+              data-testid="submission-peer-finish"
+              className="min-w-[180px] justify-end"
+            >
+              Завершить
+              <Check className="ml-2 h-5 w-5" />
+            </Button>
+          )}
         </div>
       )}
     </Page>
