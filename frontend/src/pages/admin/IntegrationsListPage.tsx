@@ -81,6 +81,7 @@ import {
 } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
+import { GoogleSheetsServiceAccountDialog } from '@/components/integrations/GoogleSheetsServiceAccountDialog';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
 
 const KIND_TITLES: Record<IntegrationKind, string> = {
@@ -619,6 +620,11 @@ function OAuthProvidersPanel() {
   const [selectedId, setSelectedId] = useState<IntegrationOAuthKind | null>(
     null,
   );
+  // SA-JSON modal is tenant-orthogonal — it's not tied to any particular
+  // OAuth provider, so it lives on the sidebar (bottom-left) rather than
+  // in the per-provider detail header where it used to push the form
+  // height up and down between selections.
+  const [saDialogOpen, setSaDialogOpen] = useState(false);
 
   const providers = (data ?? [])
     .filter((p): p is IntegrationOAuthProviderInfo =>
@@ -655,6 +661,11 @@ function OAuthProvidersPanel() {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+        {/* Sidebar column: providers list + a quiet SA-JSON trigger pinned
+            to the bottom. min-h matches the detail pane so mt-auto on the
+            SA button parks it next to where the form ends, not floating
+            against an empty space. */}
+        <div className="flex flex-col md:min-h-[480px]">
         <nav
           aria-label="OAuth-провайдеры интеграций"
           className="flex flex-col py-2"
@@ -697,6 +708,21 @@ function OAuthProvidersPanel() {
           })}
         </nav>
 
+        {/* Tenant-wide Service Account JSON — Google Sheets only entry
+            point that isn't an OAuth-app pair. It's surfaced as a small
+            link-like button so it doesn't compete with the provider rows
+            for attention but is one click away. */}
+        <button
+          type="button"
+          onClick={() => setSaDialogOpen(true)}
+          className="mt-auto flex items-center gap-2 rounded-md px-4 py-3 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/20 hover:text-foreground"
+          data-testid="integration-oauth-google-sheets-sa"
+        >
+          <BrandIcon provider="google_sheets" className="h-4 w-4 shrink-0" />
+          Google Sheets · сервисный аккаунт
+        </button>
+        </div>
+
         <div className="md:border-l md:border-border/60 p-6 md:p-8 md:min-h-[480px]">
           {selected ? (
             <IntegrationOAuthDetail provider={selected} />
@@ -707,6 +733,10 @@ function OAuthProvidersPanel() {
           )}
         </div>
       </div>
+      <GoogleSheetsServiceAccountDialog
+        open={saDialogOpen}
+        onOpenChange={setSaDialogOpen}
+      />
     </div>
   );
 }
@@ -821,18 +851,6 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
           {provider.configured ? 'настроено' : 'не настроено'}
         </span>
       </header>
-
-      {provider.provider_kind === 'google_sheets' && (
-        <Button asChild variant="outline" size="sm">
-          <Link
-            to="/integrations/google-sheets/setup"
-            data-testid="integration-oauth-google-sheets-sa"
-          >
-            Сервисный аккаунт (JSON)
-            <ChevronRight className="ml-1 h-3.5 w-3.5" />
-          </Link>
-        </Button>
-      )}
 
       <form onSubmit={onSave} className="space-y-4" noValidate>
         {problem && (
