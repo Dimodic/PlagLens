@@ -25,6 +25,7 @@ import { useSubmission } from '@/hooks/api/useSubmissions';
 import { usePlagiarismRun } from '@/hooks/api/usePlagiarism';
 import { displayAuthor } from '@/api/endpoints/submissions';
 import { useUser } from '@/hooks/api/useUsers';
+import { useAuth } from '@/auth/useAuth';
 import { useTranslation } from '@/i18n';
 
 export interface BreadcrumbItem {
@@ -78,6 +79,14 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   const location = useLocation();
   const params = useParams<Record<string, string>>();
   const path = location.pathname.replace(/\/+$/, '') || '/';
+  const { user } = useAuth();
+  const isStudent = user?.global_role === 'student';
+  // Where the «Курсы» root breadcrumb points. Staff land on /courses
+  // (their course list); students go back to /me (their dashboard) —
+  // they don't have access to the tenant-wide course directory and
+  // shouldn't be tossed onto a teacher-style screen by a back-link.
+  const coursesCrumbLabel = isStudent ? t('nav.home') : t('nav.courses');
+  const coursesCrumbHref = isStudent ? '/me' : '/courses';
 
   // ---------------- Path classification ----------------
   // We classify the path once, then call all relevant data hooks (each gated
@@ -218,7 +227,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   if (isHwAsgNew && courseSlugParam && params.hwSlug) {
     const hw = hwListQ.data?.data.find((h) => h.slug === params.hwSlug);
     return [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
       {
         label: courseBySlugQ.data?.name ?? courseSlugParam,
         to: `/courses/${courseSlugParam}`,
@@ -235,7 +244,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   // === TEACHER: /courses/:slug/homeworks/new ===
   if (isHwNew && courseSlugParam) {
     return [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
       {
         label: courseBySlugQ.data?.name ?? courseSlugParam,
         to: `/courses/${courseSlugParam}`,
@@ -249,7 +258,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     const [slug, subPage] = courseSub;
     const subKey = COURSE_SUB_TITLE[subPage] ?? 'title.s_course';
     return [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
       { label: courseBySlugQ.data?.name ?? slug, to: `/courses/${slug}` },
       { label: t(subKey), current: true },
     ];
@@ -258,7 +267,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   // === TEACHER: /courses/:slug ===
   if (isCourseDetail && courseSlugParam) {
     return [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
       {
         label: courseBySlugQ.data?.name ?? courseSlugParam,
         current: true,
@@ -285,7 +294,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     };
 
     const items: BreadcrumbItem[] = [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
     ];
     if (course) {
       items.push({ label: course.name, to: `/courses/${course.slug}` });
@@ -325,7 +334,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     const hw = teacherSubHwQ.data;
 
     const items: BreadcrumbItem[] = [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
     ];
     if (course) {
       items.push({ label: course.name, to: `/courses/${course.slug}` });
@@ -379,7 +388,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     }
 
     const items: BreadcrumbItem[] = [
-      { label: t('nav.courses'), to: '/courses' },
+      { label: coursesCrumbLabel, to: coursesCrumbHref },
     ];
     if (course) {
       items.push({ label: course.name, to: `/courses/${course.slug}` });

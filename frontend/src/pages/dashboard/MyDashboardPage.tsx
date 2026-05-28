@@ -168,6 +168,16 @@ export default function MyDashboardPage() {
     })),
   });
 
+  // useMemo deps over ``perCourseAssignmentsQ`` are tricky: useQueries
+  // returns a *new array reference* each render but referential equality
+  // on the inner queries' `.data` doesn't always flip, so React-Query
+  // mutations can land without changing the array identity React cares
+  // about. Concatenate each query's dataUpdatedAt into a string and key
+  // the memo on that — turns every real data refresh into a recompute,
+  // without per-render work when nothing's actually changed.
+  const perCourseDataKey = perCourseAssignmentsQ
+    .map((q) => q.dataUpdatedAt)
+    .join('|');
   const assignmentById = useMemo(() => {
     const m = new Map<string, AssignmentBrief>(
       myAssignments.map((a) => [a.id, a]),
@@ -178,7 +188,8 @@ export default function MyDashboardPage() {
       }
     }
     return m;
-  }, [myAssignments, perCourseAssignmentsQ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myAssignments, perCourseDataKey]);
 
   const greeting = user?.display_name
     ? `Привет, ${user.display_name.split(' ')[0]}`
