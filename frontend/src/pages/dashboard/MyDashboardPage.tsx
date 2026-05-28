@@ -2,53 +2,56 @@
  * MyDashboardPage — `/me` student cabinet, the single screen the student
  * actually uses.
  *
- * Per the design call: students have NO sidebar — everything they need
- * lives on this one page. Three sections, all hairline-divided, no card
- * chrome:
+ * Students have no sidebar; the body lives entirely here. Three hairline-
+ * divided sections:
  *
- *   1. «Скоро дедлайн»  — up to 5 closest future deadlines across all
- *                          courses.
- *   2. «Мои курсы»      — one row per course with sdano/всего + mean grade
- *                          + a chevron to the course page.
- *   3. «Последние оценки» — up to 5 most-recent graded submissions.
+ *   1. «Скоро дедлайн»  — up to 5 closest future deadlines across courses.
+ *   2. «Мои курсы»      — one row per course with «сдано/всего» + mean grade.
+ *   3. «Мои посылки»    — last N submissions with assignment title, verdict
+ *                         (Y.Contest external_verdict coloured by outcome)
+ *                         and grade. Filterable by course / status.
  *
- * Empty (no courses): a single CTA — «Введите код приглашения». That's
- * literally the only thing a fresh self-registered account can do until
- * a teacher hands them a code.
+ * Title / course name / homework title for every submission come straight
+ * from the backend — `/users/me/submissions` joins them in, so we don't
+ * have to fan out a useQueries over the course tree to recover assignment
+ * titles. ``s.assignment_title`` is the source of truth.
  *
- * The «+ По коду» action lives in the PageHeader so it's always one
- * click away, even when sections below are full.
+ * Empty state (no courses): one CTA — «Ввести код». «+ По коду» in the
+ * header is always one click away regardless.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { useQueries } from '@tanstack/react-query';
 import { ChevronRight, KeyRound, Loader2 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useMyAssignments } from '@/hooks/api/useAssignments';
-import { assignmentKeys } from '@/hooks/api/useAssignments';
-import { assignmentsApi } from '@/api/endpoints/assignments';
-import type { AssignmentBrief } from '@/api/endpoints/assignments';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { JoinByCodeDialog } from '@/components/courses/JoinByCodeDialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
 
-type Tone = 'high' | 'mid' | 'low' | 'muted';
+type Tone = 'high' | 'mid' | 'low' | 'muted' | 'ok';
 
 const toneText: Record<Tone, string> = {
   high: 'text-sev-high',
   mid: 'text-sev-mid',
   low: 'text-muted-foreground',
   muted: 'text-muted-foreground/70',
+  ok: 'text-sev-low',
 };
 
 /** Human countdown for a future deadline. Past deadlines collapse to
- *  «Прошёл» (we don't show them anyway, but the helper handles the case
- *  so callers don't have to guard). */
+ *  «Прошёл» (we don't show them anyway). */
 function deadlineTag(iso: string | null | undefined): { label: string; tone: Tone } | null {
   if (!iso) return null;
   const ts = new Date(iso).getTime();
@@ -70,30 +73,60 @@ const fmtDate = (iso: string | null | undefined) =>
       })
     : '';
 
+/** Map Y.Contest-style verdict strings to a tone. «OK» / «Accepted»
+ *  read as success; «Wrong Answer», «Compilation Error», «Runtime
+ *  Error», «Presentation Error» as fail; the rest sit in the middle. */
+function verdictTone(v: string | null | undefined): Tone {
+  if (!v) return 'muted';
+  const s = v.toLowerCase();
+  if (s.includes('ok') || s.includes('accept')) return 'ok';
+  if (
+    s.includes('wrong') ||
+    s.includes('compil') ||
+    s.includes('runtime') ||
+    s.includes('present')
+  ) {
+    return 'high';
+  }
+  return 'mid';
+}
+
+type StatusFilter = 'all' | 'graded' | 'pending';
+
+interface MySub {
+  id: string;
+  assignment_id: string;
+  course_id?: string;
+  submitted_at: string;
+  score?: number | null;
+  max_score?: number | null;
+  external_verdict?: string | null;
+  external_score?: number | null;
+  assignment_title?: string | null;
+  homework_title?: string | null;
+  course_name?: string | null;
+}
+
 export default function MyDashboardPage() {
   useDocumentTitle('Главная');
   const { user } = useAuth();
   const myCoursesQ = useMyCourses();
   const myAssignmentsQ = useMyAssignments();
-  const mySubsQ = useMySubmissions({ limit: 200 });
+  // Backend caps at 10 000; pull a generous slice so the dashboard list
+  // isn't artificially limited for power users with lots of Y.Contest
+  // imports — the list itself only renders the first N after filters.
+  const mySubsQ = useMySubmissions({ limit: 500 });
 
   const myCourses = myCoursesQ.data?.data ?? [];
   const myAssignments = myAssignmentsQ.data?.data ?? [];
-  // mySubmissions response is sometimes a bare array, sometimes Paginated.
-  // The hook's TS type covers both; normalise here.
   const subsData = mySubsQ.data as unknown;
-  const mySubs: Array<{
-    id: string;
-    assignment_id: string;
-    course_id?: string;
-    submitted_at: string;
-    score?: number | null;
-    max_score?: number | null;
-  }> = Array.isArray(subsData)
-    ? (subsData as never)
-    : ((subsData as { data?: never[] })?.data ?? []);
+  const mySubs: MySub[] = Array.isArray(subsData)
+    ? (subsData as MySub[])
+    : ((subsData as { data?: MySub[] })?.data ?? []);
 
   const [joinOpen, setJoinOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [courseFilter, setCourseFilter] = useState<string>('all');
 
   // -- «Скоро дедлайн»: future deadline_hard_at, sorted ascending. ----- //
   const upcoming = useMemo(() => {
@@ -111,9 +144,7 @@ export default function MyDashboardPage() {
       .slice(0, 5);
   }, [myAssignments]);
 
-  // -- Per-course aggregates: how many of this course's assignments did
-  // -- the student grade-receive? Mean of obtained scores. Skipped when
-  // -- the student has no submissions at all (mean = «—»).
+  // -- Per-course aggregates. ------------------------------------------ //
   const courseStats = useMemo(() => {
     const totalByCourse = new Map<string, number>();
     for (const a of myAssignments) {
@@ -130,66 +161,31 @@ export default function MyDashboardPage() {
     return { totalByCourse, gradedByCourse };
   }, [myAssignments, mySubs]);
 
-  // -- Last 10 submissions of any kind, newest first. ----------------- //
-  // Earlier this was «only graded», but binding-claim flows (Yandex.Contest
-  // participants link → backfill all their imports) deliver lots of
-  // ungraded submissions and the student would see an empty section.
-  // The score column is shown when present; otherwise we show the
-  // assignment's verdict-like status (sent / on review).
-  const recent = useMemo(() => {
-    return mySubs
-      .slice()
-      .sort(
-        (a, b) =>
-          new Date(b.submitted_at).getTime() -
-          new Date(a.submitted_at).getTime(),
-      )
-      .slice(0, 10);
-  }, [mySubs]);
-
   const courseById = useMemo(
-    () => new Map(myCourses.map((c) => [c.id, c])),
+    () => new Map(myCourses.map((c) => [String(c.id), c])),
     [myCourses],
   );
 
-  // /users/me/assignments is ``published_only=True`` — Yandex.Contest
-  // binding-imports often produce assignments that aren't published
-  // (e.g. teacher's draft contests), and the resulting submissions
-  // would render as «Задание» because the lookup misses. To recover
-  // those titles, hit /courses/:id/assignments for every course the
-  // student belongs to — that endpoint is unfiltered and the rows
-  // merge cleanly into the same id-keyed map.
-  const perCourseAssignmentsQ = useQueries({
-    queries: myCourses.map((c) => ({
-      queryKey: [...assignmentKeys.byCourse(c.id), { dashboard: true }],
-      queryFn: () =>
-        assignmentsApi.listInCourse(c.id, { limit: 500 }),
-      enabled: !!c.id,
-    })),
-  });
-
-  // useMemo deps over ``perCourseAssignmentsQ`` are tricky: useQueries
-  // returns a *new array reference* each render but referential equality
-  // on the inner queries' `.data` doesn't always flip, so React-Query
-  // mutations can land without changing the array identity React cares
-  // about. Concatenate each query's dataUpdatedAt into a string and key
-  // the memo on that — turns every real data refresh into a recompute,
-  // without per-render work when nothing's actually changed.
-  const perCourseDataKey = perCourseAssignmentsQ
-    .map((q) => q.dataUpdatedAt)
-    .join('|');
-  const assignmentById = useMemo(() => {
-    const m = new Map<string, AssignmentBrief>(
-      myAssignments.map((a) => [a.id, a]),
+  // -- Filtered + sorted submissions list. ----------------------------- //
+  const filteredSubs = useMemo(() => {
+    let arr = mySubs.slice();
+    if (statusFilter === 'graded') arr = arr.filter((s) => s.score != null);
+    else if (statusFilter === 'pending')
+      arr = arr.filter((s) => s.score == null);
+    if (courseFilter !== 'all')
+      arr = arr.filter((s) => String(s.course_id) === courseFilter);
+    arr.sort(
+      (a, b) =>
+        new Date(b.submitted_at).getTime() -
+        new Date(a.submitted_at).getTime(),
     );
-    for (const q of perCourseAssignmentsQ) {
-      for (const a of q.data?.data ?? []) {
-        if (!m.has(a.id)) m.set(a.id, a);
-      }
-    }
-    return m;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myAssignments, perCourseDataKey]);
+    return arr;
+  }, [mySubs, statusFilter, courseFilter]);
+
+  // How many rows to render in «Мои посылки». 20 is enough to read the
+  // recent state at a glance; the detail page handles deep browsing.
+  const SUBS_LIMIT = 20;
+  const visibleSubs = filteredSubs.slice(0, SUBS_LIMIT);
 
   const greeting = user?.display_name
     ? `Привет, ${user.display_name.split(' ')[0]}`
@@ -210,7 +206,6 @@ export default function MyDashboardPage() {
     </Button>
   );
 
-  // ---- Empty state: no courses yet. ---------------------------------- //
   if (!isLoading && myCourses.length === 0) {
     return (
       <Page width="regular" data-testid="my-dashboard">
@@ -252,7 +247,7 @@ export default function MyDashboardPage() {
               <ul className="divide-y divide-border/40 border-t border-border/40">
                 {upcoming.map((a) => {
                   const tag = deadlineTag(a.deadline_hard_at);
-                  const course = courseById.get(a.course_id);
+                  const course = courseById.get(String(a.course_id));
                   return (
                     <li key={a.id}>
                       <Link
@@ -298,8 +293,8 @@ export default function MyDashboardPage() {
             </h2>
             <ul className="divide-y divide-border/40 border-t border-border/40">
               {myCourses.map((c) => {
-                const total = courseStats.totalByCourse.get(c.id) ?? 0;
-                const graded = courseStats.gradedByCourse.get(c.id);
+                const total = courseStats.totalByCourse.get(String(c.id)) ?? 0;
+                const graded = courseStats.gradedByCourse.get(String(c.id));
                 const mean =
                   graded && graded.count > 0
                     ? (graded.sum / graded.count).toFixed(1)
@@ -340,52 +335,130 @@ export default function MyDashboardPage() {
             </ul>
           </section>
 
-          {recent.length > 0 && (
+          {mySubs.length > 0 && (
             <section data-testid="dashboard-recent">
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Мои посылки
-              </h2>
-              <ul className="divide-y divide-border/40 border-t border-border/40">
-                {recent.map((s) => {
-                  const a = assignmentById.get(s.assignment_id);
-                  const max = s.max_score ?? a?.max_score ?? null;
-                  const hasScore = s.score != null;
-                  return (
-                    <li key={s.id}>
-                      <Link
-                        to={`/me/submissions/${s.id}`}
-                        data-testid={`dashboard-recent-${s.id}`}
-                        className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+              <div className="mb-3 flex items-baseline justify-between gap-4">
+                <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                  Мои посылки
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={statusFilter}
+                    onValueChange={(v) =>
+                      setStatusFilter((v as StatusFilter) ?? 'all')
+                    }
+                  >
+                    <SelectTrigger
+                      className="h-8 w-[160px] text-xs"
+                      data-testid="dashboard-status-filter"
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Все</SelectItem>
+                      <SelectItem value="graded">Оценённые</SelectItem>
+                      <SelectItem value="pending">На проверке</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {myCourses.length > 1 && (
+                    <Select
+                      value={courseFilter}
+                      onValueChange={(v) => setCourseFilter(v ?? 'all')}
+                    >
+                      <SelectTrigger
+                        className="h-8 w-[180px] text-xs"
+                        data-testid="dashboard-course-filter"
                       >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-foreground truncate">
-                            {a?.title ?? 'Задание'}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {fmtDate(s.submitted_at)}
-                          </div>
-                        </div>
-                        {hasScore ? (
-                          <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                            {Number(s.score).toFixed(1)}
-                            {max != null && (
-                              <span className="text-muted-foreground"> / {max}</span>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Все курсы</SelectItem>
+                        {myCourses.map((c) => (
+                          <SelectItem key={c.id} value={String(c.id)}>
+                            {c.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              {visibleSubs.length === 0 ? (
+                <p className="border-t border-border/40 py-6 text-center text-sm text-muted-foreground">
+                  Под фильтр ничего не подходит.
+                </p>
+              ) : (
+                <>
+                  <ul className="divide-y divide-border/40 border-t border-border/40">
+                    {visibleSubs.map((s) => {
+                      const title =
+                        s.assignment_title ||
+                        myAssignments.find((a) => a.id === s.assignment_id)?.title ||
+                        'Задание';
+                      const hasScore = s.score != null;
+                      const verdict = s.external_verdict;
+                      const vTone = verdictTone(verdict);
+                      return (
+                        <li key={s.id}>
+                          <Link
+                            to={`/me/submissions/${s.id}`}
+                            data-testid={`dashboard-recent-${s.id}`}
+                            className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {title}
+                              </div>
+                              <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground truncate">
+                                <span>{fmtDate(s.submitted_at)}</span>
+                                {s.course_name && (
+                                  <>
+                                    <span aria-hidden>·</span>
+                                    <span className="truncate">{s.course_name}</span>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                            {verdict && (
+                              <span
+                                className={cn(
+                                  'text-xs shrink-0',
+                                  toneText[vTone],
+                                )}
+                                title="Вердикт Yandex.Contest"
+                              >
+                                {verdict}
+                              </span>
                             )}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground shrink-0">
-                            на проверке
-                          </span>
-                        )}
-                        <ChevronRight
-                          aria-hidden
-                          className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                        />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
+                            {hasScore ? (
+                              <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                                {Number(s.score).toFixed(1)}
+                                {s.max_score != null && (
+                                  <span className="text-muted-foreground"> / {s.max_score}</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground shrink-0">
+                                на проверке
+                              </span>
+                            )}
+                            <ChevronRight
+                              aria-hidden
+                              className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                            />
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  {filteredSubs.length > SUBS_LIMIT && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      Показаны последние {SUBS_LIMIT} из {filteredSubs.length}.
+                    </p>
+                  )}
+                </>
+              )}
             </section>
           )}
         </div>
