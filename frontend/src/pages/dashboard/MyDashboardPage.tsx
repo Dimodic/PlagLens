@@ -40,15 +40,24 @@ import {
 } from '@/components/ui/select';
 import { cn } from '@/components/ui/utils';
 
-type Tone = 'high' | 'mid' | 'low' | 'muted' | 'ok';
+type Tone = 'high' | 'mid' | 'low' | 'muted';
 
 const toneText: Record<Tone, string> = {
   high: 'text-sev-high',
   mid: 'text-sev-mid',
   low: 'text-muted-foreground',
   muted: 'text-muted-foreground/70',
-  ok: 'text-sev-low',
 };
+
+/** Yandex.Contest-style «passed compilation + tests» verdicts. CE / WA /
+ *  PE / RTE never make it to the teacher's queue (the import pipeline
+ *  filters them out), so we surface only these on the student dashboard
+ *  — the student already saw the red ones in the contest UI. */
+function isAcceptedVerdict(v: string | null | undefined): boolean {
+  if (!v) return false;
+  const s = v.trim().toLowerCase();
+  return s === 'ok' || s === 'accepted';
+}
 
 /** Human countdown for a future deadline. Past deadlines collapse to
  *  «Прошёл» (we don't show them anyway). */
@@ -72,24 +81,6 @@ const fmtDate = (iso: string | null | undefined) =>
         month: 'short',
       })
     : '';
-
-/** Map Y.Contest-style verdict strings to a tone. «OK» / «Accepted»
- *  read as success; «Wrong Answer», «Compilation Error», «Runtime
- *  Error», «Presentation Error» as fail; the rest sit in the middle. */
-function verdictTone(v: string | null | undefined): Tone {
-  if (!v) return 'muted';
-  const s = v.toLowerCase();
-  if (s.includes('ok') || s.includes('accept')) return 'ok';
-  if (
-    s.includes('wrong') ||
-    s.includes('compil') ||
-    s.includes('runtime') ||
-    s.includes('present')
-  ) {
-    return 'high';
-  }
-  return 'mid';
-}
 
 type StatusFilter = 'all' | 'graded' | 'pending';
 
@@ -166,9 +157,35 @@ export default function MyDashboardPage() {
     [myCourses],
   );
 
-  // -- Filtered + sorted submissions list. ----------------------------- //
+  // -- Filtered + deduped submissions list. --------------------------- //
+  //
+  // The teacher's review queue only ever sees Y.Contest «OK» rows — the
+  // import pipeline drops CE / WA / PE / RTE before they hit the inbox.
+  // Anything else in /users/me/submissions is contest-side noise the
+  // student already saw in Y.Contest. Surface only the «passed»
+  // submissions, and collapse multiple OK attempts on the same
+  // assignment to the latest one (so a student who hit «Submit» five
+  // times sees one row, not five).
+  //
+  // After the OK + latest-per-assignment filter, apply the user's
+  // status / course filters on top.
   const filteredSubs = useMemo(() => {
-    let arr = mySubs.slice();
+    const acceptedOnly = mySubs.filter((s) =>
+      isAcceptedVerdict(s.external_verdict),
+    );
+    // group by assignment_id, keep newest submitted_at
+    const latestByAsg = new Map<string, MySub>();
+    for (const s of acceptedOnly) {
+      const prev = latestByAsg.get(s.assignment_id);
+      if (
+        !prev ||
+        new Date(s.submitted_at).getTime() >
+          new Date(prev.submitted_at).getTime()
+      ) {
+        latestByAsg.set(s.assignment_id, s);
+      }
+    }
+    let arr = [...latestByAsg.values()];
     if (statusFilter === 'graded') arr = arr.filter((s) => s.score != null);
     else if (statusFilter === 'pending')
       arr = arr.filter((s) => s.score == null);
@@ -181,6 +198,15 @@ export default function MyDashboardPage() {
     );
     return arr;
   }, [mySubs, statusFilter, courseFilter]);
+
+  // Visibility of the «Мои посылки» section itself: hide when the
+  // student has 0 OK-attempts (showing an empty list with filters above
+  // is just chrome). We compute this off the unfiltered set so toggling
+  // a filter to «ничего не подходит» still keeps the section.
+  const hasAnyAcceptedSubs = useMemo(
+    () => mySubs.some((s) => isAcceptedVerdict(s.external_verdict)),
+    [mySubs],
+  );
 
   // How many rows to render in «Мои посылки». 20 is enough to read the
   // recent state at a glance; the detail page handles deep browsing.
@@ -335,7 +361,7 @@ export default function MyDashboardPage() {
             </ul>
           </section>
 
-          {mySubs.length > 0 && (
+          {hasAnyAcceptedSubs && (
             <section data-testid="dashboard-recent">
               <div className="mb-3 flex items-baseline justify-between gap-4">
                 <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
@@ -397,8 +423,6 @@ export default function MyDashboardPage() {
                         myAssignments.find((a) => a.id === s.assignment_id)?.title ||
                         'Задание';
                       const hasScore = s.score != null;
-                      const verdict = s.external_verdict;
-                      const vTone = verdictTone(verdict);
                       return (
                         <li key={s.id}>
                           <Link
@@ -420,17 +444,6 @@ export default function MyDashboardPage() {
                                 )}
                               </div>
                             </div>
-                            {verdict && (
-                              <span
-                                className={cn(
-                                  'text-xs shrink-0',
-                                  toneText[vTone],
-                                )}
-                                title="Вердикт Yandex.Contest"
-                              >
-                                {verdict}
-                              </span>
-                            )}
                             {hasScore ? (
                               <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
                                 {Number(s.score).toFixed(1)}
