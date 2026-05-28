@@ -794,19 +794,24 @@ export default function CourseDetailPage() {
                         )}
                         {/* Single per-row action: open the drawer. Delete +
                             Archive live inside the drawer footer to avoid
-                            stacking icons on the row (looked cluttered). */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDrawerHwId(hwId);
-                          }}
-                          aria-label="Просмотр и настройки ДЗ"
-                          data-testid={`course-hw-settings-${hw.id}`}
-                          className="text-muted-foreground hover:text-foreground p-1 -m-1 rounded opacity-60 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Settings className="h-4 w-4" />
-                        </button>
+                            stacking icons on the row (looked cluttered).
+                            Staff-only — for a student the drawer is just
+                            a roster + grade-config they can't change, so
+                            the gear icon was pure noise on /me's twin. */}
+                        {isStaff && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDrawerHwId(hwId);
+                            }}
+                            aria-label="Просмотр и настройки ДЗ"
+                            data-testid={`course-hw-settings-${hw.id}`}
+                            className="text-muted-foreground hover:text-foreground p-1 -m-1 rounded opacity-60 group-hover:opacity-100 transition-opacity"
+                          >
+                            <Settings className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                       {isOpen && (
                         <div
