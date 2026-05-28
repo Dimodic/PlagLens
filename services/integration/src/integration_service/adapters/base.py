@@ -29,6 +29,13 @@ class RemoteParticipant:
     Identity providers (Yandex / Stepik) rarely return an email — usually we
     have a ``login`` and an ``external_id``. The downstream ``identity``
     service uses ``external_id`` as the dedup key when creating users.
+
+    ``participant_id`` is the contest-scoped numeric id Yandex.Contest puts
+    on each submission row (``authorId``/``participantId``). It CHANGES
+    between contests, so don't use it as a stable user key. The stable
+    one is ``login`` (yandex passport login). We surface both so the
+    submission-import path can map nonstable participantIds back to the
+    stable login.
     """
 
     external_id: str
@@ -37,6 +44,7 @@ class RemoteParticipant:
     name: Optional[str] = None
     surname: Optional[str] = None
     email: Optional[str] = None
+    participant_id: Optional[str] = None
     extra: Dict[str, Any] = field(default_factory=dict)
 
 

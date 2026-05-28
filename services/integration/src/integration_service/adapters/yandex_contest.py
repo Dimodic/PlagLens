@@ -150,6 +150,15 @@ def _participant_role(raw: dict[str, Any]) -> str:
 
 def _to_remote_participant(raw: dict[str, Any]) -> RemoteParticipant:
     pid = str(raw.get("uid") or raw.get("id") or raw.get("login") or "")
+    # The participant ``id`` is Y.Contest's per-contest numeric id —
+    # the same field that lands as ``authorId``/``participantId`` on
+    # each submission row. Preserve it separately so the submissions
+    # importer can build a map participantId → login for stable
+    # cross-contest user attribution.
+    participant_id_raw = raw.get("id")
+    participant_id = (
+        str(participant_id_raw) if participant_id_raw is not None else None
+    )
     return RemoteParticipant(
         external_id=pid,
         role=_participant_role(raw),
@@ -157,6 +166,7 @@ def _to_remote_participant(raw: dict[str, Any]) -> RemoteParticipant:
         name=raw.get("firstName") or raw.get("name"),
         surname=raw.get("lastName") or raw.get("surname"),
         email=raw.get("email"),
+        participant_id=participant_id,
         extra={
             k: v
             for k, v in raw.items()

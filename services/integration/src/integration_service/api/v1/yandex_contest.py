@@ -529,6 +529,26 @@ async def _import_submissions_for_aliases(
     dedup count the UI just shows "импортировано 0" and the teacher
     reasonably suspects something is broken.
     """
+    # Stable per-user attribution: Y.Contest's submission list only
+    # surfaces the contest-scoped numeric participantId, which CHANGES
+    # between contests for the same person. To produce an ``author_id``
+    # that survives multi-contest imports, pre-fetch participants for
+    # this contest and build a participantId → login map up front.
+    # Failures here aren't fatal — we just fall back to the unstable
+    # participantId for any miss.
+    pid_to_login: dict[str, str] = {}
+    try:
+        pres = await adapter.import_participants(cfg, {"contest_id": contest_id})
+        for rp in pres.participants:
+            if rp.participant_id and rp.login:
+                pid_to_login[str(rp.participant_id)] = str(rp.login)
+    except Exception as exc:  # noqa: BLE001 — best-effort enrichment
+        logger.warning(
+            "yc.import.participants_prefetch_failed",
+            contest_id=contest_id,
+            error=str(exc),
+        )
+
     # Walk YC's submission list page-by-page. Each page costs ~PAGE_SIZE
     # × 0.1s on the /full GETs inside the adapter, so we bound the total
     # pages to keep the request within the gateway timeout headroom.
@@ -687,13 +707,29 @@ async def _import_submissions_for_aliases(
                 )
         items: list[dict[str, Any]] = []
         for rs in subs:
-            # Stable per-participant pseudo-id. Falls back to login when the
-            # remote didn't surface a numeric uid; refuses the row outright
-            # if neither is present (would collide on dedup constraint).
-            if rs.external_user_id:
-                author_id = f"yc:{rs.external_user_id}"
+            # Stable per-participant id. The submission list endpoint
+            # only carries Y.Contest's per-contest numeric participantId
+            # (``rs.external_user_id``) — which CHANGES between contests
+            # for the same student. Look it up in the participants map
+            # we pre-fetched (``pid_to_login``) to convert it to the
+            # yandex passport login, which IS stable cross-contest.
+            #
+            # Fallbacks, in order:
+            #   1. ``yc:<login>``     — pid was in the map (good case).
+            #   2. ``yc:login:<x>``   — submission row itself carried a
+            #                            login-shaped string (rare; some
+            #                            tenants get a real login in the
+            #                            list payload).
+            #   3. ``yc:uid:<pid>``   — neither — emit unstable id with a
+            #                            ``uid:`` prefix so a future
+            #                            migration can recognise it.
+            login = pid_to_login.get(str(rs.external_user_id or ""))
+            if login:
+                author_id = f"yc:{login}"
             elif rs.login:
                 author_id = f"yc:login:{rs.login}"
+            elif rs.external_user_id:
+                author_id = f"yc:uid:{rs.external_user_id}"
             else:
                 continue
             if not rs.source_code:
