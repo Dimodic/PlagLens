@@ -107,19 +107,19 @@ export default function LoginProvidersPage() {
               between them. */}
           <div
             aria-hidden
-            className="pointer-events-none absolute left-1/2 top-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border/60 md:block"
+            className="pointer-events-none absolute left-1/2 top-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border md:block"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute left-1/2 bottom-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border/60 md:block"
+            className="pointer-events-none absolute left-1/2 bottom-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border md:block"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute top-1/2 left-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border/60 md:block"
+            className="pointer-events-none absolute top-1/2 left-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border md:block"
           />
           <div
             aria-hidden
-            className="pointer-events-none absolute top-1/2 right-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border/60 md:block"
+            className="pointer-events-none absolute top-1/2 right-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border md:block"
           />
 
           {providers.map((p, i) => {
@@ -145,28 +145,36 @@ export default function LoginProvidersPage() {
                   </span>
                 </div>
 
-                {p.redirect_uri && (
-                  <div className="flex items-center gap-2">
-                    <code
-                      className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80"
-                      title={p.redirect_uri}
-                    >
-                      {p.redirect_uri}
-                    </code>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 shrink-0"
-                      onClick={() => copy(p.redirect_uri)}
-                      title="Скопировать redirect URI"
-                      aria-label="Скопировать redirect URI"
-                      data-testid={`login-copy-${p.provider}`}
-                    >
-                      <Copy className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                )}
+                <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 text-xs">
+                  <span className="text-muted-foreground">client_id</span>
+                  <code className="font-mono text-foreground/80 truncate">
+                    {p.client_id_preview || '—'}
+                  </code>
+                  <span />
+                  {p.redirect_uri && (
+                    <>
+                      <span className="text-muted-foreground">redirect_uri</span>
+                      <code
+                        className="font-mono text-foreground/80 truncate"
+                        title={p.redirect_uri}
+                      >
+                        {p.redirect_uri}
+                      </code>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="-my-1 h-6 w-6 shrink-0"
+                        onClick={() => copy(p.redirect_uri)}
+                        title="Скопировать redirect URI"
+                        aria-label="Скопировать redirect URI"
+                        data-testid={`login-copy-${p.provider}`}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </Button>
+                    </>
+                  )}
+                </div>
 
                 <div className="flex justify-end pt-1">
                   <Button

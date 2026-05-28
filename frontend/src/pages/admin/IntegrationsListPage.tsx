@@ -35,7 +35,6 @@ import {
   Power,
   RefreshCw,
   Trash2,
-  XCircle,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { Button } from '@/components/ui/button';
@@ -652,11 +651,8 @@ function OAuthProvidersPanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Здесь админ выдаёт платформе доступ к провайдерам импорта (Yandex.Contest,
-        Stepik, Google Sheets). Заполните <code className="font-mono">client_id</code>{' '}
-        и <code className="font-mono">client_secret</code> приложения, скопируйте{' '}
-        <code className="font-mono">redirect_uri</code> в настройки на стороне
-        провайдера — и преподаватели смогут подключать свои аккаунты в один клик.
+        Подключите OAuth-провайдеры импорта и экспорта. Преподаватели смогут
+        потом подключать свои аккаунты в один клик.
       </p>
 
       <div className="divide-y divide-border/50 border-y border-border/50">
@@ -668,22 +664,10 @@ function OAuthProvidersPanel() {
           >
             <div className="min-w-0 space-y-1">
               <div className="flex items-center gap-2">
-                {p.configured ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                ) : (
-                  <XCircle className="h-4 w-4 text-muted-foreground/60" />
-                )}
                 <span className="text-sm font-medium text-foreground">
                   {p.title}
                 </span>
-                <span
-                  className={cn(
-                    'text-xs',
-                    p.configured
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-muted-foreground/70',
-                  )}
-                >
+                <span className="text-xs text-muted-foreground">
                   {p.configured ? 'настроено' : 'не настроено'}
                 </span>
               </div>
@@ -706,21 +690,14 @@ function OAuthProvidersPanel() {
                 )}
               </div>
               {p.provider_kind === 'google_sheets' && (
-                <div className="space-y-1 pt-1">
-                  <Link
-                    to="/integrations/google-sheets/setup"
-                    className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-                    data-testid="integration-oauth-google-sheets-sa"
-                  >
-                    Сервисный аккаунт (JSON)
-                    <ChevronRight className="h-3 w-3" />
-                  </Link>
-                  <p className="text-xs text-muted-foreground">
-                    Самый простой путь: вставьте один JSON сервис-аккаунта —
-                    преподаватели делятся своей таблицей с его e-mail. OAuth ниже
-                    настраивать необязательно.
-                  </p>
-                </div>
+                <Link
+                  to="/integrations/google-sheets/setup"
+                  className="inline-flex items-center gap-1 pt-1 text-xs text-primary hover:underline"
+                  data-testid="integration-oauth-google-sheets-sa"
+                >
+                  Сервисный аккаунт (JSON)
+                  <ChevronRight className="h-3 w-3" />
+                </Link>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -767,13 +744,6 @@ function OAuthProvidersPanel() {
           </div>
         ))}
       </div>
-
-      <p className="text-xs text-muted-foreground">
-        Совет: у Yandex.Contest и Stepik укажите <em>широкий</em> scope один раз
-        (например <code className="font-mono">contest:manage</code>) — этого
-        хватит, чтобы преподаватель потом просто прошёл OAuth-подтверждение,
-        не запрашивая отдельных разрешений на каждое подключение.
-      </p>
 
       <IntegrationOAuthEditDialog
         provider={editing}
