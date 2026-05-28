@@ -3,14 +3,18 @@
  *
  * Admin sets the social-login OAuth client credentials per provider
  * (Google / Yandex / GitHub / Telegram) so users register / sign in with a
- * single click. This is the LOGIN side of OAuth — distinct from
- * /admin/integrations (the IMPORT/EXPORT side).
+ * single click. The LOGIN side of OAuth — distinct from /admin/integrations
+ * (the IMPORT/EXPORT side).
  *
- * Flat document rows (no cards) — same rhythm as the integration OAuth
- * directory, per the design code. State is shown as quiet muted text (the
- * «Настроить / Изменить» button already signals it) — no coloured badges.
- * ``redirect_uri`` is copy-only: it's our fixed callback, you paste it INTO
- * the provider's app, you don't edit it. The secret is write-only.
+ * Layout — «карточки, но не карточки»: a 2×2 grid where four thin segments
+ * draw a "+"-shaped divider between the quadrants WITH a gap at the centre
+ * (the segments stop short of the intersection). No card borders, no card
+ * backgrounds — structure comes from the cross alone. State is shown as
+ * quiet muted text; the «Настроить / Изменить» button already signals it.
+ * Per-cell content is intentionally medium-density: name + status,
+ * redirect_uri (copy-only, our fixed callback — paste into the provider's
+ * app), and the edit action. Everything else (client_id preview, docs link)
+ * lives inside the edit dialog.
  */
 import { FormEvent, useEffect, useState } from 'react';
 import { Copy, ExternalLink, Loader2 } from 'lucide-react';
@@ -35,10 +39,13 @@ import {
 } from '@/hooks/api/useAdminOAuth';
 import type { OAuthProviderInfo } from '@/api/endpoints/adminOAuth';
 import type { Problem } from '@/api/types';
+import { cn } from '@/components/ui/utils';
 
 // Login-relevant providers only. Stepik is an import provider (data pulls),
-// not a sign-in button — exclude it even if the API returns it.
+// not a sign-in button — exclude it even if the API returns it. Order is
+// stable so the 2×2 layout doesn't shuffle between renders.
 const LOGIN_PROVIDERS = new Set(['google', 'yandex', 'github', 'telegram']);
+const PROVIDER_ORDER = ['google', 'yandex', 'github', 'telegram'];
 
 /** Configured = a client_id (preview) is present. The secret is write-only,
  *  so it can't be the readiness signal. */
@@ -51,7 +58,12 @@ export default function LoginProvidersPage() {
   const notify = useNotifications();
 
   const { data, isPending, error } = useOAuthProviders();
-  const providers = (data ?? []).filter((p) => LOGIN_PROVIDERS.has(p.provider));
+  const providers = (data ?? [])
+    .filter((p) => LOGIN_PROVIDERS.has(p.provider))
+    .sort(
+      (a, b) =>
+        PROVIDER_ORDER.indexOf(a.provider) - PROVIDER_ORDER.indexOf(b.provider),
+    );
 
   const [editing, setEditing] = useState<OAuthProviderInfo | null>(null);
 
@@ -69,9 +81,7 @@ export default function LoginProvidersPage() {
       <p className="text-sm text-muted-foreground">
         Заполните <code className="font-mono">client_id</code> и{' '}
         <code className="font-mono">client_secret</code> приложения — и
-        пользователи смогут регистрироваться и входить одним кликом. Скопируйте{' '}
-        <code className="font-mono">redirect_uri</code> в настройки приложения на
-        стороне провайдера, иначе он отклонит вход.
+        пользователи смогут регистрироваться и входить одним кликом.
       </p>
 
       {error && (
@@ -90,65 +100,75 @@ export default function LoginProvidersPage() {
           <Loader2 className="h-4 w-4 animate-spin" /> Загружаем…
         </div>
       ) : (
-        <div className="divide-y divide-border/50 border-y border-border/50">
-          {providers.map((p) => {
+        <div className="relative grid grid-cols-1 md:grid-cols-2">
+          {/* Cross-with-gap divider — four thin segments that stop ~28px short
+              of the centre, leaving a clear "breath" at the intersection.
+              Desktop only; on mobile the cells stack with a simple border-b
+              between them. */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 top-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border/60 md:block"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute left-1/2 bottom-0 hidden h-[calc(50%-28px)] w-px -translate-x-1/2 bg-border/60 md:block"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 left-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border/60 md:block"
+          />
+          <div
+            aria-hidden
+            className="pointer-events-none absolute top-1/2 right-0 hidden h-px w-[calc(50%-28px)] -translate-y-1/2 bg-border/60 md:block"
+          />
+
+          {providers.map((p, i) => {
             const configured = isConfigured(p);
+            const isLast = i === providers.length - 1;
             return (
               <div
                 key={p.provider}
-                className="grid grid-cols-[1fr_auto] items-center gap-4 py-4"
+                className={cn(
+                  'space-y-3 p-6',
+                  // Mobile (1-col) divider between cells; on desktop the cross
+                  // handles separation, so no border there.
+                  !isLast && 'border-b border-border/60 md:border-0',
+                )}
                 data-testid={`login-provider-${p.provider}`}
               >
-                <div className="min-w-0 space-y-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-sm font-medium text-foreground">
-                      {p.title}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {configured ? 'настроено' : 'не настроено'}
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-                    <span className="text-muted-foreground">client_id</span>
-                    <span className="font-mono text-foreground/80 truncate">
-                      {p.client_id_preview || '—'}
-                    </span>
-                    {p.redirect_uri && (
-                      <>
-                        <span className="text-muted-foreground">redirect_uri</span>
-                        <span className="font-mono text-foreground/80 truncate">
-                          {p.redirect_uri}
-                        </span>
-                      </>
-                    )}
-                  </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <h3 className="text-base font-semibold text-foreground">
+                    {p.title}
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    {configured ? 'настроено' : 'не настроено'}
+                  </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
-                  {p.redirect_uri && (
+
+                {p.redirect_uri && (
+                  <div className="flex items-center gap-2">
+                    <code
+                      className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80"
+                      title={p.redirect_uri}
+                    >
+                      {p.redirect_uri}
+                    </code>
                     <Button
+                      type="button"
                       variant="ghost"
                       size="icon"
+                      className="h-7 w-7 shrink-0"
                       onClick={() => copy(p.redirect_uri)}
                       title="Скопировать redirect URI"
                       aria-label="Скопировать redirect URI"
                       data-testid={`login-copy-${p.provider}`}
                     >
-                      <Copy className="h-4 w-4" />
+                      <Copy className="h-3.5 w-3.5" />
                     </Button>
-                  )}
-                  {p.docs_url && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      asChild
-                      title="Где зарегистрировать"
-                      aria-label="Где зарегистрировать"
-                    >
-                      <a href={p.docs_url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  )}
+                  </div>
+                )}
+
+                <div className="flex justify-end pt-1">
                   <Button
                     variant="outline"
                     size="sm"
@@ -244,7 +264,21 @@ function ProviderEditDialog({ provider, onClose }: DialogProps) {
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>{provider.title}</DialogTitle>
-          <DialogDescription>Вход через {provider.provider}</DialogDescription>
+          <DialogDescription className="flex items-center gap-3">
+            <span>Вход через {provider.provider}</span>
+            {provider.docs_url && (
+              <a
+                href={provider.docs_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-primary hover:underline"
+                data-testid="login-docs-link"
+              >
+                где зарегистрировать
+                <ExternalLink className="h-3 w-3" />
+              </a>
+            )}
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-4" noValidate>
