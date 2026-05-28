@@ -20,6 +20,11 @@ from notification_service.channels import (
     MailgunEmailChannel,
     SmtpEmailChannel,
 )
+from notification_service.common.email_secrets import (
+    EmailSecretsUnavailable,
+    decrypt as decrypt_secret,
+    encrypt as encrypt_secret,
+)
 from notification_service.config import get_settings
 from notification_service.db import get_db
 from notification_service.delivery import get_channels, reset_email_channel
@@ -67,19 +72,55 @@ async def _get_or_create_cfg(db: AsyncSession, tenant_id: str) -> EmailTransport
 
 
 def _build_channel_from_cfg(cfg: EmailTransportConfig) -> Any:
-    """Materialise a Channel instance from a stored ``EmailTransportConfig``."""
+    """Materialise a Channel instance from a stored ``EmailTransportConfig``.
+
+    Per-row overrides (host/port/username/password/domain/api_key/...) win
+    over env-level defaults. Anything NULL falls through to the channel's
+    own env-driven default.
+    """
     s = get_settings()
     if (cfg.provider or "smtp").lower() == "mailgun":
         return MailgunEmailChannel(
-            domain=s.MAILGUN_DOMAIN,
+            domain=cfg.mailgun_domain or s.MAILGUN_DOMAIN,
+            api_key=decrypt_secret(cfg.mailgun_api_key_encrypted) or s.MAILGUN_API_KEY,
             from_email=cfg.from_email,
             from_name=cfg.from_name,
             reply_to=cfg.reply_to,
         )
     return SmtpEmailChannel(
+        host=cfg.smtp_host,
+        port=cfg.smtp_port,
+        username=cfg.smtp_username,
+        password=decrypt_secret(cfg.smtp_password_encrypted),
+        use_tls=cfg.smtp_use_tls if cfg.smtp_host else None,
+        use_starttls=cfg.smtp_use_starttls if cfg.smtp_host else None,
         from_email=cfg.from_email,
         from_name=cfg.from_name,
         reply_to=cfg.reply_to,
+    )
+
+
+def _cfg_to_out(cfg: EmailTransportConfig) -> EmailConfigOut:
+    return EmailConfigOut(
+        id=cfg.id,
+        tenant_id=cfg.tenant_id,
+        provider=cfg.provider,
+        api_key_secret_ref=cfg.api_key_secret_ref,
+        from_email=cfg.from_email,
+        from_name=cfg.from_name,
+        reply_to=cfg.reply_to,
+        dns_validated=cfg.dns_validated,
+        default_for_tenant=cfg.default_for_tenant,
+        updated_at=cfg.updated_at,
+        smtp_host=cfg.smtp_host,
+        smtp_port=cfg.smtp_port,
+        smtp_username=cfg.smtp_username,
+        smtp_password_set=bool(cfg.smtp_password_encrypted),
+        smtp_use_tls=cfg.smtp_use_tls,
+        smtp_use_starttls=cfg.smtp_use_starttls,
+        mailgun_domain=cfg.mailgun_domain,
+        mailgun_api_key_set=bool(cfg.mailgun_api_key_encrypted),
+        mailgun_region=cfg.mailgun_region or "eu",
     )
 
 
@@ -94,7 +135,7 @@ async def get_email_config(
     db: AsyncSession = Depends(get_db),
 ) -> EmailConfigOut:
     cfg = await _get_or_create_cfg(db, principal.tenant_id)
-    return EmailConfigOut.model_validate(cfg)
+    return _cfg_to_out(cfg)
 
 
 @router.patch("/admin/notifications/email-config", response_model=EmailConfigOut)
@@ -104,6 +145,7 @@ async def patch_email_config(
     db: AsyncSession = Depends(get_db),
 ) -> EmailConfigOut:
     cfg = await _get_or_create_cfg(db, principal.tenant_id)
+
     if body.provider is not None:
         if body.provider not in ("smtp", "mailgun"):
             raise Problem(400, "BAD_REQUEST", "provider must be smtp|mailgun")
@@ -118,32 +160,80 @@ async def patch_email_config(
         cfg.reply_to = str(body.reply_to)
     if body.default_for_tenant is not None:
         cfg.default_for_tenant = body.default_for_tenant
+
+    # SMTP overrides
+    if body.smtp_host is not None:
+        cfg.smtp_host = body.smtp_host or None
+    if body.smtp_port is not None:
+        cfg.smtp_port = body.smtp_port
+    if body.smtp_username is not None:
+        cfg.smtp_username = body.smtp_username or None
+    if body.smtp_use_tls is not None:
+        cfg.smtp_use_tls = body.smtp_use_tls
+    if body.smtp_use_starttls is not None:
+        cfg.smtp_use_starttls = body.smtp_use_starttls
+    if body.smtp_password is not None:
+        # Empty string = «clear the stored password»; non-empty = encrypt.
+        if body.smtp_password == "":
+            cfg.smtp_password_encrypted = None
+        else:
+            try:
+                cfg.smtp_password_encrypted = encrypt_secret(body.smtp_password)
+            except EmailSecretsUnavailable as e:
+                raise Problem(503, "EMAIL_SECRET_UNAVAILABLE", str(e))
+
+    # Mailgun overrides
+    if body.mailgun_domain is not None:
+        cfg.mailgun_domain = body.mailgun_domain or None
+    if body.mailgun_region is not None:
+        cfg.mailgun_region = body.mailgun_region
+    if body.mailgun_api_key is not None:
+        if body.mailgun_api_key == "":
+            cfg.mailgun_api_key_encrypted = None
+        else:
+            try:
+                cfg.mailgun_api_key_encrypted = encrypt_secret(body.mailgun_api_key)
+            except EmailSecretsUnavailable as e:
+                raise Problem(503, "EMAIL_SECRET_UNAVAILABLE", str(e))
+
     cfg.updated_at = datetime.now(UTC)
     await db.flush()
 
     # Hot-reload the runtime channel.
     new_chan = _build_channel_from_cfg(cfg)
     await reset_email_channel(new_chan)
-    return EmailConfigOut.model_validate(cfg)
+    return _cfg_to_out(cfg)
 
 
 @router.post("/admin/notifications/email-config:test")
 async def test_email(
+    to: str | None = Query(
+        default=None,
+        description="Recipient address; defaults to the admin's JWT email claim",
+    ),
     principal: Principal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     cfg = await _get_or_create_cfg(db, principal.tenant_id)
+    # Pick a real recipient: explicit ?to= wins, else email claim from the
+    # admin's JWT. Synthesised `admin+<uid>@example.com` is useless for
+    # actually verifying the transport — silently delivered into the void.
+    recipient = (to or principal.raw.get("email") or "").strip()
+    if not recipient:
+        raise Problem(
+            400,
+            "BAD_REQUEST",
+            "No recipient: pass ?to=… or include `email` in the admin's JWT",
+        )
     channels = get_channels()
-    # Recipient: prefer admin's stored email; for MVP use synthesised test address.
-    recipient = f"admin+{principal.user_id}@example.com"
     req = DeliveryRequest(
         notification_id="cfg-test",
         user_id=principal.user_id,
         tenant_id=principal.tenant_id,
-        title="PlagLens email config test",
+        title="PlagLens — тест email-транспорта",
         body=(
-            "<p>If you received this, "
-            f"<strong>{cfg.provider}</strong> transport is wired up.</p>"
+            "<p>Если вы получили это письмо, транспорт "
+            f"<strong>{cfg.provider}</strong> настроен корректно.</p>"
         ),
         recipient_email=recipient,
     )

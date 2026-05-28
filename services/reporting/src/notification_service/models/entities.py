@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -187,6 +188,29 @@ class EmailTransportConfig(Base):
     reply_to: Mapped[str | None] = mapped_column(String(320), nullable=True)
     dns_validated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     default_for_tenant: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # --- per-tenant SMTP creds (admin-editable, Fernet-encrypted password). ---
+    # Nullable so existing rows keep working; channels fall back to env when
+    # NULL. ``smtp_use_tls`` = implicit TLS (port 465); ``smtp_use_starttls``
+    # = STARTTLS on a cleartext socket (port 587). The UI surfaces them as a
+    # single mode selector.
+    smtp_host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_port: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    smtp_username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    smtp_password_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    smtp_use_tls: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    smtp_use_starttls: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True
+    )
+    # --- per-tenant Mailgun creds ---
+    mailgun_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    mailgun_api_key_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    mailgun_region: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="eu"
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

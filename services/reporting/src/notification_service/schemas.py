@@ -157,6 +157,12 @@ class TemplatePreviewOut(BaseModel):
 # ---- Email transport ----
 
 class EmailConfigOut(BaseModel):
+    """What the admin UI reads off the server.
+
+    Secrets (SMTP password, Mailgun API key) are never returned in
+    plaintext — we surface boolean ``*_set`` flags instead so the UI can
+    show «••••••• (введите заново для замены)» style hints.
+    """
     model_config = ConfigDict(from_attributes=True)
 
     id: str
@@ -170,14 +176,45 @@ class EmailConfigOut(BaseModel):
     default_for_tenant: bool
     updated_at: datetime
 
+    # SMTP (per-tenant override stored on the row; NULL means «use env»).
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username: str | None = None
+    smtp_password_set: bool = False
+    smtp_use_tls: bool = False
+    smtp_use_starttls: bool = True
+
+    # Mailgun (per-tenant override).
+    mailgun_domain: str | None = None
+    mailgun_api_key_set: bool = False
+    mailgun_region: str = "eu"
+
 
 class EmailConfigPatch(BaseModel):
+    """What the admin UI writes back.
+
+    ``smtp_password`` and ``mailgun_api_key`` are plaintext on the wire
+    — the server Fernet-encrypts them before saving. Leaving them out
+    (or empty) preserves the existing stored secret. Passing an empty
+    string is treated as «clear the secret».
+    """
     provider: str | None = None
     api_key_secret_ref: str | None = None
     from_email: EmailStr | None = None
     from_name: str | None = None
     reply_to: EmailStr | None = None
     default_for_tenant: bool | None = None
+
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_username: str | None = None
+    smtp_password: str | None = None  # plaintext; server encrypts
+    smtp_use_tls: bool | None = None
+    smtp_use_starttls: bool | None = None
+
+    mailgun_domain: str | None = None
+    mailgun_api_key: str | None = None  # plaintext; server encrypts
+    mailgun_region: str | None = None
 
 
 class DnsStatusOut(BaseModel):

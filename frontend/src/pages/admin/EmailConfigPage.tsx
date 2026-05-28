@@ -1,13 +1,28 @@
 /**
- * /admin/notifications/email — email transport configuration + test.
+ * /admin/notifications/email — admin-driven SMTP / Mailgun configuration.
+ *
+ * The form drives the same DB row the notification-service reads when
+ * dispatching transactional mail (register-verify, password-reset,
+ * invitations). Saving a row hot-reloads the runtime channel — no
+ * container restart, no SSH.
+ *
+ * Secrets (SMTP password, Mailgun API key) are write-only: GET never
+ * returns them in plaintext, just a boolean ``*_set`` flag. Leaving the
+ * password field empty on save preserves the stored secret; submitting
+ * any non-empty value replaces it (Fernet-encrypted server-side).
+ *
+ * Layout — same minimalism as the OAuth / Integrations pages:
+ *   • one narrow column, no card chrome
+ *   • provider segmented switch at the top
+ *   • body switches to the matching transport form
+ *   • bottom row: «Тест отправки» (sends to the admin's own email) +
+ *     «Сохранить»
  */
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Loader2, MailCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
-import { StatusPill } from '@/components/common/StatusPill';
 import { Page, PageHeader } from '@/components/layout/Page';
 import {
   Select,
@@ -16,123 +31,197 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ProblemAlert } from '@/components/common/ProblemAlert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
-  useDnsStatus,
   useEmailConfig,
   useTestEmail,
   useUpdateEmailConfig,
 } from '@/hooks/api/useNotificationsAdmin';
 import { useAuth } from '@/auth/useAuth';
-import type { EmailTransport } from '@/api/endpoints/notificationsAdmin';
+import type {
+  EmailConfigPatch,
+  EmailProvider,
+} from '@/api/endpoints/notificationsAdmin';
 import type { Problem } from '@/api/types';
+import { cn } from '@/components/ui/utils';
+
+// SMTP modes — backend stores them as two booleans (smtp_use_tls,
+// smtp_use_starttls) but for a sane UI we collapse to a single enum
+// because they're mutually exclusive in practice.
+type SmtpMode = 'ssl' | 'starttls' | 'plain';
+
+function modeToBooleans(m: SmtpMode): { use_tls: boolean; use_starttls: boolean } {
+  if (m === 'ssl') return { use_tls: true, use_starttls: false };
+  if (m === 'starttls') return { use_tls: false, use_starttls: true };
+  return { use_tls: false, use_starttls: false };
+}
+
+function booleansToMode(use_tls: boolean, use_starttls: boolean): SmtpMode {
+  if (use_tls) return 'ssl';
+  if (use_starttls) return 'starttls';
+  return 'plain';
+}
 
 export function EmailConfigPage() {
-  useDocumentTitle('Email-конфиг');
+  useDocumentTitle('Настройка почты');
   const { user } = useAuth();
   const notify = useNotifications();
   const cfgQ = useEmailConfig();
-  const dnsQ = useDnsStatus();
   const update = useUpdateEmailConfig();
   const testM = useTestEmail();
 
-  const [transport, setTransport] = useState<EmailTransport>('smtp');
+  const [provider, setProvider] = useState<EmailProvider>('smtp');
   const [fromEmail, setFromEmail] = useState('');
-  const [fromName, setFromName] = useState('');
+  const [fromName, setFromName] = useState('PlagLens');
+  const [replyTo, setReplyTo] = useState('');
+
+  // SMTP
   const [smtpHost, setSmtpHost] = useState('');
-  const [smtpPort, setSmtpPort] = useState<number>(587);
+  const [smtpPort, setSmtpPort] = useState<number>(465);
   const [smtpUsername, setSmtpUsername] = useState('');
-  const [smtpTls, setSmtpTls] = useState(true);
+  const [smtpPassword, setSmtpPassword] = useState(''); // write-only
+  const [smtpPasswordSet, setSmtpPasswordSet] = useState(false);
+  const [smtpMode, setSmtpMode] = useState<SmtpMode>('ssl');
+
+  // Mailgun
   const [mailgunDomain, setMailgunDomain] = useState('');
+  const [mailgunApiKey, setMailgunApiKey] = useState(''); // write-only
+  const [mailgunApiKeySet, setMailgunApiKeySet] = useState(false);
   const [mailgunRegion, setMailgunRegion] = useState<'us' | 'eu'>('eu');
+
   const [problem, setProblem] = useState<Problem | null>(null);
 
+  // When the GET arrives, sync form state with server values. The
+  // secrets stay empty (they're not returned) — only the *_set flags
+  // populate, used to render the «••••» placeholder.
   useEffect(() => {
-    if (cfgQ.data) {
-      setTransport(cfgQ.data.transport);
-      setFromEmail(cfgQ.data.from_email);
-      setFromName(cfgQ.data.from_name);
-      setSmtpHost(cfgQ.data.smtp_host ?? '');
-      setSmtpPort(cfgQ.data.smtp_port ?? 587);
-      setSmtpUsername(cfgQ.data.smtp_username ?? '');
-      setSmtpTls(cfgQ.data.smtp_use_tls ?? true);
-      setMailgunDomain(cfgQ.data.mailgun_domain ?? '');
-      setMailgunRegion((cfgQ.data.mailgun_region as 'us' | 'eu') ?? 'eu');
-    }
+    const c = cfgQ.data;
+    if (!c) return;
+    setProvider(c.provider);
+    setFromEmail(c.from_email ?? '');
+    setFromName(c.from_name ?? 'PlagLens');
+    setReplyTo(c.reply_to ?? '');
+    setSmtpHost(c.smtp_host ?? '');
+    setSmtpPort(c.smtp_port ?? 465);
+    setSmtpUsername(c.smtp_username ?? '');
+    setSmtpPasswordSet(!!c.smtp_password_set);
+    setSmtpMode(booleansToMode(!!c.smtp_use_tls, c.smtp_use_starttls ?? true));
+    setMailgunDomain(c.mailgun_domain ?? '');
+    setMailgunApiKeySet(!!c.mailgun_api_key_set);
+    setMailgunRegion((c.mailgun_region as 'us' | 'eu') ?? 'eu');
   }, [cfgQ.data]);
 
-  const handleSave = async () => {
+  const onSave = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setProblem(null);
+    const modeBools = modeToBooleans(smtpMode);
+    const body: EmailConfigPatch = {
+      provider,
+      from_email: fromEmail.trim() || undefined,
+      from_name: fromName.trim() || undefined,
+      reply_to: replyTo.trim() || null,
+    };
+    if (provider === 'smtp') {
+      body.smtp_host = smtpHost.trim() || null;
+      body.smtp_port = smtpPort || null;
+      body.smtp_username = smtpUsername.trim() || null;
+      body.smtp_use_tls = modeBools.use_tls;
+      body.smtp_use_starttls = modeBools.use_starttls;
+      // Only send password when the admin typed something — otherwise the
+      // backend preserves the existing stored secret.
+      if (smtpPassword) body.smtp_password = smtpPassword;
+    } else {
+      body.mailgun_domain = mailgunDomain.trim() || null;
+      body.mailgun_region = mailgunRegion;
+      if (mailgunApiKey) body.mailgun_api_key = mailgunApiKey;
+    }
+    try {
+      await update.mutateAsync(body);
+      notify.success('Сохранено');
+      setSmtpPassword('');
+      setMailgunApiKey('');
+    } catch (raw) {
+      setProblem(raw as Problem);
+    }
+  };
+
+  const onTest = async () => {
+    if (!user?.email) {
+      notify.error('У вашего аккаунта не задан email — некуда отправить тест');
+      return;
+    }
     setProblem(null);
     try {
-      await update.mutateAsync({
-        transport,
-        from_email: fromEmail,
-        from_name: fromName,
-        smtp_host: smtpHost,
-        smtp_port: smtpPort,
-        smtp_username: smtpUsername,
-        smtp_use_tls: smtpTls,
-        mailgun_domain: mailgunDomain,
-        mailgun_region: mailgunRegion,
-      });
-      notify.success('Сохранено');
-    } catch (e) {
-      setProblem(e as Problem);
+      const res = await testM.mutateAsync(user.email);
+      if (res.status === 'sent') {
+        notify.success(`Тестовое письмо отправлено на ${user.email}`);
+      } else {
+        notify.error(
+          `Не доставлено (${res.status})${res.error ? `: ${res.error}` : ''}`,
+        );
+      }
+    } catch (raw) {
+      setProblem(raw as Problem);
     }
   };
 
-  const handleTest = async () => {
-    if (!user?.email) return;
-    try {
-      await testM.mutateAsync(user.email);
-      notify.success(`Тестовое письмо отправлено на ${user.email}`);
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось отправить');
-    }
-  };
+  const providerTab = (id: EmailProvider, label: string) => (
+    <button
+      type="button"
+      key={id}
+      onClick={() => setProvider(id)}
+      className={cn(
+        'flex-1 rounded-md px-4 py-2 text-sm transition-colors',
+        provider === id
+          ? 'bg-foreground text-background'
+          : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
+      )}
+      data-testid={`email-provider-${id}`}
+      aria-pressed={provider === id}
+    >
+      {label}
+    </button>
+  );
 
   return (
-    <Page width="narrow">
-      <PageHeader title="Email-конфиг" />
-
-      {problem && <ProblemAlert problem={problem} />}
+    <Page width="regular">
+      <PageHeader title="Настройка почты" />
 
       {cfgQ.isLoading ? (
         <div className="flex items-center justify-center py-12">
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <div className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email-transport">Транспорт</Label>
-              <Select
-                value={transport}
-                onValueChange={(v) => setTransport((v as EmailTransport) ?? 'smtp')}
-              >
-                <SelectTrigger id="email-transport" data-testid="email-transport-select">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="smtp">SMTP</SelectItem>
-                  <SelectItem value="mailgun">Mailgun</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+        <form onSubmit={onSave} className="space-y-6" noValidate>
+          {problem && (
+            <Alert variant="destructive" data-testid="email-config-error">
+              <AlertTitle>{problem.title || 'Не удалось'}</AlertTitle>
+              {problem.detail && <AlertDescription>{problem.detail}</AlertDescription>}
+            </Alert>
+          )}
 
+          {/* Provider switch — two-button segmented control. */}
+          <div className="flex gap-1 rounded-md bg-muted/20 p-1">
+            {providerTab('smtp', 'SMTP')}
+            {providerTab('mailgun', 'Mailgun')}
+          </div>
+
+          {/* From-address block — shared by both providers. */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="email-from-email">from_email *</Label>
+              <Label htmlFor="email-from-email">Адрес отправителя</Label>
               <Input
                 id="email-from-email"
                 value={fromEmail}
                 onChange={(e) => setFromEmail(e.currentTarget.value)}
+                placeholder="no-reply@plaglens.ru"
                 data-testid="email-from-email-input"
               />
             </div>
-
             <div className="space-y-1.5">
-              <Label htmlFor="email-from-name">from_name</Label>
+              <Label htmlFor="email-from-name">Имя отправителя</Label>
               <Input
                 id="email-from-name"
                 value={fromName}
@@ -140,62 +229,119 @@ export function EmailConfigPage() {
                 data-testid="email-from-name-input"
               />
             </div>
+          </div>
 
-            {transport === 'smtp' && (
-              <>
+          {provider === 'smtp' && (
+            <div className="space-y-4 border-t border-border/40 pt-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_120px]">
                 <div className="space-y-1.5">
-                  <Label htmlFor="smtp-host">smtp_host</Label>
+                  <Label htmlFor="smtp-host">SMTP-сервер</Label>
                   <Input
                     id="smtp-host"
                     value={smtpHost}
                     onChange={(e) => setSmtpHost(e.currentTarget.value)}
+                    placeholder="smtp.yandex.ru"
+                    autoComplete="off"
+                    data-testid="smtp-host-input"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="smtp-port">smtp_port</Label>
+                  <Label htmlFor="smtp-port">Порт</Label>
                   <Input
                     id="smtp-port"
                     type="number"
                     value={smtpPort}
-                    onChange={(e) => setSmtpPort(Number(e.currentTarget.value) || 587)}
+                    onChange={(e) => setSmtpPort(Number(e.currentTarget.value) || 0)}
+                    data-testid="smtp-port-input"
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="smtp-username">smtp_username</Label>
-                  <Input
-                    id="smtp-username"
-                    value={smtpUsername}
-                    onChange={(e) => setSmtpUsername(e.currentTarget.value)}
-                  />
-                </div>
-                <div className="flex items-center gap-2">
-                  <Switch
-                    id="smtp-tls"
-                    checked={smtpTls}
-                    onCheckedChange={(v) => setSmtpTls(v)}
-                  />
-                  <Label htmlFor="smtp-tls">Использовать TLS</Label>
-                </div>
-              </>
-            )}
+              </div>
 
-            {transport === 'mailgun' && (
-              <>
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-mode">Режим шифрования</Label>
+                <Select
+                  value={smtpMode}
+                  onValueChange={(v) => setSmtpMode((v as SmtpMode) ?? 'ssl')}
+                >
+                  <SelectTrigger id="smtp-mode" data-testid="smtp-mode-select">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ssl">SSL (порт 465 — Yandex, Gmail)</SelectItem>
+                    <SelectItem value="starttls">STARTTLS (порт 587)</SelectItem>
+                    <SelectItem value="plain">Без шифрования (порт 25 — dev)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-username">Логин</Label>
+                <Input
+                  id="smtp-username"
+                  value={smtpUsername}
+                  onChange={(e) => setSmtpUsername(e.currentTarget.value)}
+                  autoComplete="off"
+                  placeholder="user@yandex.ru"
+                  data-testid="smtp-username-input"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="smtp-password">
+                  Пароль
+                  {smtpPasswordSet && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      (введите заново для замены)
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  id="smtp-password"
+                  type="password"
+                  value={smtpPassword}
+                  onChange={(e) => setSmtpPassword(e.currentTarget.value)}
+                  autoComplete="new-password"
+                  placeholder={smtpPasswordSet ? '••••••••' : ''}
+                  data-testid="smtp-password-input"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Для Yandex используйте «пароль приложения» из{' '}
+                  <a
+                    href="https://id.yandex.ru/security/app-passwords"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-foreground hover:underline"
+                  >
+                    id.yandex.ru → Пароли приложений
+                  </a>
+                  , а не основной пароль аккаунта.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {provider === 'mailgun' && (
+            <div className="space-y-4 border-t border-border/40 pt-6">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_120px]">
                 <div className="space-y-1.5">
-                  <Label htmlFor="mailgun-domain">mailgun_domain</Label>
+                  <Label htmlFor="mailgun-domain">Домен</Label>
                   <Input
                     id="mailgun-domain"
                     value={mailgunDomain}
                     onChange={(e) => setMailgunDomain(e.currentTarget.value)}
+                    placeholder="mg.plaglens.ru"
+                    data-testid="mailgun-domain-input"
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="mailgun-region">region</Label>
+                  <Label htmlFor="mailgun-region">Регион</Label>
                   <Select
                     value={mailgunRegion}
-                    onValueChange={(v) => setMailgunRegion((v as 'us' | 'eu') ?? 'eu')}
+                    onValueChange={(v) =>
+                      setMailgunRegion((v as 'us' | 'eu') ?? 'eu')
+                    }
                   >
-                    <SelectTrigger id="mailgun-region">
+                    <SelectTrigger id="mailgun-region" data-testid="mailgun-region-select">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -204,46 +350,57 @@ export function EmailConfigPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                {dnsQ.data && (
-                  <div className="flex items-center gap-2">
-                    <StatusPill tone={dnsQ.data.spf_ok ? 'success' : 'destructive'}>
-                      SPF: {dnsQ.data.spf_ok ? 'OK' : 'FAIL'}
-                    </StatusPill>
-                    <StatusPill tone={dnsQ.data.dkim_ok ? 'success' : 'destructive'}>
-                      DKIM: {dnsQ.data.dkim_ok ? 'OK' : 'FAIL'}
-                    </StatusPill>
-                    <StatusPill tone={dnsQ.data.dmarc_ok ? 'success' : 'destructive'}>
-                      DMARC: {dnsQ.data.dmarc_ok ? 'OK' : 'FAIL'}
-                    </StatusPill>
-                  </div>
-                )}
-              </>
-            )}
+              </div>
 
-            <div className="flex items-center justify-between gap-3 pt-2">
-              <Button
-                variant="ghost"
-                onClick={handleTest}
-                disabled={testM.isPending}
-                data-testid="email-test-button"
-              >
-                {testM.isPending ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <MailCheck className="mr-2 h-4 w-4" />
-                )}
-                Тест на свой email
-              </Button>
-              <Button
-                onClick={handleSave}
-                disabled={update.isPending}
-                data-testid="email-save-button"
-              >
-                {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Сохранить
-              </Button>
+              <div className="space-y-1.5">
+                <Label htmlFor="mailgun-api-key">
+                  API-ключ
+                  {mailgunApiKeySet && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      (введите заново для замены)
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  id="mailgun-api-key"
+                  type="password"
+                  value={mailgunApiKey}
+                  onChange={(e) => setMailgunApiKey(e.currentTarget.value)}
+                  autoComplete="new-password"
+                  placeholder={mailgunApiKeySet ? '••••••••' : ''}
+                  data-testid="mailgun-api-key-input"
+                />
+              </div>
             </div>
-        </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={onTest}
+              disabled={testM.isPending || !user?.email}
+              data-testid="email-test-button"
+            >
+              {testM.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <MailCheck className="mr-2 h-4 w-4" />
+              )}
+              Тест на свой email
+            </Button>
+            <Button
+              type="submit"
+              disabled={update.isPending}
+              data-testid="email-save-button"
+            >
+              {update.isPending && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Сохранить
+            </Button>
+          </div>
+        </form>
       )}
     </Page>
   );

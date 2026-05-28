@@ -5,28 +5,57 @@ import api from '../client';
 import type { Paginated } from '../types';
 import { buildListParams, type ListParams } from '../pagination';
 
-export type EmailTransport = 'smtp' | 'mailgun';
+export type EmailProvider = 'smtp' | 'mailgun';
 export type DeliveryChannel = 'email' | 'telegram' | 'in_app';
 export type DeliveryStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
 
+/** Read-side shape: ``*_set`` flags expose whether a secret is on file
+ *  without ever returning the plaintext. ``smtp_use_tls`` (implicit TLS on
+ *  port 465 / Yandex) and ``smtp_use_starttls`` (STARTTLS on 587) are the
+ *  two mutually-exclusive SMTP modes the UI surfaces as a single toggle. */
 export interface EmailConfig {
-  transport: EmailTransport;
+  provider: EmailProvider;
   from_email: string;
   from_name: string;
-  smtp_host?: string;
-  smtp_port?: number;
-  smtp_username?: string;
+  reply_to?: string | null;
+
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  smtp_password_set?: boolean;
   smtp_use_tls?: boolean;
-  mailgun_domain?: string;
+  smtp_use_starttls?: boolean;
+
+  mailgun_domain?: string | null;
+  mailgun_api_key_set?: boolean;
+  mailgun_region?: 'us' | 'eu';
+}
+
+/** Write-side shape — adds the plaintext secret fields. Omitting them
+ *  leaves the stored secret intact; explicit `""` clears it. */
+export interface EmailConfigPatch {
+  provider?: EmailProvider;
+  from_email?: string;
+  from_name?: string;
+  reply_to?: string | null;
+
+  smtp_host?: string | null;
+  smtp_port?: number | null;
+  smtp_username?: string | null;
+  smtp_password?: string; // plaintext; server Fernet-encrypts
+  smtp_use_tls?: boolean;
+  smtp_use_starttls?: boolean;
+
+  mailgun_domain?: string | null;
+  mailgun_api_key?: string; // plaintext; server Fernet-encrypts
   mailgun_region?: 'us' | 'eu';
 }
 
 export interface DnsStatus {
-  domain: string;
-  spf_ok: boolean;
-  dkim_ok: boolean;
-  dmarc_ok: boolean;
-  details?: Record<string, unknown>;
+  spf: boolean;
+  dkim: boolean;
+  dmarc: boolean;
+  checked_at: string;
 }
 
 export interface NotificationTemplate {
@@ -75,12 +104,19 @@ export const notificationsAdminApi = {
   getEmailConfig: () =>
     api.get<EmailConfig>('/admin/notifications/email-config').then((r) => r.data),
 
-  updateEmailConfig: (body: Partial<EmailConfig>) =>
+  updateEmailConfig: (body: EmailConfigPatch) =>
     api.patch<EmailConfig>('/admin/notifications/email-config', body).then((r) => r.data),
 
+  // Recipient goes as a query param so the body stays empty (idiomatic for
+  // ``POST :test``-style action endpoints). The backend falls back to the
+  // admin's JWT email claim if ``to`` is missing.
   testEmail: (to: string) =>
     api
-      .post<{ delivery_id: string }>('/admin/notifications/email-config:test', { to })
+      .post<{ status: string; provider: string; recipient: string; error?: string }>(
+        '/admin/notifications/email-config:test',
+        null,
+        { params: { to } },
+      )
       .then((r) => r.data),
 
   dnsStatus: () =>

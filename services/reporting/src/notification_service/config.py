@@ -78,6 +78,13 @@ class Settings(BaseSettings):
     # Shared secret for the internal email-direct endpoint (Identity ↔ Notification).
     NOTIFICATION_INTERNAL_TOKEN: str | None = None
 
+    # Fernet key for encrypting per-tenant SMTP password / Mailgun API key
+    # at rest in ``email_transport_config``. URL-safe base64-encoded 32-byte
+    # key (``cryptography.fernet.Fernet.generate_key()``).
+    # When empty, admin PATCH refuses to store new secrets and the channels
+    # only see env-level credentials. Rotate by re-encrypting all rows.
+    EMAIL_SECRET_KEY: str | None = None
+
     TELEGRAM_BOT_TOKEN_PATH: str | None = None
     TELEGRAM_BOT_TOKEN: str | None = None
     TELEGRAM_BOT_USERNAME: str | None = None

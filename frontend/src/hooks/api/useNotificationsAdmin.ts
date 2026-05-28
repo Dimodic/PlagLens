@@ -6,7 +6,7 @@ import {
   notificationsAdminApi,
   type CreateTemplateInput,
   type DeliveryFilters,
-  type EmailConfig,
+  type EmailConfigPatch,
 } from '@/api/endpoints/notificationsAdmin';
 import type { ListParams } from '@/api/pagination';
 
@@ -30,7 +30,7 @@ export function useEmailConfig() {
 export function useUpdateEmailConfig() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: Partial<EmailConfig>) =>
+    mutationFn: (body: EmailConfigPatch) =>
       notificationsAdminApi.updateEmailConfig(body),
     onSuccess: () => qc.invalidateQueries({ queryKey: notifAdminKeys.emailConfig }),
   });

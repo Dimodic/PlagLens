@@ -28,6 +28,13 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_engine()
     init_redis()
     init_channels()
+    # Hot-load per-tenant EmailTransportConfig if a row exists — otherwise
+    # the channel stays on env defaults until the admin clicks Save in the
+    # UI, which would silently break verification email on reboot.
+    try:
+        await _bootstrap_email_channel_from_db()
+    except Exception as e:  # noqa: BLE001
+        log.warning("email_channel_db_bootstrap_failed", error=str(e))
     dispatcher = KafkaDispatcher()
     scheduler = None
     if not settings.SCHEDULER_DISABLED:
@@ -58,6 +65,37 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await close_channels()
         await close_redis()
         await dispose_engine()
+
+
+async def _bootstrap_email_channel_from_db() -> None:
+    """At startup, fold any persisted EmailTransportConfig into the live channel.
+
+    Without this, every container restart silently demotes the email
+    transport to env defaults (typically Mailhog) — even if the admin
+    has saved Yandex SMTP through the UI. We pick the most-recently-
+    updated row (the admin only edits one per tenant); for a fresh DB
+    with no row the function is a no-op and the env-built channel stays
+    in place.
+    """
+    from sqlalchemy import desc, select
+
+    from notification_service.api.v1.admin_email import _build_channel_from_cfg
+    from notification_service.db import get_session_factory
+    from notification_service.delivery import reset_email_channel
+    from notification_service.models import EmailTransportConfig
+
+    SessionLocal = get_session_factory()
+    async with SessionLocal() as db:
+        stmt = (
+            select(EmailTransportConfig)
+            .order_by(desc(EmailTransportConfig.updated_at))
+            .limit(1)
+        )
+        res = await db.execute(stmt)
+        cfg = res.scalars().first()
+        if cfg is None:
+            return
+        await reset_email_channel(_build_channel_from_cfg(cfg))
 
 
 def create_app() -> FastAPI:
