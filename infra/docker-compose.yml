@@ -393,6 +393,12 @@ services:
       # called by identity (transactional verify / reset / invite mails).
       # Empty in dev — notification only checks the token when AUTH_DISABLED=false.
       NOTIFICATION_INTERNAL_TOKEN: ${NOTIFICATION_INTERNAL_TOKEN:-}
+      # Fernet key used to encrypt SMTP password / Mailgun API key stored
+      # in ``email_transport_config``. Generate with
+      #   python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+      # When empty, the admin email-config page reads fine but Save returns
+      # a 503 «EMAIL_SECRET_KEY is not configured».
+      EMAIL_SECRET_KEY: ${EMAIL_SECRET_KEY:-}
       # NB: deliberately NOT setting KAFKA_CONSUMER_GROUP — reporting AND
       # notification both read it; each must keep its own default group so they
       # don't share one consumer group (audit uses KAFKA_GROUP_ID separately).
