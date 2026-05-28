@@ -240,22 +240,83 @@ class GitHubProvider(_ProviderBase):
           "id": 11223344,
           "avatar_url": "https://avatars.githubusercontent.com/u/...",
           "name": "Иван Иванов",
-          "email": "ivan@example.com"
+          "email": "ivan@example.com"   # null when the user hides it
         }
 
-    GitHub may return ``email = null`` for users who hide their email — we then
-    still consider the profile usable but ``email_verified`` is ``False``.
+    GitHub returns ``email = null`` whenever the user has set their
+    primary email to *private* (default for accounts created since 2020).
+    Our provisioning flow refuses no-email profiles (``OAUTH_NO_EMAIL``),
+    so we ALSO hit the ``/user/emails`` endpoint — that one needs the
+    ``user:email`` scope (already in defaults) and returns every linked
+    email regardless of visibility. We pick the ``primary``+``verified``
+    one to fill the gap.
     """
 
     name: ClassVar[str] = "github"
     authorize_url: ClassVar[str] = "https://github.com/login/oauth/authorize"
     token_url: ClassVar[str] = "https://github.com/login/oauth/access_token"
     userinfo_url: ClassVar[str] = "https://api.github.com/user"
+    emails_url: ClassVar[str] = "https://api.github.com/user/emails"
     default_scopes: ClassVar[list[str]] = ["read:user", "user:email"]
 
     extra_headers: ClassVar[dict[str, str]] = {
         "X-GitHub-Api-Version": "2022-11-28",
     }
+
+    async def fetch_userinfo(self, access_token: str) -> OAuthProfile:
+        headers = {
+            "Authorization": f"{self.auth_header_scheme} {access_token}",
+            "Accept": "application/json",
+        }
+        headers.update(self.extra_headers)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(self.userinfo_url, headers=headers)
+            resp.raise_for_status()
+            payload = resp.json()
+            # Patch the missing email from /user/emails when the user
+            # has their primary address marked private. Best-effort — a
+            # 404/403 here means the token simply lacks user:email scope,
+            # in which case the downstream OAUTH_NO_EMAIL is the correct
+            # error.
+            if not payload.get("email"):
+                try:
+                    er = await client.get(self.emails_url, headers=headers)
+                    if er.status_code == 200:
+                        emails = er.json()
+                        primary = next(
+                            (
+                                e
+                                for e in emails
+                                if isinstance(e, dict)
+                                and e.get("primary")
+                                and e.get("verified")
+                                and e.get("email")
+                            ),
+                            None,
+                        )
+                        # Fallback: any verified email when no entry is
+                        # flagged primary (rare, but observed on legacy
+                        # accounts).
+                        if primary is None:
+                            primary = next(
+                                (
+                                    e
+                                    for e in emails
+                                    if isinstance(e, dict)
+                                    and e.get("verified")
+                                    and e.get("email")
+                                ),
+                                None,
+                            )
+                        if primary:
+                            payload["email"] = primary["email"]
+                            payload["_email_verified"] = True
+                except httpx.HTTPError:
+                    # Network blip: surface the original (no-email) profile
+                    # so the higher-level handler produces a clean 400 with
+                    # a "configure email scope" hint, not a 500.
+                    pass
+        return self.parse_userinfo(payload)
 
     def parse_userinfo(self, raw: dict[str, Any]) -> OAuthProfile:
         # GitHub recommends ``id`` as the stable subject, but we expose
@@ -267,11 +328,20 @@ class GitHubProvider(_ProviderBase):
         # Use numeric id when available (it's stable), otherwise fall back to login.
         provider_user_id = str(gh_id) if gh_id is not None else str(login)
         email = raw.get("email")
+        # ``_email_verified`` is our own breadcrumb set by ``fetch_userinfo``
+        # when we filled the email in from /user/emails (where every entry
+        # carries an explicit verified flag). When we read the email
+        # directly from /user there's no verification flag in the payload,
+        # so we infer "verified" from "present" — GitHub doesn't expose
+        # unverified primaries via /user.
+        verified_hint = raw.get("_email_verified")
         return OAuthProfile(
             provider=self.name,
             provider_user_id=provider_user_id,
             email=email.lower() if isinstance(email, str) else None,
-            email_verified=bool(email),
+            email_verified=(
+                bool(verified_hint) if verified_hint is not None else bool(email)
+            ),
             display_name=raw.get("name") or login,
             avatar_url=raw.get("avatar_url"),
             raw=raw,
