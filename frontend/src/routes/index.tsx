@@ -100,7 +100,9 @@ const DemoLoginPage = lazy(() => import('@/pages/auth/DemoLoginPage'));
 const ProfilePage = lazy(() => import('@/pages/me/ProfilePage'));
 const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
 const MyExternalBindingsPage = lazy(() => import('@/pages/me/MyExternalBindingsPage'));
-const MyAssignmentDetailPage = lazy(() => import('@/pages/me/MyAssignmentDetailPage'));
+// MyAssignmentDetailPage is gone — assignment detail is unified at
+// /assignments/:id (which renders the staff view, gated by role).
+// /me/assignments/:id keeps its URL as a thin redirect for old links.
 const MySubmissionDetailPage = lazy(() => import('@/pages/me/MySubmissionDetailPage'));
 
 // Teacher / admin shortcuts.
@@ -204,6 +206,13 @@ function RedirectToCourseTab({ tab }: { tab?: string }) {
   return <Navigate to={target} replace />;
 }
 
+/** /me/assignments/:id → /assignments/:id. Preserves the dynamic
+ *  segment so the unified detail page renders the same assignment. */
+function MyAssignmentRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/assignments/${id ?? ''}`} replace />;
+}
+
 const protectedRoutes: RouteObject[] = [
   {
     path: '/',
@@ -223,7 +232,11 @@ const protectedRoutes: RouteObject[] = [
       // the list view is part of the dashboard now, but the detail page
       // (with grade + feedback) keeps its own URL.
       { path: 'me/assignments', element: <Navigate to="/me" replace /> },
-      { path: 'me/assignments/:id', element: <MyAssignmentDetailPage /> },
+      // /me/assignments/:id was a separate (broken) student-view of the
+      // assignment. Now the canonical detail page is /assignments/:id;
+      // gate-by-role lives inside it so the student gets a stripped-down
+      // version of the same page. Old links / breadcrumbs redirect.
+      { path: 'me/assignments/:id', element: <MyAssignmentRedirect /> },
       { path: 'me/submissions', element: <Navigate to="/me" replace /> },
       { path: 'me/submissions/:id', element: <MySubmissionDetailPage /> },
       // /me/inbox → /notifications (canonical inbox URL is shared across roles).

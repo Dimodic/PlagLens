@@ -66,7 +66,7 @@ function typeLabel(type: SearchType, t: (k: string) => string): string {
 
 function buildHref(type: SearchType, id: string, slug?: string): string {
   if (type === 'course') return slug ? `/courses/${slug}` : `/courses/${id}`;
-  if (type === 'assignment') return `/me/assignments/${id}`;
+  if (type === 'assignment') return `/assignments/${id}`;
   return `/admin/users/${id}`;
 }
 

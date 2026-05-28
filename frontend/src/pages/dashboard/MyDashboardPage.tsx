@@ -290,7 +290,7 @@ export default function MyDashboardPage() {
                   return (
                     <li key={a.id}>
                       <Link
-                        to={`/me/assignments/${a.id}`}
+                        to={`/assignments/${a.id}`}
                         data-testid={`dashboard-upcoming-${a.id}`}
                         className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
                       >

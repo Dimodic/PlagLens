@@ -18,6 +18,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ChevronRight,
+  ExternalLink,
   Loader2,
   MoreHorizontal,
   Sparkles,
@@ -348,14 +349,46 @@ export default function AssignmentDetailPage() {
             </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {!isTeacher && (
-              <Button asChild data-testid="assignment-upload-button">
-                <Link to={`/assignments/${assignment.id}/upload`}>
-                  <Upload className="mr-2 h-4 w-4" />
-                  Загрузить посылку
-                </Link>
-              </Button>
-            )}
+            {!isTeacher && (() => {
+              // Y.Contest / Stepik / eJudge-imported assignments don't
+              // accept manual uploads — submissions arrive via the
+              // import pipeline. Pull the first external_binding (we
+              // care about presence, not which one) and turn the
+              // primary action into «Открыть в <провайдер> →» so the
+              // student goes to where they actually submit. Manual
+              // assignments (no bindings) keep «Загрузить посылку».
+              const bind = (assignment.external_bindings ?? [])[0] as
+                | { system?: string; url?: string }
+                | undefined;
+              if (bind) {
+                const sysLabel: Record<string, string> = {
+                  yandex_contest: 'Yandex.Contest',
+                  stepik: 'Stepik',
+                  ejudge: 'eJudge',
+                };
+                const label = sysLabel[bind.system ?? ''] ?? 'провайдер';
+                return bind.url ? (
+                  <Button
+                    asChild
+                    variant="outline"
+                    data-testid="assignment-external-open"
+                  >
+                    <a href={bind.url} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Открыть в {label}
+                    </a>
+                  </Button>
+                ) : null;
+              }
+              return (
+                <Button asChild data-testid="assignment-upload-button">
+                  <Link to={`/assignments/${assignment.id}/upload`}>
+                    <Upload className="mr-2 h-4 w-4" />
+                    Загрузить посылку
+                  </Link>
+                </Button>
+              );
+            })()}
             {isTeacher && (
               <>
                 {/*

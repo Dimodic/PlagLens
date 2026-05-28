@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/select';
 import { useAssignment } from '@/hooks/api/useAssignments';
 import { useUploadSubmission } from '@/hooks/api/useSubmissions';
+import { Page } from '@/components/layout/Page';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
@@ -137,7 +138,7 @@ export default function SubmissionUploadPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <Page width="regular">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
           Загрузить посылку
@@ -242,11 +243,7 @@ export default function SubmissionUploadPage() {
             <Button
               type="button"
               variant="ghost"
-              onClick={() =>
-                navigate(
-                  isStudent ? `/me/assignments/${id}` : `/assignments/${id}`,
-                )
-              }
+              onClick={() => navigate(`/assignments/${id}`)}
               data-testid="submission-upload-cancel"
             >
               Отмена
@@ -264,6 +261,6 @@ export default function SubmissionUploadPage() {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </Page>
   );
 }

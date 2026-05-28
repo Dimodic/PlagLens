@@ -128,7 +128,7 @@ export default function MySubmissionDetailPage() {
         </div>
         <div className="flex-none">
           <Button asChild variant="ghost" size="sm">
-            <Link to={`/me/assignments/${sub.assignment_id}`}>
+            <Link to={`/assignments/${sub.assignment_id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               К заданию
             </Link>
