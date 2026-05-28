@@ -104,7 +104,9 @@ export function useAssignmentAggregateStats(
   });
 }
 
-export function useMySubmissions(filters: SubmissionListFilters = {}) {
+export function useMySubmissions(
+  filters: SubmissionListFilters & { course_id?: string } = {},
+) {
   return useQuery({
     queryKey: submissionKeys.myList(filters),
     queryFn: () => submissionsApi.mySubmissions(filters),

@@ -50,6 +50,12 @@ import {
   homeworkKeys,
   useHomeworksForCourse,
 } from '@/hooks/api/useHomeworks';
+import { useMySubmissions } from '@/hooks/api/useSubmissions';
+import {
+  statusForAssignment,
+  taskLinkTarget,
+  type MySub,
+} from '@/lib/studentTaskStatus';
 import { useAuth } from '@/auth/useAuth';
 import { hasCourseRole, hasGlobalRole } from '@/auth/RoleGuard';
 import { useNotifications } from '@/hooks/useNotifications';
@@ -270,6 +276,30 @@ export default function CourseDetailPage() {
     limit: 500,
     sort: '-deadline_soft_at',
   });
+
+  // Student-only: pull *my* submissions for this course so we can route
+  // each task row to the same target the dashboard does — straight into
+  // the latest readable submission if there is one, falling back to the
+  // assignment page when there isn't. Staff don't need this (they go to
+  // the grading inbox), so the query is gated on !isStaff.
+  const mySubsQ = useMySubmissions(
+    !isStaff && course?.id ? { course_id: course.id, limit: 500 } : {},
+  );
+  const mySubsByAsgId = useMemo(() => {
+    const m = new Map<string, MySub[]>();
+    if (isStaff) return m;
+    const raw = mySubsQ.data as unknown;
+    const list: MySub[] = Array.isArray(raw)
+      ? (raw as MySub[])
+      : ((raw as { data?: MySub[] })?.data ?? []);
+    for (const s of list) {
+      const key = String(s.assignment_id);
+      const arr = m.get(key) ?? [];
+      arr.push(s);
+      m.set(key, arr);
+    }
+    return m;
+  }, [isStaff, mySubsQ.data]);
 
   // YC import-as-homework dialog: one-shot create new homework from a YC
   // contest + import every problem as an assignment inside it. Triggered
@@ -789,29 +819,44 @@ export default function CourseDetailPage() {
                             </p>
                           ) : (
                             <ul className="flex flex-col">
-                              {hwAssignments.map((a) => (
-                                <li key={a.id}>
-                                  <Link
-                                    to={`/assignments/${a.id}`}
-                                    data-testid={`course-hw-assignment-${a.id}`}
-                                    className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/30"
-                                  >
-                                    <span className="min-w-0 flex-1 truncate text-foreground">
-                                      {a.title}
-                                    </span>
-                                    {/* language_hint dropped — language is
-                                        shown next to the actual code on the
-                                        submission detail; in the assignment
-                                        list it's repeat noise. */}
-                                    {a.status === 'archived' && (
-                                      <span className="text-xs text-muted-foreground/70">
-                                        в архиве
+                              {hwAssignments.map((a) => {
+                                // Students go straight to their latest
+                                // readable submission when one exists, so
+                                // the click behaves the same as on the
+                                // /me dashboard. Staff still land on the
+                                // assignment detail (their grading inbox
+                                // entry point).
+                                const mySubs = isStaff
+                                  ? []
+                                  : (mySubsByAsgId.get(String(a.id)) ?? []);
+                                const status = statusForAssignment(mySubs);
+                                const target = isStaff
+                                  ? `/assignments/${a.id}`
+                                  : taskLinkTarget(a.id, status);
+                                return (
+                                  <li key={a.id}>
+                                    <Link
+                                      to={target}
+                                      data-testid={`course-hw-assignment-${a.id}`}
+                                      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/30"
+                                    >
+                                      <span className="min-w-0 flex-1 truncate text-foreground">
+                                        {a.title}
                                       </span>
-                                    )}
-                                    <ChevronRight className="h-3 w-3 flex-none text-muted-foreground" />
-                                  </Link>
-                                </li>
-                              ))}
+                                      {/* language_hint dropped — language is
+                                          shown next to the actual code on the
+                                          submission detail; in the assignment
+                                          list it's repeat noise. */}
+                                      {a.status === 'archived' && (
+                                        <span className="text-xs text-muted-foreground/70">
+                                          в архиве
+                                        </span>
+                                      )}
+                                      <ChevronRight className="h-3 w-3 flex-none text-muted-foreground" />
+                                    </Link>
+                                  </li>
+                                );
+                              })}
                             </ul>
                           )}
                         </div>

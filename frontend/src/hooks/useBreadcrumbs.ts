@@ -163,6 +163,13 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   // /me/assignments/:id — only need the assignment title.
   const myAsgQ = useAssignment(needMyAsg ? params.id : undefined);
 
+  // /me/submissions/:id — fetch the submission to read its denormalised
+  // ``assignment_title``. Used as the terminal crumb instead of the
+  // opaque ``sub_…`` id, which leaked DB plumbing into the nav bar.
+  const mySubQ = useSubmission(
+    isMySubmissionDetail ? params.id : undefined,
+  );
+
   // /submissions/:id (teacher view) — climb via submission → assignment →
   // course/homework so the crumb reads "Курсы › <Course> › <Homework> ›
   // <Assignment> › <Автор>". The opaque `sub_…` id is never useful as a
@@ -216,10 +223,20 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
   }
 
   // === STUDENT: /me/submissions/:id ===
+  // Terminal crumb shows the assignment title (denormalised on the
+  // submission row by ``_enrich_titles``). ``Посылка #sub_…`` was a
+  // debugger-flavoured opaque id and read as noise in the nav bar.
+  // First crumb keeps "Мои посылки" wording (matches the tab the
+  // student came from on the assignment page) but points at /me — the
+  // ``/me/submissions`` route is just a redirect there.
   if (isMySubmissionDetail) {
+    const sub = mySubQ.data as
+      | { assignment_title?: string | null }
+      | undefined;
+    const label = sub?.assignment_title ?? '…';
     return [
-      { label: t('nav.my_submissions'), to: '/me/submissions' },
-      { label: `Посылка #${params.id}`, current: true },
+      { label: t('nav.my_submissions'), to: '/me' },
+      { label, current: true },
     ];
   }
 

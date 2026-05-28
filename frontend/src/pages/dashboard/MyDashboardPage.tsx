@@ -37,74 +37,12 @@ import type { CourseBrief } from '@/api/endpoints/courses';
 import type { Homework } from '@/api/endpoints/homeworks';
 import type { AssignmentBrief } from '@/api/endpoints/assignments';
 import { cn } from '@/components/ui/utils';
-
-function isAccepted(v: string | null | undefined): boolean {
-  if (!v) return false;
-  const s = v.trim().toLowerCase();
-  return s === 'ok' || s === 'accepted';
-}
-
-interface MySub {
-  id: string;
-  assignment_id: string;
-  course_id?: string;
-  submitted_at: string;
-  external_verdict?: string | null;
-  score?: number | null;
-  max_score?: number | null;
-}
-
-interface TaskStatus {
-  /** Tone the right-hand label uses. */
-  tone: 'graded' | 'pending' | 'failed' | 'none';
-  /** Visible text right of the title. */
-  label: string;
-  /** Optional submission id to jump to. */
-  submissionId: string | null;
-}
-
-/** Aggregate the student's attempts on a single assignment into one
- *  status. Latest-OK with a released grade wins; otherwise the most
- *  recent OK (without a score) reads «на проверке»; otherwise the
- *  newest failed verdict surfaces. No attempts at all → empty. */
-function statusForAssignment(subs: MySub[]): TaskStatus {
-  if (subs.length === 0) {
-    return { tone: 'none', label: '', submissionId: null };
-  }
-  const sorted = subs
-    .slice()
-    .sort(
-      (a, b) =>
-        new Date(b.submitted_at).getTime() -
-        new Date(a.submitted_at).getTime(),
-    );
-  const oks = sorted.filter((s) => isAccepted(s.external_verdict));
-  if (oks.length > 0) {
-    const okGraded = oks.find((s) => s.score != null);
-    if (okGraded) {
-      const max = okGraded.max_score;
-      return {
-        tone: 'graded',
-        label:
-          max != null
-            ? `${Number(okGraded.score).toFixed(1)} / ${max}`
-            : Number(okGraded.score).toFixed(1),
-        submissionId: okGraded.id,
-      };
-    }
-    return {
-      tone: 'pending',
-      label: 'на проверке',
-      submissionId: oks[0].id,
-    };
-  }
-  const last = sorted[0];
-  return {
-    tone: 'failed',
-    label: last.external_verdict ?? '',
-    submissionId: last.id,
-  };
-}
+import {
+  isAccepted,
+  statusForAssignment,
+  taskLinkTarget,
+  type MySub,
+} from '@/lib/studentTaskStatus';
 
 export default function MyDashboardPage() {
   useDocumentTitle('Главная');
@@ -434,9 +372,7 @@ function TaskRow({
   // Where a click on the row lands: the student's own submission if
   // there is one to read, otherwise the assignment detail (where they
   // can re-read the condition + use «Мои посылки» tab).
-  const target = status.submissionId
-    ? `/me/submissions/${status.submissionId}`
-    : `/assignments/${assignment.id}`;
+  const target = taskLinkTarget(assignment.id, status);
 
   const statusTone =
     status.tone === 'graded'
