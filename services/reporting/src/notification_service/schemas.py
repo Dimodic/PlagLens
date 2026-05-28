@@ -189,6 +189,10 @@ class EmailConfigOut(BaseModel):
     mailgun_api_key_set: bool = False
     mailgun_region: str = "eu"
 
+    # Resend (resend.com HTTP API). No domain/region — the API uses
+    # whatever the verified ``from`` address says.
+    resend_api_key_set: bool = False
+
 
 class EmailConfigPatch(BaseModel):
     """What the admin UI writes back.
@@ -215,6 +219,8 @@ class EmailConfigPatch(BaseModel):
     mailgun_domain: str | None = None
     mailgun_api_key: str | None = None  # plaintext; server encrypts
     mailgun_region: str | None = None
+
+    resend_api_key: str | None = None  # plaintext; server encrypts
 
 
 class DnsStatusOut(BaseModel):

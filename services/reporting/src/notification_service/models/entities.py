@@ -211,6 +211,13 @@ class EmailTransportConfig(Base):
     mailgun_region: Mapped[str] = mapped_column(
         String(8), nullable=False, default="eu"
     )
+    # --- per-tenant Resend creds (resend.com HTTP API) ---
+    # Resend doesn't need a domain field in our model — it accepts any
+    # ``from`` address whose domain the account has verified, so the
+    # FROM_EMAIL column already covers it.
+    resend_api_key_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

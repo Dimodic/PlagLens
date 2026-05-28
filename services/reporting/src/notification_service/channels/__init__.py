@@ -3,6 +3,7 @@ from notification_service.channels.base import Channel, DeliveryRequest, Deliver
 from notification_service.channels.email import (
     EmailChannel,
     MailgunEmailChannel,
+    ResendEmailChannel,
     SmtpEmailChannel,
     build_email_channel,
 )
@@ -17,6 +18,7 @@ __all__ = [
     "EmailChannel",
     "SmtpEmailChannel",
     "MailgunEmailChannel",
+    "ResendEmailChannel",
     "build_email_channel",
     "TelegramChannel",
 ]

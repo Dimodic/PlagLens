@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from notification_service.channels import (
     DeliveryRequest,
     MailgunEmailChannel,
+    ResendEmailChannel,
     SmtpEmailChannel,
 )
 from notification_service.common.email_secrets import (
@@ -79,10 +80,18 @@ def _build_channel_from_cfg(cfg: EmailTransportConfig) -> Any:
     own env-driven default.
     """
     s = get_settings()
-    if (cfg.provider or "smtp").lower() == "mailgun":
+    provider = (cfg.provider or "smtp").lower()
+    if provider == "mailgun":
         return MailgunEmailChannel(
             domain=cfg.mailgun_domain or s.MAILGUN_DOMAIN,
             api_key=decrypt_secret(cfg.mailgun_api_key_encrypted) or s.MAILGUN_API_KEY,
+            from_email=cfg.from_email,
+            from_name=cfg.from_name,
+            reply_to=cfg.reply_to,
+        )
+    if provider == "resend":
+        return ResendEmailChannel(
+            api_key=decrypt_secret(cfg.resend_api_key_encrypted),
             from_email=cfg.from_email,
             from_name=cfg.from_name,
             reply_to=cfg.reply_to,
@@ -121,7 +130,11 @@ def _cfg_to_out(cfg: EmailTransportConfig) -> EmailConfigOut:
         mailgun_domain=cfg.mailgun_domain,
         mailgun_api_key_set=bool(cfg.mailgun_api_key_encrypted),
         mailgun_region=cfg.mailgun_region or "eu",
+        resend_api_key_set=bool(cfg.resend_api_key_encrypted),
     )
+
+
+_ALLOWED_PROVIDERS = ("smtp", "mailgun", "resend")
 
 
 # ---------------------------------------------------------------------------
@@ -147,8 +160,12 @@ async def patch_email_config(
     cfg = await _get_or_create_cfg(db, principal.tenant_id)
 
     if body.provider is not None:
-        if body.provider not in ("smtp", "mailgun"):
-            raise Problem(400, "BAD_REQUEST", "provider must be smtp|mailgun")
+        if body.provider not in _ALLOWED_PROVIDERS:
+            raise Problem(
+                400,
+                "BAD_REQUEST",
+                f"provider must be one of {'|'.join(_ALLOWED_PROVIDERS)}",
+            )
         cfg.provider = body.provider
     if body.api_key_secret_ref is not None:
         cfg.api_key_secret_ref = body.api_key_secret_ref
@@ -193,6 +210,16 @@ async def patch_email_config(
         else:
             try:
                 cfg.mailgun_api_key_encrypted = encrypt_secret(body.mailgun_api_key)
+            except EmailSecretsUnavailable as e:
+                raise Problem(503, "EMAIL_SECRET_UNAVAILABLE", str(e))
+
+    # Resend
+    if body.resend_api_key is not None:
+        if body.resend_api_key == "":
+            cfg.resend_api_key_encrypted = None
+        else:
+            try:
+                cfg.resend_api_key_encrypted = encrypt_secret(body.resend_api_key)
             except EmailSecretsUnavailable as e:
                 raise Problem(503, "EMAIL_SECRET_UNAVAILABLE", str(e))
 

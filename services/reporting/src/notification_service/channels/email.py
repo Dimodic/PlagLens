@@ -346,6 +346,114 @@ class MailgunEmailChannel(Channel):
 
 
 # ---------------------------------------------------------------------------
+# Resend (resend.com HTTP API)
+# ---------------------------------------------------------------------------
+
+
+class ResendEmailChannel(Channel):
+    """Sends mail through Resend's HTTP API (https://resend.com/docs/api).
+
+    Resend is the simpler HTTP-API alternative to Mailgun for transactional
+    mail: one endpoint (``POST /emails``), bearer-token auth, accepts any
+    ``from`` address whose domain the Resend account has verified.
+
+    No domain / region knobs — those live entirely on Resend's side. The
+    only per-tenant field is the API key (stored Fernet-encrypted).
+    """
+
+    name = "email"
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient | None = None,
+        max_attempts: int = 3,
+        api_key: str | None = None,
+        base_url: str = "https://api.resend.com",
+        from_email: str | None = None,
+        from_name: str | None = None,
+        reply_to: str | None = None,
+    ) -> None:
+        s = get_settings()
+        self._client = client
+        self._owns_client = client is None
+        self._max_attempts = max_attempts
+        self._api_key = api_key
+        self._base_url = base_url
+        self._from_email = from_email or s.FROM_EMAIL
+        self._from_name = from_name or s.FROM_NAME
+        self._reply_to = reply_to if reply_to is not None else s.REPLY_TO
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            s = get_settings()
+            self._client = httpx.AsyncClient(timeout=s.MAILGUN_TIMEOUT_SECONDS)
+        return self._client
+
+    async def send(self, req: DeliveryRequest) -> DeliveryResult:
+        if not req.recipient_email:
+            return DeliveryResult(status="skipped", error="no recipient email")
+        if not self._api_key:
+            return DeliveryResult(
+                status="failed", error="resend api key is not configured"
+            )
+
+        url = f"{self._base_url}/emails"
+        from_field = f"{self._from_name} <{self._from_email}>"
+        plain, html = _split_html(req.body or "")
+        payload: dict[str, Any] = {
+            "from": from_field,
+            "to": [req.recipient_email],
+            "subject": req.title or "(no subject)",
+            "headers": {
+                "X-Plaglens-Notification-Id": req.notification_id,
+                "X-Plaglens-Tenant-Id": req.tenant_id,
+            },
+        }
+        if html:
+            payload["html"] = html
+            payload["text"] = plain
+        else:
+            payload["text"] = plain
+        if self._reply_to:
+            payload["reply_to"] = self._reply_to
+
+        client = self._get_client()
+        delay = 1.0
+        last_err: str | None = None
+        for attempt in range(1, self._max_attempts + 1):
+            try:
+                resp = await client.post(
+                    url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self._api_key}"},
+                )
+                if 200 <= resp.status_code < 300:
+                    return DeliveryResult(status="sent")
+                if resp.status_code in _TRANSIENT_HTTP:
+                    last_err = f"http {resp.status_code}"
+                    if attempt < self._max_attempts:
+                        await asyncio.sleep(delay)
+                        delay *= 3
+                        continue
+                return DeliveryResult(
+                    status="failed",
+                    error=f"http {resp.status_code}: {resp.text[:200]}",
+                )
+            except httpx.HTTPError as e:
+                last_err = str(e)
+                if attempt < self._max_attempts:
+                    await asyncio.sleep(delay)
+                    delay *= 3
+                    continue
+        return DeliveryResult(status="failed", error=last_err or "unknown")
+
+    async def close(self) -> None:
+        if self._owns_client and self._client is not None:
+            await self._client.aclose()
+            self._client = None
+
+
+# ---------------------------------------------------------------------------
 # Selector + back-compat alias
 # ---------------------------------------------------------------------------
 
@@ -353,8 +461,11 @@ class MailgunEmailChannel(Channel):
 def build_email_channel() -> Channel:
     """Pick channel implementation based on ``EMAIL_TRANSPORT`` setting."""
     s = get_settings()
-    if s.EMAIL_TRANSPORT.lower() == "mailgun":
+    transport = s.EMAIL_TRANSPORT.lower()
+    if transport == "mailgun":
         return MailgunEmailChannel()
+    if transport == "resend":
+        return ResendEmailChannel()
     return SmtpEmailChannel()
 
 

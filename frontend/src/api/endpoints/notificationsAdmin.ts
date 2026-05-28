@@ -5,7 +5,7 @@ import api from '../client';
 import type { Paginated } from '../types';
 import { buildListParams, type ListParams } from '../pagination';
 
-export type EmailProvider = 'smtp' | 'mailgun';
+export type EmailProvider = 'smtp' | 'mailgun' | 'resend';
 export type DeliveryChannel = 'email' | 'telegram' | 'in_app';
 export type DeliveryStatus = 'queued' | 'delivered' | 'failed' | 'skipped';
 
@@ -29,6 +29,8 @@ export interface EmailConfig {
   mailgun_domain?: string | null;
   mailgun_api_key_set?: boolean;
   mailgun_region?: 'us' | 'eu';
+
+  resend_api_key_set?: boolean;
 }
 
 /** Write-side shape — adds the plaintext secret fields. Omitting them
@@ -49,6 +51,8 @@ export interface EmailConfigPatch {
   mailgun_domain?: string | null;
   mailgun_api_key?: string; // plaintext; server Fernet-encrypts
   mailgun_region?: 'us' | 'eu';
+
+  resend_api_key?: string; // plaintext; server Fernet-encrypts
 }
 
 export interface DnsStatus {
