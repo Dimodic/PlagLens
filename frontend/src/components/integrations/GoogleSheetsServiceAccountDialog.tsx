@@ -15,10 +15,14 @@
  * separate page made admins navigate away from the providers list and
  * fight breadcrumbs to come back. The page lives on (it's still mounted
  * for the personal-SA mode on the teacher side) but admin uses the modal.
+ *
+ * Why no «Название подключения» field: there's exactly one tenant-wide SA
+ * per tenant; the name is purely cosmetic. We hard-code «Google Sheets»
+ * and skip the question.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
-import { CheckCircle2, Copy, Loader2, Upload } from 'lucide-react';
+import { CheckCircle2, Copy, ExternalLink, Loader2, Upload } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -41,24 +45,26 @@ interface Props {
   onOpenChange: (open: boolean) => void;
 }
 
+// Direct deep-link into the Google Cloud Console's Service Accounts list.
+// Closer to «one click» than walking the admin through a 6-step path in
+// running prose.
+const GCP_SA_URL = 'https://console.cloud.google.com/iam-admin/serviceaccounts';
+
 export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) {
   const notify = useNotifications();
   const setup = useGoogleSheetsSetup();
 
-  const [displayName, setDisplayName] = useState('Google Sheets');
   const [saJson, setSaJson] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
-  const [saved, setSaved] = useState<
-    | { client_email: string | null; display_name: string }
-    | null
-  >(null);
+  const [saved, setSaved] = useState<{ client_email: string | null } | null>(
+    null,
+  );
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Reset on each re-open: stale JSON or an old success banner from the
   // previous session would be confusing.
   useEffect(() => {
     if (open) {
-      setDisplayName('Google Sheets');
       setSaJson('');
       setProblem(null);
       setSaved(null);
@@ -109,13 +115,10 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
     }
     setProblem(null);
     setup.mutate(
-      { display_name: displayName.trim() || 'Google Sheets', sa_json: json },
+      { display_name: 'Google Sheets', sa_json: json },
       {
         onSuccess: (res) => {
-          setSaved({
-            client_email: res.client_email,
-            display_name: res.display_name,
-          });
+          setSaved({ client_email: res.client_email });
           notify.success('Google Sheets подключён');
         },
         onError: (p) => setProblem(p as unknown as Problem),
@@ -140,8 +143,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
         <DialogHeader>
           <DialogTitle>Сервисный аккаунт Google</DialogTitle>
           <DialogDescription>
-            Загрузите JSON-ключ или вставьте его содержимое. Reporting-сервис
-            использует его для предпросмотра таблиц и записи оценок.
+            Загрузите JSON-ключ или вставьте его содержимое.
           </DialogDescription>
         </DialogHeader>
 
@@ -149,7 +151,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
           <div className="space-y-3" data-testid="sa-saved">
             <div className="flex items-center gap-2 text-sm text-foreground">
               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-              Подключение «{saved.display_name}» сохранено.
+              Подключение сохранено.
             </div>
             {saved.client_email && (
               <div className="space-y-1.5">
@@ -196,24 +198,28 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
             )}
 
             <div className="space-y-1.5">
-              <Label htmlFor="sa-name">Название подключения</Label>
-              <Input
-                id="sa-name"
-                value={displayName}
-                onChange={(e) => setDisplayName(e.currentTarget.value)}
-                data-testid="sa-display-name"
-              />
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
                 <Label htmlFor="sa-json">JSON сервисного аккаунта</Label>
+                {/* Direct deep-link instead of the old «Google Cloud →
+                    IAM & Admin → Service Accounts → ваш SA → Keys → Add
+                    Key → JSON» prose path — one click, no reading. */}
+                <a
+                  href={GCP_SA_URL}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                  title="Открыть Google Cloud Console"
+                  aria-label="Открыть Google Cloud Console"
+                  data-testid="sa-docs-link"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                </a>
                 <Button
                   type="button"
                   variant="ghost"
                   size="sm"
                   onClick={onPickFile}
-                  className="-my-1 h-7 gap-1.5 text-xs"
+                  className="-my-1 ml-auto h-7 gap-1.5 text-xs"
                   data-testid="sa-pick-file"
                 >
                   <Upload className="h-3.5 w-3.5" />
@@ -239,10 +245,6 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
                 className="font-mono text-xs"
                 data-testid="sa-json"
               />
-              <p className="text-xs text-muted-foreground">
-                Google Cloud → IAM &amp; Admin → Service Accounts → ваш SA →
-                Keys → Add Key → JSON.
-              </p>
             </div>
 
             <DialogFooter>
