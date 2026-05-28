@@ -1,237 +1,139 @@
 /**
- * MyDashboardPage — `/me` student cabinet, the single screen the student
- * actually uses.
+ * MyDashboardPage — `/me` student cabinet.
  *
- * Students have no sidebar; the body lives entirely here. Three hairline-
- * divided sections:
+ * Same mental model as the teacher's /courses tree (CoursesListPage):
+ * курс → ДЗ → задание. The only differences a student notices:
  *
- *   1. «Скоро дедлайн»  — up to 5 closest future deadlines across courses.
- *   2. «Мои курсы»      — one row per course with «сдано/всего» + mean grade.
- *   3. «Мои посылки»    — last N submissions with assignment title, verdict
- *                         (Y.Contest external_verdict coloured by outcome)
- *                         and grade. Filterable by course / status.
+ *   • Right side of each task row shows the student's status — score
+ *     when the teacher has released the grade, «на проверке» when the
+ *     last accepted attempt is still ungraded, the failing verdict
+ *     (WA / CE / PE / RTE) when no OK exists yet, or empty when the
+ *     student never attempted.
+ *   • Tapping a task row navigates to the relevant surface — to the
+ *     student's submission detail when there's an OK attempt to read,
+ *     to the assignment page otherwise.
+ *   • A small «info» icon next to the title opens the condition in a
+ *     modal so the student can re-read the task without leaving their
+ *     position in the tree.
  *
- * Title / course name / homework title for every submission come straight
- * from the backend — `/users/me/submissions` joins them in, so we don't
- * have to fan out a useQueries over the course tree to recover assignment
- * titles. ``s.assignment_title`` is the source of truth.
- *
- * Empty state (no courses): one CTA — «Ввести код». «+ По коду» in the
- * header is always one click away regardless.
+ * Header carries only «+ По коду». No widgets, no Hero stats —
+ * everything fits in the tree.
  */
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { ChevronRight, KeyRound, Loader2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ChevronDown, ChevronRight, Info, KeyRound, Loader2 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
-import { useMyAssignments } from '@/hooks/api/useAssignments';
+import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
+import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { JoinByCodeDialog } from '@/components/courses/JoinByCodeDialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { AssignmentConditionDialog } from '@/components/assignments/AssignmentConditionDialog';
+import type { CourseBrief } from '@/api/endpoints/courses';
+import type { Homework } from '@/api/endpoints/homeworks';
+import type { AssignmentBrief } from '@/api/endpoints/assignments';
 import { cn } from '@/components/ui/utils';
 
-type Tone = 'high' | 'mid' | 'low' | 'muted';
-
-const toneText: Record<Tone, string> = {
-  high: 'text-sev-high',
-  mid: 'text-sev-mid',
-  low: 'text-muted-foreground',
-  muted: 'text-muted-foreground/70',
-};
-
-/** Yandex.Contest-style «passed compilation + tests» verdicts. CE / WA /
- *  PE / RTE never make it to the teacher's queue (the import pipeline
- *  filters them out), so we surface only these on the student dashboard
- *  — the student already saw the red ones in the contest UI. */
-function isAcceptedVerdict(v: string | null | undefined): boolean {
+function isAccepted(v: string | null | undefined): boolean {
   if (!v) return false;
   const s = v.trim().toLowerCase();
   return s === 'ok' || s === 'accepted';
 }
-
-/** Human countdown for a future deadline. Past deadlines collapse to
- *  «Прошёл» (we don't show them anyway). */
-function deadlineTag(iso: string | null | undefined): { label: string; tone: Tone } | null {
-  if (!iso) return null;
-  const ts = new Date(iso).getTime();
-  if (Number.isNaN(ts)) return null;
-  const ms = ts - Date.now();
-  if (ms < 0) return { label: 'Прошёл', tone: 'muted' };
-  const hours = Math.round(ms / 3_600_000);
-  if (hours <= 24) return { label: `Через ${Math.max(1, hours)} ч.`, tone: 'high' };
-  const days = Math.round(ms / 86_400_000);
-  if (days <= 2) return { label: `Через ${days} дн.`, tone: 'mid' };
-  return { label: `Через ${days} дн.`, tone: 'low' };
-}
-
-const fmtDate = (iso: string | null | undefined) =>
-  iso
-    ? new Date(iso).toLocaleDateString('ru-RU', {
-        day: 'numeric',
-        month: 'short',
-      })
-    : '';
-
-type StatusFilter = 'all' | 'graded' | 'pending';
 
 interface MySub {
   id: string;
   assignment_id: string;
   course_id?: string;
   submitted_at: string;
+  external_verdict?: string | null;
   score?: number | null;
   max_score?: number | null;
-  external_verdict?: string | null;
-  external_score?: number | null;
-  assignment_title?: string | null;
-  homework_title?: string | null;
-  course_name?: string | null;
+}
+
+interface TaskStatus {
+  /** Tone the right-hand label uses. */
+  tone: 'graded' | 'pending' | 'failed' | 'none';
+  /** Visible text right of the title. */
+  label: string;
+  /** Optional submission id to jump to. */
+  submissionId: string | null;
+}
+
+/** Aggregate the student's attempts on a single assignment into one
+ *  status. Latest-OK with a released grade wins; otherwise the most
+ *  recent OK (without a score) reads «на проверке»; otherwise the
+ *  newest failed verdict surfaces. No attempts at all → empty. */
+function statusForAssignment(subs: MySub[]): TaskStatus {
+  if (subs.length === 0) {
+    return { tone: 'none', label: '', submissionId: null };
+  }
+  const sorted = subs
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(b.submitted_at).getTime() -
+        new Date(a.submitted_at).getTime(),
+    );
+  const oks = sorted.filter((s) => isAccepted(s.external_verdict));
+  if (oks.length > 0) {
+    const okGraded = oks.find((s) => s.score != null);
+    if (okGraded) {
+      const max = okGraded.max_score;
+      return {
+        tone: 'graded',
+        label:
+          max != null
+            ? `${Number(okGraded.score).toFixed(1)} / ${max}`
+            : Number(okGraded.score).toFixed(1),
+        submissionId: okGraded.id,
+      };
+    }
+    return {
+      tone: 'pending',
+      label: 'на проверке',
+      submissionId: oks[0].id,
+    };
+  }
+  const last = sorted[0];
+  return {
+    tone: 'failed',
+    label: last.external_verdict ?? '',
+    submissionId: last.id,
+  };
 }
 
 export default function MyDashboardPage() {
   useDocumentTitle('Главная');
   const { user } = useAuth();
   const myCoursesQ = useMyCourses();
-  const myAssignmentsQ = useMyAssignments();
-  // Backend caps at 10 000; pull a generous slice so the dashboard list
-  // isn't artificially limited for power users with lots of Y.Contest
-  // imports — the list itself only renders the first N after filters.
   const mySubsQ = useMySubmissions({ limit: 500 });
+  const [joinOpen, setJoinOpen] = useState(false);
+  const [conditionAsgId, setConditionAsgId] = useState<string | null>(null);
 
   const myCourses = myCoursesQ.data?.data ?? [];
-  const myAssignments = myAssignmentsQ.data?.data ?? [];
   const subsData = mySubsQ.data as unknown;
   const mySubs: MySub[] = Array.isArray(subsData)
     ? (subsData as MySub[])
     : ((subsData as { data?: MySub[] })?.data ?? []);
 
-  const [joinOpen, setJoinOpen] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [courseFilter, setCourseFilter] = useState<string>('all');
-
-  // -- «Скоро дедлайн»: future deadline_hard_at, sorted ascending. ----- //
-  const upcoming = useMemo(() => {
-    const now = Date.now();
-    return myAssignments
-      .filter(
-        (a) =>
-          a.deadline_hard_at && new Date(a.deadline_hard_at).getTime() > now,
-      )
-      .sort(
-        (a, b) =>
-          new Date(a.deadline_hard_at!).getTime() -
-          new Date(b.deadline_hard_at!).getTime(),
-      )
-      .slice(0, 5);
-  }, [myAssignments]);
-
-  // -- Per-course aggregates. ------------------------------------------ //
-  // Course IDs come back as ``int`` from /users/me/courses and
-  // /users/me/assignments but as ``str`` from /users/me/submissions —
-  // SubmissionOut serialises them through Pydantic as strings. JS Maps
-  // don't coerce key types, so we string-key everything here to keep
-  // the merge consistent (otherwise «0 из 20 сдано» reads as «0 из 0»).
-  const courseStats = useMemo(() => {
-    const totalByCourse = new Map<string, number>();
-    for (const a of myAssignments) {
-      const k = String(a.course_id);
-      totalByCourse.set(k, (totalByCourse.get(k) ?? 0) + 1);
-    }
-    const gradedByCourse = new Map<string, { count: number; sum: number }>();
+  const subsByAsgId = useMemo(() => {
+    const m = new Map<string, MySub[]>();
     for (const s of mySubs) {
-      if (s.score == null || !s.course_id) continue;
-      const k = String(s.course_id);
-      const cur = gradedByCourse.get(k) ?? { count: 0, sum: 0 };
-      cur.count += 1;
-      cur.sum += Number(s.score);
-      gradedByCourse.set(k, cur);
+      const key = String(s.assignment_id);
+      const arr = m.get(key) ?? [];
+      arr.push(s);
+      m.set(key, arr);
     }
-    return { totalByCourse, gradedByCourse };
-  }, [myAssignments, mySubs]);
-
-  const courseById = useMemo(
-    () => new Map(myCourses.map((c) => [String(c.id), c])),
-    [myCourses],
-  );
-
-  // -- Filtered + deduped submissions list. --------------------------- //
-  //
-  // The teacher's review queue only ever sees Y.Contest «OK» rows — the
-  // import pipeline drops CE / WA / PE / RTE before they hit the inbox.
-  // Anything else in /users/me/submissions is contest-side noise the
-  // student already saw in Y.Contest. Surface only the «passed»
-  // submissions, and collapse multiple OK attempts on the same
-  // assignment to the latest one (so a student who hit «Submit» five
-  // times sees one row, not five).
-  //
-  // After the OK + latest-per-assignment filter, apply the user's
-  // status / course filters on top.
-  const filteredSubs = useMemo(() => {
-    const acceptedOnly = mySubs.filter((s) =>
-      isAcceptedVerdict(s.external_verdict),
-    );
-    // group by assignment_id, keep newest submitted_at
-    const latestByAsg = new Map<string, MySub>();
-    for (const s of acceptedOnly) {
-      const prev = latestByAsg.get(s.assignment_id);
-      if (
-        !prev ||
-        new Date(s.submitted_at).getTime() >
-          new Date(prev.submitted_at).getTime()
-      ) {
-        latestByAsg.set(s.assignment_id, s);
-      }
-    }
-    let arr = [...latestByAsg.values()];
-    if (statusFilter === 'graded') arr = arr.filter((s) => s.score != null);
-    else if (statusFilter === 'pending')
-      arr = arr.filter((s) => s.score == null);
-    if (courseFilter !== 'all')
-      arr = arr.filter((s) => String(s.course_id) === courseFilter);
-    // Sort by assignment title using natural order (A < B < … < J < K),
-    // so a Y.Contest task list reads like the contest itself rather
-    // than scrambled by submitted_at. ``localeCompare(..., { numeric:
-    // true })`` keeps multi-digit numbers in human order too («Задача
-    // 2» < «Задача 10»).
-    arr.sort((a, b) =>
-      (a.assignment_title ?? '').localeCompare(b.assignment_title ?? '', 'ru', {
-        numeric: true,
-        sensitivity: 'base',
-      }),
-    );
-    return arr;
-  }, [mySubs, statusFilter, courseFilter]);
-
-  // Visibility of the «Мои посылки» section itself: hide when the
-  // student has 0 OK-attempts (showing an empty list with filters above
-  // is just chrome). We compute this off the unfiltered set so toggling
-  // a filter to «ничего не подходит» still keeps the section.
-  const hasAnyAcceptedSubs = useMemo(
-    () => mySubs.some((s) => isAcceptedVerdict(s.external_verdict)),
-    [mySubs],
-  );
-
-  // How many rows to render in «Мои посылки». 20 is enough to read the
-  // recent state at a glance; the detail page handles deep browsing.
-  const SUBS_LIMIT = 20;
-  const visibleSubs = filteredSubs.slice(0, SUBS_LIMIT);
+    return m;
+  }, [mySubs]);
 
   const greeting = user?.display_name
     ? `Привет, ${user.display_name.split(' ')[0]}`
     : 'Главная';
-
-  const isLoading =
-    myCoursesQ.isLoading || myAssignmentsQ.isLoading || mySubsQ.isLoading;
 
   const joinAction = (
     <Button
@@ -245,7 +147,18 @@ export default function MyDashboardPage() {
     </Button>
   );
 
-  if (!isLoading && myCourses.length === 0) {
+  if (myCoursesQ.isLoading && myCourses.length === 0) {
+    return (
+      <Page width="regular" data-testid="my-dashboard">
+        <PageHeader title={<span data-testid="my-dashboard-title">{greeting}</span>} />
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      </Page>
+    );
+  }
+
+  if (myCourses.length === 0) {
     return (
       <Page width="regular" data-testid="my-dashboard">
         <PageHeader title={<span data-testid="my-dashboard-title">{greeting}</span>} />
@@ -272,225 +185,283 @@ export default function MyDashboardPage() {
         action={joinAction}
       />
 
-      {isLoading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      <div
+        className="divide-y divide-border/50 border-t border-border/50"
+        data-testid="my-courses-list"
+      >
+        {myCourses.map((c) => (
+          <CourseSection
+            key={c.id}
+            course={c}
+            subsByAsgId={subsByAsgId}
+            onOpenCondition={setConditionAsgId}
+          />
+        ))}
+      </div>
+
+      <JoinByCodeDialog open={joinOpen} onOpenChange={setJoinOpen} />
+      <AssignmentConditionDialog
+        assignmentId={conditionAsgId}
+        open={conditionAsgId !== null}
+        onOpenChange={(o) => {
+          if (!o) setConditionAsgId(null);
+        }}
+      />
+    </Page>
+  );
+}
+
+/* -- course node ------------------------------------------------------ */
+
+function CourseSection({
+  course,
+  subsByAsgId,
+  onOpenCondition,
+}: {
+  course: CourseBrief;
+  subsByAsgId: Map<string, MySub[]>;
+  onOpenCondition: (id: string) => void;
+}) {
+  const hwQ = useHomeworksForCourse(course.id, { limit: 100 });
+  const asgQ = useAssignmentsByCourse(course.id, {
+    limit: 500,
+    sort: '-deadline_soft_at',
+  });
+  const homeworks = hwQ.data?.data ?? [];
+  const assignments = asgQ.data?.data ?? [];
+
+  // Group assignments by homework_id for fast lookup inside the
+  // expanded ДЗ rows.
+  const asgByHwId = useMemo(() => {
+    const m = new Map<string, AssignmentBrief[]>();
+    for (const a of assignments) {
+      if (a.homework_id == null) continue;
+      const key = String(a.homework_id);
+      const arr = m.get(key) ?? [];
+      arr.push(a);
+      m.set(key, arr);
+    }
+    return m;
+  }, [assignments]);
+
+  // Aggregates for the course-row subtitle.
+  const total = assignments.length;
+  const gradedCount = assignments.filter((a) => {
+    const subs = subsByAsgId.get(String(a.id)) ?? [];
+    return subs.some((s) => s.score != null);
+  }).length;
+  const mean = (() => {
+    const scores: number[] = [];
+    for (const a of assignments) {
+      const subs = subsByAsgId.get(String(a.id)) ?? [];
+      const okGraded = subs
+        .filter((s) => isAccepted(s.external_verdict) && s.score != null)
+        .sort(
+          (x, y) =>
+            new Date(y.submitted_at).getTime() -
+            new Date(x.submitted_at).getTime(),
+        )[0];
+      if (okGraded?.score != null) scores.push(Number(okGraded.score));
+    }
+    if (scores.length === 0) return null;
+    return (scores.reduce((s, n) => s + n, 0) / scores.length).toFixed(1);
+  })();
+
+  return (
+    <section
+      data-testid={`my-course-row-${course.slug}`}
+      data-course-id={course.id}
+      className="py-6"
+    >
+      <Link
+        to={`/courses/${course.slug}`}
+        className="flex items-center justify-between gap-4 transition-colors hover:text-foreground"
+      >
+        <div className="min-w-0">
+          <div className="text-xl font-semibold tracking-tight truncate">
+            {course.name}
+          </div>
+          <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+            <span>
+              {gradedCount} из {total} сдано
+            </span>
+            {mean != null && (
+              <>
+                <span aria-hidden>·</span>
+                <span className="tabular-nums">средний балл {mean}</span>
+              </>
+            )}
+          </div>
         </div>
-      ) : (
-        <div className="space-y-10">
-          {upcoming.length > 0 && (
-            <section data-testid="dashboard-upcoming">
-              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Скоро дедлайн
-              </h2>
-              <ul className="divide-y divide-border/40 border-t border-border/40">
-                {upcoming.map((a) => {
-                  const tag = deadlineTag(a.deadline_hard_at);
-                  const course = courseById.get(String(a.course_id));
-                  return (
-                    <li key={a.id}>
-                      <Link
-                        to={`/assignments/${a.id}`}
-                        data-testid={`dashboard-upcoming-${a.id}`}
-                        className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-sm font-medium text-foreground truncate">
-                            {a.title}
-                          </div>
-                          {course && (
-                            <div className="text-xs text-muted-foreground truncate">
-                              {course.name}
-                            </div>
-                          )}
-                        </div>
-                        {tag && (
-                          <span
-                            className={cn(
-                              'text-xs shrink-0 tabular-nums',
-                              toneText[tag.tone],
-                            )}
-                          >
-                            {tag.label}
-                          </span>
-                        )}
-                        <ChevronRight
-                          aria-hidden
-                          className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                        />
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+      </Link>
+
+      <div className="mt-5 pl-3">
+        {hwQ.isLoading ? (
+          <div className="py-3 text-sm text-muted-foreground">Загружаем…</div>
+        ) : homeworks.length === 0 ? (
+          <div className="py-2 text-sm text-muted-foreground">Нет ДЗ</div>
+        ) : (
+          <div className="divide-y divide-border/30">
+            {homeworks.map((hw) => (
+              <HomeworkSubrow
+                key={hw.id}
+                hw={hw}
+                courseSlug={course.slug}
+                assignments={asgByHwId.get(String(hw.id)) ?? []}
+                subsByAsgId={subsByAsgId}
+                onOpenCondition={onOpenCondition}
+                loadingAsg={asgQ.isLoading}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/* -- homework node — expand/collapse to reveal its tasks -------------- */
+
+function HomeworkSubrow({
+  hw,
+  courseSlug,
+  assignments,
+  subsByAsgId,
+  onOpenCondition,
+  loadingAsg,
+}: {
+  hw: Homework;
+  courseSlug: string;
+  assignments: AssignmentBrief[];
+  subsByAsgId: Map<string, MySub[]>;
+  onOpenCondition: (id: string) => void;
+  loadingAsg: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const hwHref = `/courses/${courseSlug}/homeworks/${hw.slug}`;
+
+  // Count of «сдано» (any OK attempt) inside this ДЗ so the collapsed row
+  // already tells the student where they stand without expanding.
+  const okCount = assignments.filter((a) => {
+    const subs = subsByAsgId.get(String(a.id)) ?? [];
+    return subs.some((s) => isAccepted(s.external_verdict));
+  }).length;
+  const totalCount = assignments.length;
+
+  return (
+    <div data-testid={`my-hw-${hw.id}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="group/row w-full flex items-center gap-3 -mx-2 px-2 py-3.5 rounded hover:bg-muted/20 text-left"
+        data-testid={`my-hw-toggle-${hw.id}`}
+      >
+        <span className="text-muted-foreground" aria-hidden>
+          {open ? (
+            <ChevronDown className="h-5 w-5" />
+          ) : (
+            <ChevronRight className="h-5 w-5" />
           )}
-
-          <section data-testid="dashboard-courses">
-            <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-              Мои курсы
-            </h2>
-            <ul className="divide-y divide-border/40 border-t border-border/40">
-              {myCourses.map((c) => {
-                const total = courseStats.totalByCourse.get(String(c.id)) ?? 0;
-                const graded = courseStats.gradedByCourse.get(String(c.id));
-                const mean =
-                  graded && graded.count > 0
-                    ? (graded.sum / graded.count).toFixed(1)
-                    : null;
-                return (
-                  <li key={c.id}>
-                    <Link
-                      to={`/courses/${c.slug}`}
-                      data-testid={`dashboard-course-${c.slug}`}
-                      className="group flex items-center gap-4 py-4 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-base font-medium text-foreground truncate">
-                          {c.name}
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
-                          <span>
-                            {graded?.count ?? 0} из {total} сдано
-                          </span>
-                          {mean != null && (
-                            <>
-                              <span aria-hidden>·</span>
-                              <span className="tabular-nums">
-                                средний балл {mean}
-                              </span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <ChevronRight
-                        aria-hidden
-                        className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                      />
-                    </Link>
-                  </li>
-                );
-              })}
+        </span>
+        <span className="flex-1 min-w-0 flex items-center justify-between gap-4">
+          <span className="text-base font-medium truncate">{hw.title}</span>
+          {totalCount > 0 && (
+            <span className="text-xs tabular-nums text-muted-foreground shrink-0">
+              {okCount} / {totalCount}
+            </span>
+          )}
+        </span>
+      </button>
+      {open && (
+        <div className="pl-9 pb-3">
+          {loadingAsg ? (
+            <div className="py-3 text-sm text-muted-foreground">Загружаем…</div>
+          ) : assignments.length === 0 ? (
+            <div className="py-2 text-sm text-muted-foreground">
+              <Link to={hwHref} className="hover:underline">
+                Открыть ДЗ →
+              </Link>
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/20">
+              {assignments.map((a) => (
+                <TaskRow
+                  key={a.id}
+                  assignment={a}
+                  subs={subsByAsgId.get(String(a.id)) ?? []}
+                  onOpenCondition={onOpenCondition}
+                />
+              ))}
             </ul>
-          </section>
-
-          {hasAnyAcceptedSubs && (
-            <section data-testid="dashboard-recent">
-              <div className="mb-3 flex items-baseline justify-between gap-4">
-                <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                  Мои посылки
-                </h2>
-                <div className="flex items-center gap-2">
-                  <Select
-                    value={statusFilter}
-                    onValueChange={(v) =>
-                      setStatusFilter((v as StatusFilter) ?? 'all')
-                    }
-                  >
-                    <SelectTrigger
-                      className="h-8 w-[160px] text-xs"
-                      data-testid="dashboard-status-filter"
-                    >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Все</SelectItem>
-                      <SelectItem value="graded">Оценённые</SelectItem>
-                      <SelectItem value="pending">На проверке</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {myCourses.length > 1 && (
-                    <Select
-                      value={courseFilter}
-                      onValueChange={(v) => setCourseFilter(v ?? 'all')}
-                    >
-                      <SelectTrigger
-                        className="h-8 w-[180px] text-xs"
-                        data-testid="dashboard-course-filter"
-                      >
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Все курсы</SelectItem>
-                        {myCourses.map((c) => (
-                          <SelectItem key={c.id} value={String(c.id)}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-              </div>
-
-              {visibleSubs.length === 0 ? (
-                <p className="border-t border-border/40 py-6 text-center text-sm text-muted-foreground">
-                  Под фильтр ничего не подходит.
-                </p>
-              ) : (
-                <>
-                  <ul className="divide-y divide-border/40 border-t border-border/40">
-                    {visibleSubs.map((s) => {
-                      const title =
-                        s.assignment_title ||
-                        myAssignments.find((a) => a.id === s.assignment_id)?.title ||
-                        'Задание';
-                      const hasScore = s.score != null;
-                      return (
-                        <li key={s.id}>
-                          <Link
-                            to={`/me/submissions/${s.id}`}
-                            data-testid={`dashboard-recent-${s.id}`}
-                            className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-medium text-foreground truncate">
-                                {title}
-                              </div>
-                              <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground truncate">
-                                <span>{fmtDate(s.submitted_at)}</span>
-                                {s.course_name && (
-                                  <>
-                                    <span aria-hidden>·</span>
-                                    <span className="truncate">{s.course_name}</span>
-                                  </>
-                                )}
-                              </div>
-                            </div>
-                            {hasScore ? (
-                              <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                                {Number(s.score).toFixed(1)}
-                                {s.max_score != null && (
-                                  <span className="text-muted-foreground"> / {s.max_score}</span>
-                                )}
-                              </span>
-                            ) : (
-                              <span className="text-xs text-muted-foreground shrink-0">
-                                на проверке
-                              </span>
-                            )}
-                            <ChevronRight
-                              aria-hidden
-                              className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                            />
-                          </Link>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                  {filteredSubs.length > SUBS_LIMIT && (
-                    <p className="mt-3 text-xs text-muted-foreground">
-                      Показаны последние {SUBS_LIMIT} из {filteredSubs.length}.
-                    </p>
-                  )}
-                </>
-              )}
-            </section>
           )}
         </div>
       )}
+    </div>
+  );
+}
 
-      <JoinByCodeDialog open={joinOpen} onOpenChange={setJoinOpen} />
-    </Page>
+/* -- task row — title, status on the right, «i» icon ------------------ */
+
+function TaskRow({
+  assignment,
+  subs,
+  onOpenCondition,
+}: {
+  assignment: AssignmentBrief;
+  subs: MySub[];
+  onOpenCondition: (id: string) => void;
+}) {
+  const navigate = useNavigate();
+  const status = useMemo(() => statusForAssignment(subs), [subs]);
+
+  // Where a click on the row lands: the student's own submission if
+  // there is one to read, otherwise the assignment detail (where they
+  // can re-read the condition + use «Мои посылки» tab).
+  const target = status.submissionId
+    ? `/me/submissions/${status.submissionId}`
+    : `/assignments/${assignment.id}`;
+
+  const statusTone =
+    status.tone === 'graded'
+      ? 'text-foreground font-medium'
+      : status.tone === 'pending'
+        ? 'text-muted-foreground'
+        : status.tone === 'failed'
+          ? 'text-sev-high'
+          : 'text-muted-foreground/40';
+
+  return (
+    <li
+      className="group flex items-center gap-3 py-2.5 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/15"
+      data-testid={`my-task-${assignment.id}`}
+    >
+      <button
+        type="button"
+        onClick={() => navigate(target)}
+        data-testid={`my-task-link-${assignment.id}`}
+        className="flex-1 min-w-0 text-left text-sm text-foreground/90 truncate hover:underline"
+      >
+        {assignment.title}
+      </button>
+      {status.label && (
+        <span
+          className={cn('text-xs shrink-0 tabular-nums', statusTone)}
+          data-testid={`my-task-status-${assignment.id}`}
+        >
+          {status.label}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => onOpenCondition(String(assignment.id))}
+        title="Условие задания"
+        aria-label="Условие задания"
+        data-testid={`my-task-condition-${assignment.id}`}
+        className="shrink-0 p-1 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+      >
+        <Info className="h-4 w-4" />
+      </button>
+    </li>
   );
 }
