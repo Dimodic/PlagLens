@@ -578,7 +578,7 @@ export function LoginPage() {
                   Пароль
                 </Label>
                 <Link
-                  to="/auth/password-reset"
+                  to="/auth/forgot"
                   data-testid="login-forgot-link"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
