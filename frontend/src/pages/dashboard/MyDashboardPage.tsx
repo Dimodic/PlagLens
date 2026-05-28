@@ -126,16 +126,21 @@ export default function MyDashboardPage() {
     return { totalByCourse, gradedByCourse };
   }, [myAssignments, mySubs]);
 
-  // -- Last 5 graded submissions, newest first. ----------------------- //
+  // -- Last 10 submissions of any kind, newest first. ----------------- //
+  // Earlier this was «only graded», but binding-claim flows (Yandex.Contest
+  // participants link → backfill all their imports) deliver lots of
+  // ungraded submissions and the student would see an empty section.
+  // The score column is shown when present; otherwise we show the
+  // assignment's verdict-like status (sent / on review).
   const recent = useMemo(() => {
     return mySubs
-      .filter((s) => s.score != null)
+      .slice()
       .sort(
         (a, b) =>
           new Date(b.submitted_at).getTime() -
           new Date(a.submitted_at).getTime(),
       )
-      .slice(0, 5);
+      .slice(0, 10);
   }, [mySubs]);
 
   const courseById = useMemo(
@@ -299,12 +304,13 @@ export default function MyDashboardPage() {
           {recent.length > 0 && (
             <section data-testid="dashboard-recent">
               <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-                Последние оценки
+                Мои посылки
               </h2>
               <ul className="divide-y divide-border/40 border-t border-border/40">
                 {recent.map((s) => {
                   const a = assignmentById.get(s.assignment_id);
                   const max = s.max_score ?? a?.max_score ?? null;
+                  const hasScore = s.score != null;
                   return (
                     <li key={s.id}>
                       <Link
@@ -320,12 +326,18 @@ export default function MyDashboardPage() {
                             {fmtDate(s.submitted_at)}
                           </div>
                         </div>
-                        <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                          {Number(s.score).toFixed(1)}
-                          {max != null && (
-                            <span className="text-muted-foreground"> / {max}</span>
-                          )}
-                        </span>
+                        {hasScore ? (
+                          <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                            {Number(s.score).toFixed(1)}
+                            {max != null && (
+                              <span className="text-muted-foreground"> / {max}</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground shrink-0">
+                            на проверке
+                          </span>
+                        )}
                         <ChevronRight
                           aria-hidden
                           className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"

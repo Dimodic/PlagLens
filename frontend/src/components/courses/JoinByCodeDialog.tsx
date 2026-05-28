@@ -5,6 +5,7 @@
  */
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/auth/useAuth';
 import { Loader2 } from 'lucide-react';
 import { useJoinByCode } from '@/hooks/api/useCourses';
 import { coursesApi } from '@/api/endpoints/courses';
@@ -32,9 +33,22 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
   const navigate = useNavigate();
   const notify = useNotifications();
   const join = useJoinByCode();
+  const { user } = useAuth();
   const [problem, setProblem] = useState<Problem | null>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
+
+  // Where the user lands after a successful redeem depends on what kind
+  // of code they used:
+  //   • A code that joins a specific course → land on that course page.
+  //   • A binding-only code (Yandex.Contest participant claim, etc.) →
+  //     the API may not return a course slug; previously we fell back to
+  //     /courses (teacher-style list), which is useless for a student
+  //     who's actually after their newly-claimed submissions. For
+  //     students we land them on /me — the dashboard with the «Мои
+  //     посылки» list now showing those backfilled submissions. Staff
+  //     keep the old /courses fallback because that's their natural home.
+  const fallbackHome = user?.global_role === 'student' ? '/me' : '/courses';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -56,12 +70,17 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
         navigate(`/courses/${maybeSlug}`);
         return;
       }
-      try {
-        const course = await coursesApi.get(String(res.course_id));
-        navigate(`/courses/${course.slug}`);
-      } catch {
-        navigate('/courses');
+      const courseId = res.course_id;
+      if (courseId) {
+        try {
+          const course = await coursesApi.get(String(courseId));
+          navigate(`/courses/${course.slug}`);
+          return;
+        } catch {
+          /* fall through to home */
+        }
       }
+      navigate(fallbackHome);
     } catch (err) {
       setProblem(parseProblem(err));
     }
