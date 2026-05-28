@@ -19,12 +19,11 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { Link } from 'react-router-dom';
-import { useEffect, useRef, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
 import { useQueries } from '@tanstack/react-query';
 import {
   AlertCircle,
-  CheckCircle2,
   ChevronRight,
   Copy,
   ExternalLink,
@@ -61,16 +60,10 @@ import type {
   IntegrationOAuthKind,
   IntegrationOAuthProviderInfo,
 } from '@/api/endpoints/adminIntegrationsOauth';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
+import { BrandIcon } from '@/components/icons/BrandIcon';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   useCreateIntegration,
   useDeleteIntegration,
@@ -609,31 +602,41 @@ export function IntegrationsListPage() {
 }
 
 /* ----------------------------------------------------------------- */
-/* OAuth providers tab — read-only directory of login providers.    */
+/* OAuth providers — admin-only master-detail. Sidebar lists the three
+ * import providers; the detail pane edits credentials inline (no modal).
+ * Same shape as /admin/login-providers, tweaked for the PUT-style upsert
+ * contract (client_id + client_secret + redirect_uri all required).
+ */
+
+const INTEGRATION_OAUTH_ORDER: IntegrationOAuthKind[] = [
+  'yandex_contest',
+  'stepik',
+  'google_sheets',
+];
 
 function OAuthProvidersPanel() {
   const { data, isLoading, error } = useIntegrationOAuthProviders();
-  const notify = useNotifications();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [editing, setEditing] = useState<IntegrationOAuthProviderInfo | null>(
+  const [selectedId, setSelectedId] = useState<IntegrationOAuthKind | null>(
     null,
   );
 
-  const onCopy = async (p: IntegrationOAuthProviderInfo) => {
-    const uri = p.redirect_uri || p.default_redirect_uri || '';
-    if (!uri) return;
-    try {
-      await navigator.clipboard.writeText(uri);
-      setCopiedId(p.provider_kind);
-      notify.success('Redirect URI скопирован');
-      setTimeout(
-        () => setCopiedId((cur) => (cur === p.provider_kind ? null : cur)),
-        1500,
-      );
-    } catch {
-      notify.error('Не удалось скопировать');
+  const providers = (data ?? [])
+    .filter((p): p is IntegrationOAuthProviderInfo =>
+      INTEGRATION_OAUTH_ORDER.includes(
+        p.provider_kind as IntegrationOAuthKind,
+      ),
+    )
+    .sort(
+      (a, b) =>
+        INTEGRATION_OAUTH_ORDER.indexOf(a.provider_kind) -
+        INTEGRATION_OAUTH_ORDER.indexOf(b.provider_kind),
+    );
+
+  useEffect(() => {
+    if (selectedId === null && providers.length > 0) {
+      setSelectedId(providers[0].provider_kind);
     }
-  };
+  }, [selectedId, providers]);
 
   if (isLoading) {
     return (
@@ -647,118 +650,70 @@ function OAuthProvidersPanel() {
     return <ProblemAlert problem={error as unknown as Problem} />;
   }
 
-  const providers = data ?? [];
+  const selected = providers.find((p) => p.provider_kind === selectedId) ?? null;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <p className="text-sm text-muted-foreground">
-        Подключите OAuth-провайдеры импорта и экспорта. Преподаватели смогут
-        потом подключать свои аккаунты в один клик.
+        Подключите OAuth-провайдеры импорта и экспорта — преподаватели смогут
+        подключать свои аккаунты в один клик.
       </p>
 
-      <div className="divide-y divide-border/50 border-y border-border/50">
-        {providers.map((p) => (
-          <div
-            key={p.provider_kind}
-            className="grid grid-cols-[1fr_auto] items-center gap-4 py-4"
-            data-testid={`integration-oauth-provider-${p.provider_kind}`}
-          >
-            <div className="min-w-0 space-y-1">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-foreground">
-                  {p.title}
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  {p.configured ? 'настроено' : 'не настроено'}
-                </span>
-              </div>
-              <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
-                <span className="text-muted-foreground">client_id</span>
-                <span className="font-mono text-foreground/80 truncate">
-                  {p.client_id || '—'}
-                </span>
-                <span className="text-muted-foreground">redirect_uri</span>
-                <span className="font-mono text-foreground/80 truncate">
-                  {p.redirect_uri || p.default_redirect_uri || '—'}
-                </span>
-                {p.scope && (
-                  <>
-                    <span className="text-muted-foreground">scope</span>
-                    <span className="font-mono text-foreground/80 truncate">
-                      {p.scope}
-                    </span>
-                  </>
+      <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+        <nav
+          aria-label="OAuth-провайдеры интеграций"
+          className="flex flex-col py-2"
+        >
+          {providers.map((p) => {
+            const isSelected = p.provider_kind === selectedId;
+            return (
+              <button
+                key={p.provider_kind}
+                type="button"
+                onClick={() => setSelectedId(p.provider_kind)}
+                className={cn(
+                  'flex w-full items-center gap-3 rounded-md px-4 py-3 text-left transition-colors',
+                  isSelected ? 'bg-muted/40' : 'hover:bg-muted/20',
                 )}
-              </div>
-              {p.provider_kind === 'google_sheets' && (
-                <Link
-                  to="/integrations/google-sheets/setup"
-                  className="inline-flex items-center gap-1 pt-1 text-xs text-primary hover:underline"
-                  data-testid="integration-oauth-google-sheets-sa"
-                >
-                  Сервисный аккаунт (JSON)
-                  <ChevronRight className="h-3 w-3" />
-                </Link>
-              )}
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onCopy(p)}
-                aria-label="Скопировать redirect URI"
-                title="Скопировать redirect URI"
-                data-testid={`integration-oauth-copy-${p.provider_kind}`}
+                data-testid={`integration-oauth-provider-${p.provider_kind}`}
+                aria-current={isSelected ? 'page' : undefined}
               >
-                {copiedId === p.provider_kind ? (
-                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-              </Button>
-              {p.register_url && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  asChild
-                  aria-label="Зарегистрировать приложение у провайдера"
-                  title="Зарегистрировать приложение у провайдера"
-                >
-                  <a
-                    href={p.register_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditing(p)}
-                data-testid={`integration-oauth-edit-${p.provider_kind}`}
-              >
-                {p.configured ? 'Изменить' : 'Настроить'}
-              </Button>
-            </div>
-          </div>
-        ))}
-      </div>
+                <BrandIcon
+                  provider={p.provider_kind}
+                  className="h-5 w-5 shrink-0 text-foreground/80"
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm font-medium text-foreground truncate">
+                    {p.title}
+                  </div>
+                  <div className="text-xs text-muted-foreground truncate">
+                    {p.configured ? 'настроено' : 'не настроено'}
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </nav>
 
-      <IntegrationOAuthEditDialog
-        provider={editing}
-        onClose={() => setEditing(null)}
-      />
+        <div className="md:border-l md:border-border/60 p-6 md:p-8">
+          {selected ? (
+            <IntegrationOAuthDetail provider={selected} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Выберите провайдера слева.
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-interface EditDialogProps {
-  provider: IntegrationOAuthProviderInfo | null;
-  onClose: () => void;
+interface DetailProps {
+  provider: IntegrationOAuthProviderInfo;
 }
 
-function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
+function IntegrationOAuthDetail({ provider }: DetailProps) {
   const notify = useNotifications();
   const upsert = useUpsertIntegrationOAuthProvider();
   const remove = useDeleteIntegrationOAuthProvider();
@@ -766,34 +721,46 @@ function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
   const [clientSecret, setClientSecret] = useState('');
   const [redirectUri, setRedirectUri] = useState('');
   const [scope, setScope] = useState('');
+  const [problem, setProblem] = useState<Problem | null>(null);
 
-  const open = !!provider;
-  const lastProvider = useRef<string | null>(null);
+  // Pre-fill from the provider snapshot whenever the selection changes.
+  // The backend's PUT contract requires all of client_id + client_secret +
+  // redirect_uri on every save, so we surface the existing client_id /
+  // redirect_uri pre-filled and ask the admin to re-enter the secret.
   useEffect(() => {
-    if (provider && lastProvider.current !== provider.provider_kind) {
-      lastProvider.current = provider.provider_kind;
-      setClientId(provider.client_id ?? '');
-      setClientSecret('');
-      setRedirectUri(provider.redirect_uri ?? provider.default_redirect_uri ?? '');
-      setScope(provider.scope ?? provider.default_scope ?? '');
+    setClientId(provider.client_id ?? '');
+    setClientSecret('');
+    setRedirectUri(provider.redirect_uri ?? provider.default_redirect_uri ?? '');
+    setScope(provider.scope ?? '');
+    setProblem(null);
+  }, [provider.provider_kind, provider.client_id, provider.redirect_uri, provider.default_redirect_uri, provider.scope]);
+
+  const copyRedirect = () => {
+    if (redirectUri && typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(redirectUri);
+      notify.info('Redirect URI скопирован');
     }
-    if (!provider) lastProvider.current = null;
-  }, [provider]);
+  };
 
-  if (!provider) return null;
-
-  // The backend requires client_id + client_secret + redirect_uri on every
-  // PUT. We can't PATCH only the secret, so on edit-existing we still
-  // demand the user re-enter the secret (good practice anyway — no
-  // accidental save when they wanted to read the current value).
   const canSave =
     !!clientId.trim() && !!clientSecret.trim() && !!redirectUri.trim();
 
-  const onSave = async () => {
-    if (!canSave) return;
+  const onSave = async (e: FormEvent) => {
+    e.preventDefault();
+    setProblem(null);
+    if (!canSave) {
+      setProblem({
+        title: 'Заполните Client ID, Client Secret и Redirect URI',
+        detail:
+          'Бэкенд хранит все три поля вместе — секрет нельзя обновить отдельно.',
+        status: 400,
+        code: 'BAD_REQUEST',
+      } as Problem);
+      return;
+    }
     try {
       await upsert.mutateAsync({
-        kind: provider.provider_kind as IntegrationOAuthKind,
+        kind: provider.provider_kind,
         payload: {
           client_id: clientId.trim(),
           client_secret: clientSecret.trim(),
@@ -802,128 +769,166 @@ function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
         },
       });
       notify.success(`${provider.title}: ключи сохранены`);
-      onClose();
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось сохранить');
+      setClientSecret('');
+    } catch (raw) {
+      setProblem(raw as Problem);
     }
   };
 
   const onRemove = async () => {
     if (!confirm(`Удалить OAuth-приложение «${provider.title}»?`)) return;
     try {
-      await remove.mutateAsync(provider.provider_kind as IntegrationOAuthKind);
+      await remove.mutateAsync(provider.provider_kind);
       notify.success(`${provider.title}: приложение удалено`);
-      onClose();
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось удалить');
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{provider.title}</DialogTitle>
-          <DialogDescription>
-            Зарегистрируйте приложение у провайдера, вставьте client_id и
-            client_secret. После сохранения преподаватели смогут подключать
-            свои аккаунты одним кликом.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="iov-client-id">client_id</Label>
-            <Input
-              id="iov-client-id"
-              value={clientId}
-              onChange={(e) => setClientId(e.currentTarget.value)}
-              autoComplete="off"
-              data-testid="integration-oauth-edit-client-id"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="iov-client-secret">client_secret</Label>
-            <Input
-              id="iov-client-secret"
-              value={clientSecret}
-              onChange={(e) => setClientSecret(e.currentTarget.value)}
-              type="password"
-              placeholder={
-                provider.client_secret_set ? '••••• (введите заново)' : ''
-              }
-              autoComplete="new-password"
-              data-testid="integration-oauth-edit-client-secret"
-            />
-            {provider.client_secret_set && (
-              <p className="text-xs text-muted-foreground">
-                Секрет уже сохранён — его нельзя посмотреть, можно только
-                заменить новым значением.
-              </p>
+    <div className="space-y-6">
+      <header className="flex items-center gap-3">
+        <BrandIcon
+          provider={provider.provider_kind}
+          className="h-7 w-7 shrink-0 text-foreground/80"
+        />
+        <h2 className="text-xl font-semibold text-foreground">
+          {provider.title}
+        </h2>
+        <span className="ml-auto text-xs text-muted-foreground">
+          {provider.configured ? 'настроено' : 'не настроено'}
+        </span>
+      </header>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        {provider.register_url && (
+          <a
+            href={provider.register_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+            data-testid={`integration-oauth-register-${provider.provider_kind}`}
+          >
+            где зарегистрировать
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+        {provider.provider_kind === 'google_sheets' && (
+          <Link
+            to="/integrations/google-sheets/setup"
+            className="inline-flex items-center gap-1 text-primary hover:underline"
+            data-testid="integration-oauth-google-sheets-sa"
+          >
+            Сервисный аккаунт (JSON)
+            <ChevronRight className="h-3 w-3" />
+          </Link>
+        )}
+      </div>
+
+      <form onSubmit={onSave} className="space-y-4" noValidate>
+        {problem && (
+          <Alert variant="destructive">
+            <AlertTitle>{problem.title}</AlertTitle>
+            {problem.detail && (
+              <AlertDescription>{problem.detail}</AlertDescription>
             )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="iov-redirect-uri">redirect_uri</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="iov-redirect-uri"
-                value={redirectUri}
-                readOnly
-                className="font-mono text-xs"
-                data-testid="integration-oauth-edit-redirect-uri"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={() => void navigator.clipboard?.writeText(redirectUri)}
-                title="Скопировать"
-                aria-label="Скопировать redirect URI"
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              Это наш фиксированный адрес — только скопируйте его в настройки
-              приложения у провайдера. Менять не нужно.
-            </p>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="iov-scope">scope (опционально)</Label>
-            <Input
-              id="iov-scope"
-              value={scope}
-              onChange={(e) => setScope(e.currentTarget.value)}
-              autoComplete="off"
-              placeholder={provider.default_scope ?? ''}
-              data-testid="integration-oauth-edit-scope"
-            />
-            <p className="text-xs text-muted-foreground">
-              По умолчанию — <code className="font-mono">{provider.default_scope ?? '—'}</code>.
-              Если выдадите широкий scope здесь, преподавателю не придётся
-              подтверждать дополнительные разрешения при каждом подключении.
-            </p>
-          </div>
+          </Alert>
+        )}
+
+        <div className="space-y-1.5">
+          <Label htmlFor="iov-client-id">Client ID</Label>
+          <Input
+            id="iov-client-id"
+            value={clientId}
+            onChange={(e) => setClientId(e.currentTarget.value)}
+            autoComplete="off"
+            className="font-mono text-xs"
+            data-testid="integration-oauth-edit-client-id"
+          />
         </div>
-        <DialogFooter className="gap-2 sm:gap-2">
-          {provider.configured && (
+
+        <div className="space-y-1.5">
+          <Label htmlFor="iov-client-secret">
+            Client Secret
+            {provider.client_secret_set && (
+              <span className="ml-2 text-xs text-muted-foreground">
+                (введите заново для замены)
+              </span>
+            )}
+          </Label>
+          <Input
+            id="iov-client-secret"
+            value={clientSecret}
+            onChange={(e) => setClientSecret(e.currentTarget.value)}
+            type="password"
+            className="font-mono text-xs"
+            placeholder={provider.client_secret_set ? '••••••••' : ''}
+            autoComplete="new-password"
+            data-testid="integration-oauth-edit-client-secret"
+          />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="iov-redirect-uri">Redirect URI</Label>
+          <div className="flex items-center gap-2">
+            <Input
+              id="iov-redirect-uri"
+              value={redirectUri}
+              readOnly
+              className="font-mono text-xs"
+              data-testid="integration-oauth-edit-redirect-uri"
+            />
             <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              onClick={copyRedirect}
+              title="Скопировать"
+              aria-label="Скопировать redirect URI"
+              data-testid={`integration-oauth-copy-${provider.provider_kind}`}
+            >
+              <Copy className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Это наш фиксированный адрес — только скопируйте.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="iov-scope">Scope</Label>
+          <Input
+            id="iov-scope"
+            value={scope}
+            onChange={(e) => setScope(e.currentTarget.value)}
+            autoComplete="off"
+            className="font-mono text-xs"
+            placeholder={provider.default_scope ?? ''}
+            data-testid="integration-oauth-edit-scope"
+          />
+          <p className="text-xs text-muted-foreground">
+            По умолчанию{' '}
+            <code className="font-mono">{provider.default_scope ?? '—'}</code>.
+            Широкий scope = меньше подтверждений у преподавателя.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between pt-2">
+          {provider.configured ? (
+            <Button
+              type="button"
               variant="ghost"
               onClick={onRemove}
               disabled={upsert.isPending || remove.isPending}
-              className="text-destructive hover:text-destructive sm:mr-auto"
+              className="text-destructive hover:text-destructive"
             >
               Удалить приложение
             </Button>
+          ) : (
+            <span />
           )}
           <Button
-            variant="outline"
-            onClick={onClose}
-            disabled={upsert.isPending}
-          >
-            Отмена
-          </Button>
-          <Button
-            onClick={onSave}
+            type="submit"
             disabled={!canSave || upsert.isPending}
             data-testid="integration-oauth-edit-save"
           >
@@ -932,9 +937,9 @@ function IntegrationOAuthEditDialog({ provider, onClose }: EditDialogProps) {
             )}
             Сохранить
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </form>
+    </div>
   );
 }
 
