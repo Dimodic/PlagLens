@@ -45,7 +45,7 @@ const StatsPanel = lazy(() =>
   import('@/components/courses/StatsPanel').then((m) => ({ default: m.StatsPanel })),
 );
 import { SuspiciousPanel } from '@/components/courses/SuspiciousPanel';
-import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
+import { assignmentKeys, useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import {
   homeworkKeys,
   useHomeworksForCourse,
@@ -344,9 +344,17 @@ export default function CourseDetailPage() {
       void qc.invalidateQueries({
         queryKey: homeworkKeys.forCourse(course?.id ?? ''),
       });
+      // Also invalidate the per-course assignments cache: without this
+      // the freshly-imported ДЗ row appears but its task list reads
+      // «0 заданий» until a hard refresh — the homework row got
+      // refetched, but the sibling /courses/:id/assignments query
+      // (which feeds asgByHwId in the tree) didn't.
+      void qc.invalidateQueries({
+        queryKey: assignmentKeys.byCourse(course?.id ?? ''),
+      });
       // HW detail page is gone — stay on the course page; the freshly
-      // imported ДЗ shows up in the inline list once the query above
-      // invalidates.
+      // imported ДЗ shows up in the inline list once the queries above
+      // invalidate.
       navigate(`/courses/${course?.slug ?? slug}`);
     } else if (op.status === 'failed') {
       const msg = (op.errors ?? []).join('; ') || 'Импорт упал';
