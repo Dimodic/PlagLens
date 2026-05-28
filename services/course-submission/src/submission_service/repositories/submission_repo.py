@@ -359,19 +359,31 @@ class SubmissionRepository:
     async def list_for_user(
         self,
         *,
-        author_id: str,
+        author_id: str | list[str],
         tenant_id: str,
         course_id: str | None = None,
         assignment_id: str | None = None,
         language: str | None = None,
         limit: int | None = None,
     ) -> list[Submission]:
+        """List a single user's submissions.
+
+        ``author_id`` may be a single id or a list. The list form is what
+        the self-service router uses to cover both:
+          * the user's own ``usr_…`` id, and
+          * every external participant id linked to them via
+            ``identity.external_bindings`` (e.g. ``yc:<login>``).
+        Imported rows arrive labelled with the external id and only get
+        rewritten to ``usr_…`` if a "claim" runs; folding both into the
+        same filter means the dashboard works without that claim step.
+        """
+        ids = [author_id] if isinstance(author_id, str) else list(author_id)
         stmt = (
             select(Submission)
             # Eager-load grade so the API can compute ``is_graded``
             # without an async lazy-load (mirrors the staff inbox).
             .options(selectinload(Submission.grade))
-            .where(Submission.author_id == author_id)
+            .where(Submission.author_id.in_(ids))
             .where(Submission.tenant_id == tenant_id)
             .where(Submission.deleted_at.is_(None))
             .order_by(Submission.submitted_at.desc())

@@ -2589,6 +2589,33 @@ async def migrate_author_ids(
             {"to_key": to_key, "from_key": from_key},
         )
         binds_total += binds_res.rowcount or 0
+
+    # 3) Claim pass — for every yc binding (system='yandex_contest'),
+    #    rewrite matching submissions' author_id to the bound user_id.
+    #    This is the "second leg" of the migration: rows that USED to live
+    #    under yc:<pid> are now yc:<login>, but the read path still expects
+    #    author_id == user_id once the user has redeemed. Without this
+    #    step the student keeps seeing «По заданию посылок нет» until they
+    #    re-redeem (which clears nothing for already-imported rows).
+    #    Cross-tenant safe — we restrict to bindings whose user lives in
+    #    this tenant so we don't accidentally rewrite another tenant's
+    #    rows. Idempotent (a second run touches 0 rows).
+    claim_res = await session.execute(
+        text(
+            "UPDATE submission.submissions s "
+            "SET author_id = b.user_id "
+            "FROM identity.external_bindings b, identity.users u "
+            "WHERE b.system = 'yandex_contest' "
+            "AND s.source = 'yandex_contest' "
+            "AND s.author_id = b.external_id "
+            "AND b.user_id = u.id "
+            "AND u.tenant_id = :tenant "
+            "AND s.tenant_id = :tenant"
+        ),
+        {"tenant": cfg.tenant_id},
+    )
+    claimed = claim_res.rowcount or 0
+
     await session.commit()
     logger.info(
         "yc.migrate_author_ids.done",
@@ -2597,6 +2624,7 @@ async def migrate_author_ids(
         mapped=len(pid_to_login),
         submissions_updated=subs_total,
         bindings_updated=binds_total,
+        claimed=claimed,
     )
     return {
         "ok": True,
@@ -2604,4 +2632,5 @@ async def migrate_author_ids(
         "mapped": len(pid_to_login),
         "submissions_updated": subs_total,
         "bindings_updated": binds_total,
+        "claimed": claimed,
     }

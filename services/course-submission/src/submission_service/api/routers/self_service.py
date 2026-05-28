@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Query
+from sqlalchemy import text
 
 from submission_service.api.deps import CourseDep, CurrentUser, SessionDep
 from submission_service.common.pagination import Page, PageInfo
@@ -17,8 +18,47 @@ from submission_service.schemas.submission import SubmissionOut
 router = APIRouter()
 
 
-def _ensure_self(sub: Any, user_id: str) -> None:
-    if sub.author_id != user_id:
+async def _self_author_ids(session: Any, user_id: str) -> list[str]:
+    """The set of ``author_id`` values that count as "this user's submissions".
+
+    A submission row's ``author_id`` is either:
+      * the user's own ``usr_…`` id (post-claim or direct upload), OR
+      * an external participant id like ``yc:smmaxims`` (pre-claim,
+        imported from Yandex.Contest / Stepik / eJudge).
+
+    To make `/users/me/submissions` show BOTH kinds without forcing a
+    "claim" step on every import, we expand the filter to include every
+    external_id the user has linked. Identity is in the same Postgres but
+    a different schema — a single cross-schema ``IN`` query covers it.
+    Falls back to just ``[user_id]`` if the query trips on a missing
+    grant; the worst case is then the old behaviour (only user_id rows
+    show up).
+    """
+    ids: list[str] = [user_id]
+    try:
+        rows = (
+            await session.execute(
+                text(
+                    "SELECT system || ':' || external_id AS ext "
+                    "FROM identity.external_bindings "
+                    "WHERE user_id = :uid"
+                ),
+                {"uid": user_id},
+            )
+        ).all()
+        for (ext,) in rows:
+            if ext and ext not in ids:
+                ids.append(str(ext))
+    except Exception:
+        # Permission denied or schema missing in dev/test envs — keep
+        # going with the bare user_id, the old behaviour. We don't want
+        # the whole /users/me/submissions page to 500 over a grant.
+        pass
+    return ids
+
+
+def _ensure_self(sub: Any, author_ids: list[str]) -> None:
+    if sub.author_id not in author_ids:
         raise forbidden("Not your submission")
 
 
@@ -30,8 +70,9 @@ async def my_submissions_for_assignment(
     assignment_id: str, user: CurrentUser, session: SessionDep
 ) -> list[SubmissionOut]:
     repo = SubmissionRepository(session)
+    author_ids = await _self_author_ids(session, user.user_id)
     items = await repo.list_for_user(
-        author_id=user.user_id,
+        author_id=author_ids,
         tenant_id=user.tenant_id,
         assignment_id=assignment_id,
     )
@@ -114,8 +155,9 @@ async def my_submissions(
             allowed = {str(c) for c in (*member_ids, *owner_ids)}
             all_items = [s for s in all_items if s.course_id in allowed]
     else:
+        author_ids = await _self_author_ids(session, user.user_id)
         all_items = await repo.list_for_user(
-            author_id=user.user_id,
+            author_id=author_ids,
             tenant_id=user.tenant_id,
             course_id=course_id,
             assignment_id=assignment_id,
@@ -253,7 +295,7 @@ async def my_submission(
     sub = await repo.get(submission_id)
     if sub is None:
         raise not_found("Submission not found")
-    _ensure_self(sub, user.user_id)
+    _ensure_self(sub, await _self_author_ids(session, user.user_id))
     return SubmissionOut.model_validate(sub)
 
 
@@ -270,7 +312,7 @@ async def my_grade(
     sub = await repo.get(submission_id)
     if sub is None:
         raise not_found("Submission not found")
-    _ensure_self(sub, user.user_id)
+    _ensure_self(sub, await _self_author_ids(session, user.user_id))
     grade = await repo.get_grade(sub.id)
     if grade is None:
         raise not_found("Grade not set")
@@ -299,7 +341,7 @@ async def my_feedback(
     sub = await repo.get(submission_id)
     if sub is None:
         raise not_found("Submission not found")
-    _ensure_self(sub, user.user_id)
+    _ensure_self(sub, await _self_author_ids(session, user.user_id))
     items = await repo.list_feedback(sub.id, visible_only=True)
     return [FeedbackOut.model_validate(f) for f in items]
 
@@ -312,7 +354,7 @@ async def my_plagiarism(
     sub = await repo.get(submission_id)
     if sub is None:
         raise not_found("Submission not found")
-    _ensure_self(sub, user.user_id)
+    _ensure_self(sub, await _self_author_ids(session, user.user_id))
     flags = sub.flags or {}
     return {
         "submission_id": sub.id,
@@ -329,7 +371,7 @@ async def my_ai(
     sub = await repo.get(submission_id)
     if sub is None:
         raise not_found("Submission not found")
-    _ensure_self(sub, user.user_id)
+    _ensure_self(sub, await _self_author_ids(session, user.user_id))
     items = await repo.list_feedback(sub.id, visible_only=True)
     llm = [f for f in items if f.source == "llm_curated"]
     return {
