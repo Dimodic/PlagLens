@@ -36,6 +36,7 @@ import {
   useAssignmentGrades,
   useDistributeSubmissions,
   useLatestPerStudent,
+  useMySubmissions,
 } from '@/hooks/api/useSubmissions';
 import { useCourseMembers } from '@/hooks/api/useCourses';
 import { useUsers } from '@/hooks/api/useUsers';
@@ -502,7 +503,7 @@ export default function AssignmentDetailPage() {
           <div className="mt-6">
             {/* MAIN */}
             <div className="min-w-0 space-y-6">
-              <TabsContent value="about" className="mt-0">
+              <TabsContent value="about" className="mt-0 space-y-8">
                 {assignment.description ? (
                   // Plain prose, no Card chrome — design-system §7 antipattern:
                   // "Card вокруг каждой секции". YC HTML rendered via
@@ -518,6 +519,10 @@ export default function AssignmentDetailPage() {
                   <div className="py-12 text-center text-sm text-muted-foreground">
                     Описание не задано.
                   </div>
+                )}
+
+                {!isTeacher && (
+                  <MyAssignmentSubmissions assignmentId={String(assignment.id)} />
                 )}
               </TabsContent>
 
@@ -1425,5 +1430,120 @@ function SubmissionTimeline({
         {maxCount}
       </text>
     </svg>
+  );
+}
+
+/* ---------------------------------------------------------------------- */
+/* MyAssignmentSubmissions — student-only sub-section on the «about» tab. */
+/* Surfaces the student's own OK / Accepted attempts on this assignment   */
+/* with a click-through to the submission detail. CE / WA / PE rows are   */
+/* filtered out (they never reach the teacher's queue either; showing     */
+/* them here would imply they're «pending» when they're really dead).     */
+/* ---------------------------------------------------------------------- */
+
+function isAccepted(v: string | null | undefined): boolean {
+  if (!v) return false;
+  const s = v.trim().toLowerCase();
+  return s === 'ok' || s === 'accepted';
+}
+
+const fmtSubDate = (iso: string | null | undefined) =>
+  iso
+    ? new Date(iso).toLocaleString('ru-RU', {
+        day: 'numeric',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : '';
+
+function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
+  // Reuses the same /users/me/submissions query the dashboard already
+  // primed — assignment_ids=[…] hits FastAPI's repeated query params
+  // contract for ``list[str] = Query()``.
+  const q = useMySubmissions({ assignment_ids: [assignmentId] });
+  const subsRaw = q.data as unknown;
+  const subs: Array<{
+    id: string;
+    submitted_at: string;
+    external_verdict?: string | null;
+    score?: number | null;
+    max_score?: number | null;
+  }> = Array.isArray(subsRaw)
+    ? (subsRaw as never)
+    : ((subsRaw as { data?: never[] })?.data ?? []);
+
+  const accepted = subs
+    .filter((s) => isAccepted(s.external_verdict))
+    .sort(
+      (a, b) =>
+        new Date(b.submitted_at).getTime() -
+        new Date(a.submitted_at).getTime(),
+    );
+
+  if (q.isLoading) {
+    return (
+      <section className="border-t border-border/40 pt-6">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Мои посылки
+        </h2>
+        <p className="text-sm text-muted-foreground">Загружаем…</p>
+      </section>
+    );
+  }
+
+  if (accepted.length === 0) {
+    return (
+      <section className="border-t border-border/40 pt-6">
+        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+          Мои посылки
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          На проверку ещё не уехало ни одной OK-посылки.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border-t border-border/40 pt-6" data-testid="assignment-my-subs">
+      <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+        Мои посылки
+      </h2>
+      <ul className="divide-y divide-border/40 border-t border-border/40">
+        {accepted.map((s) => {
+          const hasScore = s.score != null;
+          return (
+            <li key={s.id}>
+              <Link
+                to={`/me/submissions/${s.id}`}
+                data-testid={`assignment-my-sub-${s.id}`}
+                className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+              >
+                <span className="text-sm text-foreground truncate flex-1">
+                  Посылка от {fmtSubDate(s.submitted_at)}
+                </span>
+                {hasScore ? (
+                  <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                    {Number(s.score).toFixed(1)}
+                    {s.max_score != null && (
+                      <span className="text-muted-foreground"> / {s.max_score}</span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground shrink-0">
+                    на проверке
+                  </span>
+                )}
+                <ChevronRight
+                  aria-hidden
+                  className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
