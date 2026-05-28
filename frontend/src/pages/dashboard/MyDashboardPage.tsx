@@ -230,29 +230,44 @@ function CourseSection({
   const homeworks = hwQ.data?.data ?? [];
   const assignments = asgQ.data?.data ?? [];
 
-  // Group assignments by homework_id for fast lookup inside the
-  // expanded ДЗ rows.
+  // Group assignments by homework_id, AND only keep ones whose ДЗ is
+  // present in the homeworks list — backend's /courses/:id/assignments
+  // can include orphaned / archived rows that we never render in the
+  // tree, and counting them in «N из M сдано» reads as a phantom +10.
+  // Source of truth = «what the student actually sees here».
+  const visibleHwIds = useMemo(
+    () => new Set(homeworks.map((h) => String(h.id))),
+    [homeworks],
+  );
   const asgByHwId = useMemo(() => {
     const m = new Map<string, AssignmentBrief[]>();
     for (const a of assignments) {
       if (a.homework_id == null) continue;
       const key = String(a.homework_id);
+      if (!visibleHwIds.has(key)) continue;
       const arr = m.get(key) ?? [];
       arr.push(a);
       m.set(key, arr);
     }
     return m;
-  }, [assignments]);
+  }, [assignments, visibleHwIds]);
 
-  // Aggregates for the course-row subtitle.
-  const total = assignments.length;
-  const gradedCount = assignments.filter((a) => {
+  // Course-row aggregates run on the assignments the student will actually
+  // see when they expand the ДЗ list — anything else is invisible to them
+  // and confusing in the counter. «Сдано» means «оценка released», not
+  // «есть OK». «На проверке» counts as not-yet-сдано.
+  const visibleAssignments = useMemo(
+    () => Array.from(asgByHwId.values()).flat(),
+    [asgByHwId],
+  );
+  const total = visibleAssignments.length;
+  const gradedCount = visibleAssignments.filter((a) => {
     const subs = subsByAsgId.get(String(a.id)) ?? [];
     return subs.some((s) => s.score != null);
   }).length;
   const mean = (() => {
     const scores: number[] = [];
-    for (const a of assignments) {
+    for (const a of visibleAssignments) {
       const subs = subsByAsgId.get(String(a.id)) ?? [];
       const okGraded = subs
         .filter((s) => isAccepted(s.external_verdict) && s.score != null)
@@ -340,11 +355,12 @@ function HomeworkSubrow({
   const [open, setOpen] = useState(false);
   const hwHref = `/courses/${courseSlug}/homeworks/${hw.slug}`;
 
-  // Count of «сдано» (any OK attempt) inside this ДЗ so the collapsed row
-  // already tells the student where they stand without expanding.
-  const okCount = assignments.filter((a) => {
+  // «Сдано» = teacher has released a score for the assignment; «OK
+  // ещё не оценено» falls into «на проверке», not «сдано». The course-
+  // header counter uses the same definition, so the two never disagree.
+  const gradedCount = assignments.filter((a) => {
     const subs = subsByAsgId.get(String(a.id)) ?? [];
-    return subs.some((s) => isAccepted(s.external_verdict));
+    return subs.some((s) => s.score != null);
   }).length;
   const totalCount = assignments.length;
 
@@ -368,7 +384,7 @@ function HomeworkSubrow({
           <span className="text-base font-medium truncate">{hw.title}</span>
           {totalCount > 0 && (
             <span className="text-xs tabular-nums text-muted-foreground shrink-0">
-              {okCount} / {totalCount}
+              {gradedCount} / {totalCount}
             </span>
           )}
         </span>
