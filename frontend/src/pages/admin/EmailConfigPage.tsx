@@ -48,7 +48,6 @@ import type {
   EmailProvider,
 } from '@/api/endpoints/notificationsAdmin';
 import type { Problem } from '@/api/types';
-import { cn } from '@/components/ui/utils';
 
 // SMTP modes — backend stores them as two booleans (smtp_use_tls,
 // smtp_use_starttls) but for a sane UI we collapse to a single enum
@@ -67,18 +66,11 @@ function booleansToMode(use_tls: boolean, use_starttls: boolean): SmtpMode {
   return 'plain';
 }
 
-// UI-level branches. ``smtp`` stays as-is on the wire; everything under
-// ``api`` is one of the HTTP-API providers.
-type Branch = 'smtp' | 'api';
-type ApiProvider = 'mailgun' | 'resend';
-
-function branchOf(p: EmailProvider): Branch {
-  return p === 'smtp' ? 'smtp' : 'api';
-}
-
-function defaultApiProvider(p: EmailProvider): ApiProvider {
-  return p === 'mailgun' || p === 'resend' ? p : 'mailgun';
-}
+const PROVIDER_LABELS: Record<EmailProvider, string> = {
+  smtp: 'SMTP',
+  mailgun: 'Mailgun · API',
+  resend: 'Resend · API',
+};
 
 export function EmailConfigPage() {
   useDocumentTitle('Почта');
@@ -88,11 +80,11 @@ export function EmailConfigPage() {
   const update = useUpdateEmailConfig();
   const testM = useTestEmail();
 
-  // Two-level provider selection: branch first (SMTP / API), then which
-  // API vendor inside the API branch. We collapse to a single
-  // ``EmailProvider`` only when sending PATCH.
-  const [branch, setBranch] = useState<Branch>('smtp');
-  const [apiProvider, setApiProvider] = useState<ApiProvider>('mailgun');
+  // Single flat selector over all three transports. Earlier iteration
+  // had a two-button «SMTP / API» segmented control + a vendor select,
+  // which read as two big blobs at the top of the form — overkill for
+  // three options.
+  const [provider, setProvider] = useState<EmailProvider>('smtp');
 
   const [fromEmail, setFromEmail] = useState('');
   const [fromName, setFromName] = useState('PlagLens');
@@ -121,8 +113,7 @@ export function EmailConfigPage() {
   useEffect(() => {
     const c = cfgQ.data;
     if (!c) return;
-    setBranch(branchOf(c.provider));
-    setApiProvider(defaultApiProvider(c.provider));
+    setProvider(c.provider);
     setFromEmail(c.from_email ?? '');
     setFromName(c.from_name ?? 'PlagLens');
     setReplyTo(c.reply_to ?? '');
@@ -137,21 +128,16 @@ export function EmailConfigPage() {
     setResendApiKeySet(!!c.resend_api_key_set);
   }, [cfgQ.data]);
 
-  // ``EmailProvider`` actually sent on the wire follows the current
-  // branch/apiProvider pair.
-  const effectiveProvider: EmailProvider =
-    branch === 'smtp' ? 'smtp' : apiProvider;
-
   const onSave = async (e?: FormEvent) => {
     e?.preventDefault();
     setProblem(null);
     const body: EmailConfigPatch = {
-      provider: effectiveProvider,
+      provider,
       from_email: fromEmail.trim() || undefined,
       from_name: fromName.trim() || undefined,
       reply_to: replyTo.trim() || null,
     };
-    if (effectiveProvider === 'smtp') {
+    if (provider === 'smtp') {
       const m = modeToBooleans(smtpMode);
       body.smtp_host = smtpHost.trim() || null;
       body.smtp_port = smtpPort || null;
@@ -159,11 +145,11 @@ export function EmailConfigPage() {
       body.smtp_use_tls = m.use_tls;
       body.smtp_use_starttls = m.use_starttls;
       if (smtpPassword) body.smtp_password = smtpPassword;
-    } else if (effectiveProvider === 'mailgun') {
+    } else if (provider === 'mailgun') {
       body.mailgun_domain = mailgunDomain.trim() || null;
       body.mailgun_region = mailgunRegion;
       if (mailgunApiKey) body.mailgun_api_key = mailgunApiKey;
-    } else if (effectiveProvider === 'resend') {
+    } else if (provider === 'resend') {
       if (resendApiKey) body.resend_api_key = resendApiKey;
     }
     try {
@@ -197,27 +183,8 @@ export function EmailConfigPage() {
     }
   };
 
-  // Branch segmented control — top-level «SMTP vs API».
-  const branchTab = (id: Branch, label: string) => (
-    <button
-      type="button"
-      key={id}
-      onClick={() => setBranch(id)}
-      className={cn(
-        'flex-1 rounded-md px-4 py-2 text-sm transition-colors',
-        branch === id
-          ? 'bg-foreground text-background'
-          : 'text-muted-foreground hover:bg-muted/40 hover:text-foreground',
-      )}
-      data-testid={`email-branch-${id}`}
-      aria-pressed={branch === id}
-    >
-      {label}
-    </button>
-  );
-
   return (
-    <Page width="regular">
+    <Page width="narrow">
       <PageHeader title="Почта" />
 
       {cfgQ.isLoading ? (
@@ -225,7 +192,7 @@ export function EmailConfigPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : (
-        <form onSubmit={onSave} className="space-y-6" noValidate>
+        <form onSubmit={onSave} className="space-y-5" noValidate>
           {problem && (
             <Alert variant="destructive" data-testid="email-config-error">
               <AlertTitle>{problem.title || 'Не удалось'}</AlertTitle>
@@ -233,38 +200,51 @@ export function EmailConfigPage() {
             </Alert>
           )}
 
-          {/* Top-level branch switch: SMTP vs API providers. */}
-          <div className="flex gap-1 rounded-md bg-muted/20 p-1">
-            {branchTab('smtp', 'SMTP')}
-            {branchTab('api', 'API-провайдеры')}
+          {/* Transport selector — flat list of all three options. The
+              earlier two-step «SMTP / API» segmented control + vendor
+              select was overkill for three choices and read as two big
+              chrome blocks. One Select is enough. */}
+          <div className="space-y-1.5">
+            <Label htmlFor="email-provider">Транспорт</Label>
+            <Select
+              value={provider}
+              onValueChange={(v) => setProvider((v as EmailProvider) ?? 'smtp')}
+            >
+              <SelectTrigger id="email-provider" data-testid="email-provider-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="smtp">{PROVIDER_LABELS.smtp}</SelectItem>
+                <SelectItem value="mailgun">{PROVIDER_LABELS.mailgun}</SelectItem>
+                <SelectItem value="resend">{PROVIDER_LABELS.resend}</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* From-address block — shared across all providers. */}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="email-from-email">Адрес отправителя</Label>
-              <Input
-                id="email-from-email"
-                value={fromEmail}
-                onChange={(e) => setFromEmail(e.currentTarget.value)}
-                placeholder="no-reply@plaglens.ru"
-                data-testid="email-from-email-input"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="email-from-name">Имя отправителя</Label>
-              <Input
-                id="email-from-name"
-                value={fromName}
-                onChange={(e) => setFromName(e.currentTarget.value)}
-                data-testid="email-from-name-input"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email-from-email">Адрес отправителя</Label>
+            <Input
+              id="email-from-email"
+              value={fromEmail}
+              onChange={(e) => setFromEmail(e.currentTarget.value)}
+              placeholder="no-reply@plaglens.ru"
+              data-testid="email-from-email-input"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="email-from-name">Имя отправителя</Label>
+            <Input
+              id="email-from-name"
+              value={fromName}
+              onChange={(e) => setFromName(e.currentTarget.value)}
+              data-testid="email-from-name-input"
+            />
           </div>
 
-          {branch === 'smtp' && (
-            <div className="space-y-4 border-t border-border/40 pt-6">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_120px]">
+          {provider === 'smtp' && (
+            <>
+              <div className="grid grid-cols-[1fr_96px] gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="smtp-host">SMTP-сервер</Label>
                   <Input
@@ -336,131 +316,106 @@ export function EmailConfigPage() {
                   data-testid="smtp-password-input"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Для Yandex используйте «пароль приложения» из{' '}
+                  Для Yandex —{' '}
                   <a
                     href="https://id.yandex.ru/security/app-passwords"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-foreground hover:underline"
                   >
-                    id.yandex.ru → Пароли приложений
+                    пароль приложения
                   </a>
-                  , а не основной пароль аккаунта.
+                  , не основной.
                 </p>
               </div>
-            </div>
+            </>
           )}
 
-          {branch === 'api' && (
-            <div className="space-y-4 border-t border-border/40 pt-6">
-              <div className="space-y-1.5">
-                <Label htmlFor="api-provider">Провайдер</Label>
-                <Select
-                  value={apiProvider}
-                  onValueChange={(v) =>
-                    setApiProvider((v as ApiProvider) ?? 'mailgun')
-                  }
-                >
-                  <SelectTrigger id="api-provider" data-testid="api-provider-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mailgun">Mailgun</SelectItem>
-                    <SelectItem value="resend">Resend</SelectItem>
-                  </SelectContent>
-                </Select>
+          {provider === 'mailgun' && (
+            <>
+              <div className="grid grid-cols-[1fr_96px] gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="mailgun-domain">Домен</Label>
+                  <Input
+                    id="mailgun-domain"
+                    value={mailgunDomain}
+                    onChange={(e) => setMailgunDomain(e.currentTarget.value)}
+                    placeholder="mg.plaglens.ru"
+                    data-testid="mailgun-domain-input"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="mailgun-region">Регион</Label>
+                  <Select
+                    value={mailgunRegion}
+                    onValueChange={(v) =>
+                      setMailgunRegion((v as 'us' | 'eu') ?? 'eu')
+                    }
+                  >
+                    <SelectTrigger id="mailgun-region" data-testid="mailgun-region-select">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="us">US</SelectItem>
+                      <SelectItem value="eu">EU</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
 
-              {apiProvider === 'mailgun' && (
-                <>
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_120px]">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="mailgun-domain">Домен</Label>
-                      <Input
-                        id="mailgun-domain"
-                        value={mailgunDomain}
-                        onChange={(e) => setMailgunDomain(e.currentTarget.value)}
-                        placeholder="mg.plaglens.ru"
-                        data-testid="mailgun-domain-input"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="mailgun-region">Регион</Label>
-                      <Select
-                        value={mailgunRegion}
-                        onValueChange={(v) =>
-                          setMailgunRegion((v as 'us' | 'eu') ?? 'eu')
-                        }
-                      >
-                        <SelectTrigger id="mailgun-region" data-testid="mailgun-region-select">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="us">US</SelectItem>
-                          <SelectItem value="eu">EU</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="mailgun-api-key">
+                  API-ключ
+                  {mailgunApiKeySet && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      (введите заново для замены)
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  id="mailgun-api-key"
+                  type="password"
+                  value={mailgunApiKey}
+                  onChange={(e) => setMailgunApiKey(e.currentTarget.value)}
+                  autoComplete="new-password"
+                  placeholder={mailgunApiKeySet ? '••••••••' : ''}
+                  data-testid="mailgun-api-key-input"
+                />
+              </div>
+            </>
+          )}
 
-                  <div className="space-y-1.5">
-                    <Label htmlFor="mailgun-api-key">
-                      API-ключ
-                      {mailgunApiKeySet && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          (введите заново для замены)
-                        </span>
-                      )}
-                    </Label>
-                    <Input
-                      id="mailgun-api-key"
-                      type="password"
-                      value={mailgunApiKey}
-                      onChange={(e) => setMailgunApiKey(e.currentTarget.value)}
-                      autoComplete="new-password"
-                      placeholder={mailgunApiKeySet ? '••••••••' : ''}
-                      data-testid="mailgun-api-key-input"
-                    />
-                  </div>
-                </>
-              )}
-
-              {apiProvider === 'resend' && (
-                <>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="resend-api-key">
-                      API-ключ
-                      {resendApiKeySet && (
-                        <span className="ml-2 text-xs text-muted-foreground">
-                          (введите заново для замены)
-                        </span>
-                      )}
-                    </Label>
-                    <Input
-                      id="resend-api-key"
-                      type="password"
-                      value={resendApiKey}
-                      onChange={(e) => setResendApiKey(e.currentTarget.value)}
-                      autoComplete="new-password"
-                      placeholder={resendApiKeySet ? '••••••••' : 're_xxxxxxxxxx'}
-                      data-testid="resend-api-key-input"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Создайте ключ на{' '}
-                      <a
-                        href="https://resend.com/api-keys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-foreground hover:underline"
-                      >
-                        resend.com/api-keys
-                      </a>
-                      . Адрес отправителя должен использовать домен,
-                      подтверждённый в вашем Resend-аккаунте.
-                    </p>
-                  </div>
-                </>
-              )}
+          {provider === 'resend' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="resend-api-key">
+                API-ключ
+                {resendApiKeySet && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    (введите заново для замены)
+                  </span>
+                )}
+              </Label>
+              <Input
+                id="resend-api-key"
+                type="password"
+                value={resendApiKey}
+                onChange={(e) => setResendApiKey(e.currentTarget.value)}
+                autoComplete="new-password"
+                placeholder={resendApiKeySet ? '••••••••' : 're_xxxxxxxxxx'}
+                data-testid="resend-api-key-input"
+              />
+              <p className="text-xs text-muted-foreground">
+                Создайте ключ на{' '}
+                <a
+                  href="https://resend.com/api-keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-foreground hover:underline"
+                >
+                  resend.com/api-keys
+                </a>
+                . Домен отправителя должен быть подтверждён в Resend.
+              </p>
             </div>
           )}
 
