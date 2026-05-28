@@ -654,11 +654,6 @@ function OAuthProvidersPanel() {
 
   return (
     <div className="space-y-6">
-      <p className="text-sm text-muted-foreground">
-        Подключите OAuth-провайдеры импорта и экспорта — преподаватели смогут
-        подключать свои аккаунты в один клик.
-      </p>
-
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
         <nav
           aria-label="OAuth-провайдеры интеграций"
@@ -686,7 +681,14 @@ function OAuthProvidersPanel() {
                   <div className="text-sm font-medium text-foreground truncate">
                     {p.title}
                   </div>
-                  <div className="text-xs text-muted-foreground truncate">
+                  <div
+                    className={cn(
+                      'text-xs truncate',
+                      p.configured
+                        ? 'text-muted-foreground'
+                        : 'text-sev-mid font-medium',
+                    )}
+                  >
                     {p.configured ? 'настроено' : 'не настроено'}
                   </div>
                 </div>
@@ -787,7 +789,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center gap-3">
+      <header className="flex items-center gap-2">
         <BrandIcon
           provider={provider.provider_kind}
           className="h-7 w-7 shrink-0 text-foreground/80"
@@ -795,35 +797,42 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
         <h2 className="text-xl font-semibold text-foreground">
           {provider.title}
         </h2>
-        <span className="ml-auto text-xs text-muted-foreground">
-          {provider.configured ? 'настроено' : 'не настроено'}
-        </span>
-      </header>
-
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         {provider.register_url && (
           <a
             href={provider.register_url}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
+            title="Где зарегистрировать приложение"
+            aria-label="Где зарегистрировать приложение"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
             data-testid={`integration-oauth-register-${provider.provider_kind}`}
           >
-            где зарегистрировать
-            <ExternalLink className="h-3 w-3" />
+            <ExternalLink className="h-4 w-4" />
           </a>
         )}
-        {provider.provider_kind === 'google_sheets' && (
+        <span
+          className={cn(
+            'ml-auto text-xs',
+            provider.configured
+              ? 'text-muted-foreground'
+              : 'text-sev-mid font-medium',
+          )}
+        >
+          {provider.configured ? 'настроено' : 'не настроено'}
+        </span>
+      </header>
+
+      {provider.provider_kind === 'google_sheets' && (
+        <Button asChild variant="outline" size="sm">
           <Link
             to="/integrations/google-sheets/setup"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
             data-testid="integration-oauth-google-sheets-sa"
           >
             Сервисный аккаунт (JSON)
-            <ChevronRight className="h-3 w-3" />
+            <ChevronRight className="ml-1 h-3.5 w-3.5" />
           </Link>
-        )}
-      </div>
+        </Button>
+      )}
 
       <form onSubmit={onSave} className="space-y-4" noValidate>
         {problem && (
@@ -869,19 +878,19 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="iov-redirect-uri">Redirect URI</Label>
-          <div className="flex items-center gap-2">
-            <Input
-              id="iov-redirect-uri"
-              value={redirectUri}
-              readOnly
-              className="font-mono text-xs"
-              data-testid="integration-oauth-edit-redirect-uri"
-            />
+          <Label>Redirect URI</Label>
+          <div
+            className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+            data-testid="integration-oauth-edit-redirect-uri"
+          >
+            <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
+              {redirectUri}
+            </code>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="icon"
+              className="-my-1 h-7 w-7 shrink-0"
               onClick={copyRedirect}
               title="Скопировать"
               aria-label="Скопировать redirect URI"

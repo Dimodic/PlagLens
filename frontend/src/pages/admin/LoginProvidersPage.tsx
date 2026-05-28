@@ -71,13 +71,8 @@ export default function LoginProvidersPage() {
   const selected = providers.find((p) => p.provider === selectedId) ?? null;
 
   return (
-    <Page width="wide">
+    <Page width="regular">
       <PageHeader title="Вход через соцсети" />
-
-      <p className="text-sm text-muted-foreground">
-        Подключите вход через соцсети — пользователи смогут регистрироваться
-        одним кликом.
-      </p>
 
       {error && (
         <Alert variant="destructive">
@@ -127,7 +122,14 @@ export default function LoginProvidersPage() {
                     <div className="text-sm font-medium text-foreground truncate">
                       {p.title}
                     </div>
-                    <div className="text-xs text-muted-foreground truncate">
+                    <div
+                      className={cn(
+                        'text-xs truncate',
+                        configured
+                          ? 'text-muted-foreground'
+                          : 'text-sev-mid font-medium',
+                      )}
+                    >
                       {configured ? 'настроено' : 'не настроено'}
                     </div>
                   </div>
@@ -222,7 +224,7 @@ function ProviderDetail({ provider }: DetailProps) {
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center gap-3">
+      <header className="flex items-center gap-2">
         <BrandIcon
           provider={provider.provider}
           className="h-7 w-7 shrink-0 text-foreground/80"
@@ -230,23 +232,30 @@ function ProviderDetail({ provider }: DetailProps) {
         <h2 className="text-xl font-semibold text-foreground">
           {provider.title}
         </h2>
-        <span className="ml-auto text-xs text-muted-foreground">
+        {provider.docs_url && (
+          <a
+            href={provider.docs_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Где зарегистрировать приложение"
+            aria-label="Где зарегистрировать приложение"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+            data-testid="login-docs-link"
+          >
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        )}
+        <span
+          className={cn(
+            'ml-auto text-xs',
+            configured
+              ? 'text-muted-foreground'
+              : 'text-sev-mid font-medium',
+          )}
+        >
           {configured ? 'настроено' : 'не настроено'}
         </span>
       </header>
-
-      {provider.docs_url && (
-        <a
-          href={provider.docs_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
-          data-testid="login-docs-link"
-        >
-          где зарегистрировать
-          <ExternalLink className="h-3 w-3" />
-        </a>
-      )}
 
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {problem && (
@@ -303,19 +312,19 @@ function ProviderDetail({ provider }: DetailProps) {
 
         {provider.redirect_uri && (
           <div className="space-y-1.5">
-            <Label htmlFor="login-redirect-uri">Redirect URI</Label>
-            <div className="flex items-center gap-2">
-              <Input
-                id="login-redirect-uri"
-                readOnly
-                value={provider.redirect_uri}
-                className="font-mono text-xs"
-                data-testid={`login-redirect-${provider.provider}`}
-              />
+            <Label>Redirect URI</Label>
+            <div
+              className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+              data-testid={`login-redirect-${provider.provider}`}
+            >
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
+                {provider.redirect_uri}
+              </code>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="icon"
+                className="-my-1 h-7 w-7 shrink-0"
                 onClick={copyRedirect}
                 title="Скопировать"
                 aria-label="Скопировать redirect URI"
