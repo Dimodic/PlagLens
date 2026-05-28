@@ -154,20 +154,28 @@ async def my_submissions(
         total=total,
     )
     out = [SubmissionOut.model_validate(s) for s in window]
-    # Mark graded rows from the eager-loaded grade relationship and, for
-    # staff only, surface the actual score so the triage queue can show
-    # the оценка ("8 / 10") in place of a generic "проверено" badge. The
-    # score is deliberately NOT exposed on the student self-service list:
-    # grade visibility there is gated by comment_visible_to_student + the
-    # assignment release schedule (enforced in my_grade), so a student
-    # keeps only the neutral "проверено" indicator until the teacher
-    # releases it.
+    # Mark graded rows from the eager-loaded grade relationship and
+    # surface the score where the viewer is allowed to see it.
+    #
+    # Staff (teacher/admin/assistant) always see the score — that's
+    # their triage queue.
+    #
+    # Students see their OWN graded submissions with score whenever the
+    # grade row is flagged ``comment_visible_to_student=True`` (the
+    # teacher's "release" toggle). Previously the score was stripped
+    # unconditionally on the student list, which made the dashboard's
+    # «Мои посылки» say «на проверке» for every released grade — the
+    # release-schedule gate in ``my_grade`` only covers the per-row
+    # detail page. The same flag is the source of truth here too.
     is_staff = user.global_role in _STAFF_ROLES
     for model, src in zip(out, window, strict=True):
         g = getattr(src, "grade", None)
         graded = g is not None and g.score is not None
         model.is_graded = graded
-        if graded and is_staff:
+        if not graded:
+            continue
+        visible = is_staff or bool(getattr(g, "comment_visible_to_student", False))
+        if visible:
             model.score = float(g.score)
             model.max_score = (
                 float(g.max_score) if g.max_score is not None else None

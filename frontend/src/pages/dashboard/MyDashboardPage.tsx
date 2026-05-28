@@ -136,18 +136,25 @@ export default function MyDashboardPage() {
   }, [myAssignments]);
 
   // -- Per-course aggregates. ------------------------------------------ //
+  // Course IDs come back as ``int`` from /users/me/courses and
+  // /users/me/assignments but as ``str`` from /users/me/submissions —
+  // SubmissionOut serialises them through Pydantic as strings. JS Maps
+  // don't coerce key types, so we string-key everything here to keep
+  // the merge consistent (otherwise «0 из 20 сдано» reads as «0 из 0»).
   const courseStats = useMemo(() => {
     const totalByCourse = new Map<string, number>();
     for (const a of myAssignments) {
-      totalByCourse.set(a.course_id, (totalByCourse.get(a.course_id) ?? 0) + 1);
+      const k = String(a.course_id);
+      totalByCourse.set(k, (totalByCourse.get(k) ?? 0) + 1);
     }
     const gradedByCourse = new Map<string, { count: number; sum: number }>();
     for (const s of mySubs) {
       if (s.score == null || !s.course_id) continue;
-      const cur = gradedByCourse.get(s.course_id) ?? { count: 0, sum: 0 };
+      const k = String(s.course_id);
+      const cur = gradedByCourse.get(k) ?? { count: 0, sum: 0 };
       cur.count += 1;
       cur.sum += Number(s.score);
-      gradedByCourse.set(s.course_id, cur);
+      gradedByCourse.set(k, cur);
     }
     return { totalByCourse, gradedByCourse };
   }, [myAssignments, mySubs]);
