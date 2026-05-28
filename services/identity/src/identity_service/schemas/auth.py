@@ -11,7 +11,12 @@ class RegisterRequest(BaseModel):
     email: str
     password: str = Field(min_length=4, max_length=128)
     display_name: str = Field(min_length=1, max_length=255)
-    tenant_slug: str
+    # tenant_slug is optional from the SPA — the registration form on
+    # /login doesn't ask for an organisation. When omitted, the service
+    # plants the user in ``Settings.default_tenant_slug`` (a placeholder
+    # «public» tenant). A real organisation is picked up later when the
+    # user redeems an invitation code, which migrates ``user.tenant_id``.
+    tenant_slug: str | None = None
     locale: str = "ru"
     invitation_token: str | None = None
 

@@ -143,6 +143,14 @@ class Settings(BaseSettings):
     # ---- Misc ----
     default_locale: str = "ru"
 
+    # Tenant assigned at self-registration when the user doesn't have an
+    # invitation code yet. The slug must point to a real tenant row — we
+    # seed «public» via Alembic. After the user redeems a course-invite
+    # whose tenant differs, the redeem endpoint migrates ``user.tenant_id``
+    # so the account «moves» into the real organisation; until then the
+    # account lives in this self-service tenant.
+    default_tenant_slug: str = "public"
+
     @property
     def cookie_secure(self) -> bool:
         return self.environment in ("staging", "prod")

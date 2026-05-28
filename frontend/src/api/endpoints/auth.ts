@@ -21,7 +21,11 @@ export interface RegisterRequest {
   email: string;
   password: string;
   display_name: string;
-  tenant_slug: string;
+  // tenant_slug is optional — when omitted the backend plants the user
+  // in the placeholder «public» tenant. Real organisation is picked up
+  // later when the user redeems an invitation code, which migrates
+  // ``user.tenant_id`` on the identity side.
+  tenant_slug?: string;
   locale?: string;
   invitation_token?: string;
 }

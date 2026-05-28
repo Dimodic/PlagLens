@@ -1,5 +1,25 @@
 /**
- * LoginPage — entry point for credential + OAuth sign-in.
+ * LoginPage — single entry point for both sign-in and sign-up.
+ *
+ * Two modes share one screen (same brand header, same OAuth row, same
+ * «или по почте» divider). The bottom footer toggles between them — no
+ * page navigation, no flicker, no re-mount of the OAuth row.
+ *
+ * Why merged: the previous /register lived in a separate Card on a
+ * different route. Switching mid-flow meant a navigation + losing all
+ * typed input. Users routinely conflate the two anyway («I want to
+ * sign in… wait, I don't have an account»). Same surface = same mental
+ * model, OAuth becomes a true «one-click» path for both.
+ *
+ * The /register URL still works — routes/index.tsx redirects it to
+ * `/login?mode=register` so external links and bookmarks aren't broken.
+ *
+ * Registration intentionally has no «Organisation» or «Invitation code»
+ * field. Backend (identity 0007+) plants self-registered users in a
+ * placeholder «public» tenant. The real organisation is picked up
+ * later when the user redeems an invitation code on /me — the redeem
+ * endpoint migrates ``user.tenant_id`` to the inviting tenant and
+ * requires_relogin flips so the SPA refreshes the JWT.
  *
  * Design notes per .claude/UI_RULES.md:
  *   - No card chrome. One narrow column on a flat background.
@@ -8,10 +28,6 @@
  *     and the form as the fallback.
  *   - All OAuth glyphs are monochrome (use currentColor) so the row feels
  *     like a single element of the page, not a brand carnival.
-
- *   - Telegram lives in the same icon row; clicking it programmatically
- *     opens Telegram's native confirm popup via the JS API (no widget
- *     button, no modal). See ``src/auth/telegramLogin.ts``.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -30,6 +46,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { openTelegramLogin } from '@/auth/telegramLogin';
+import { emailSchema, passwordSchema } from '@/utils/validators';
+
+type Mode = 'login' | 'register';
 
 // Monochrome brand glyphs taken from simple-icons (CC0). All four use
 // `fill: currentColor` so the row stays in lockstep with the theme. The
@@ -43,7 +62,6 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
     viewBox: '0 0 24 24',
   };
   if (provider === 'google') {
-    // Source: simple-icons/google.svg
     return (
       <svg {...common}>
         <path d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z" />
@@ -51,13 +69,6 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
     );
   }
   if (provider === 'yandex') {
-    // Source: Yandex official "Я in circle" mark
-    // (commons.wikimedia.org/.../Yandex_icon.svg, brand orange stripped).
-    // We render it monochromatically by combining the two sub-paths
-    // (disc + Я letterform) into a single path with the evenodd rule —
-    // the Я is *cut out* of the filled disc, letting the page background
-    // show through. That keeps it true monochrome (currentColor only)
-    // and inverts correctly when the theme flips.
     return (
       <svg {...common}>
         <path
@@ -69,7 +80,6 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
     );
   }
   if (provider === 'telegram') {
-    // Source: simple-icons/telegram.svg — full disc with paper-plane cut-out.
     return (
       <svg {...common}>
         <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
@@ -77,7 +87,6 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
     );
   }
   if (provider === 'github') {
-    // Source: simple-icons/github.svg
     return (
       <svg {...common}>
         <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12z" />
@@ -88,19 +97,31 @@ function OAuthGlyph({ provider }: { provider: OAuthProvider }) {
 }
 
 export function LoginPage() {
-  const { t } = useTranslation();
-  useDocumentTitle(t('auth.login.title'));
-
+  const { t, locale } = useTranslation();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { login, reloadMe } = useAuth();
   const notify = useNotifications();
 
+  // ?mode=register lets external links (and the /register redirect)
+  // deep-link into the sign-up form. Default to sign-in.
+  const initialMode: Mode = params.get('mode') === 'register' ? 'register' : 'login';
+  const [mode, setMode] = useState<Mode>(initialMode);
+  useDocumentTitle(
+    mode === 'register'
+      ? t('auth.register.title')
+      : t('auth.login.title'),
+  );
+
+  // Shared input state — email is reused across both modes; password
+  // intentionally NOT reused so an autofilled login password doesn't
+  // bleed into a registration attempt.
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [totpCode, setTotpCode] = useState('');
 
+  // Login-only state
+  const [totpCode, setTotpCode] = useState('');
   const [problem, setProblem] = useState<Problem | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
@@ -109,6 +130,41 @@ export function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
   const [tgBusy, setTgBusy] = useState(false);
+
+  // Register-only state
+  const [displayName, setDisplayName] = useState('');
+  const [password2, setPassword2] = useState('');
+  const [displayNameError, setDisplayNameError] = useState<string | null>(null);
+  const [password2Error, setPassword2Error] = useState<string | null>(null);
+  const [registered, setRegistered] = useState(false);
+
+  // Inline confirm-password validation: as soon as the user has typed
+  // anything in the second field we mirror «не совпадает» against the
+  // primary password. Cleared when either field is empty so we don't
+  // shout at empty inputs.
+  useEffect(() => {
+    if (mode !== 'register') return;
+    if (!password2) {
+      setPassword2Error(null);
+      return;
+    }
+    setPassword2Error(password2 === password ? null : 'Пароли не совпадают');
+  }, [mode, password, password2]);
+
+  const switchMode = (next: Mode) => {
+    setMode(next);
+    setProblem(null);
+    setEmailError(null);
+    setPasswordError(null);
+    setDisplayNameError(null);
+    setPassword2Error(null);
+    setRegistered(false);
+    // Keep the URL in sync so a refresh / share preserves the mode.
+    const nextParams = new URLSearchParams(params);
+    if (next === 'register') nextParams.set('mode', 'register');
+    else nextParams.delete('mode');
+    setParams(nextParams, { replace: true });
+  };
 
   const onTelegramClick = async () => {
     if (tgBusy) return;
@@ -159,7 +215,8 @@ export function LoginPage() {
     navigate(next ? decodeURIComponent(next) : '/', { replace: true });
   };
 
-  const validate = (): boolean => {
+  /* ---------- Login ---------- */
+  const validateLogin = (): boolean => {
     let ok = true;
     if (!/^.+@.+\..+$/.test(email)) {
       setEmailError('Некорректный email'); ok = false;
@@ -173,9 +230,9 @@ export function LoginPage() {
     return ok;
   };
 
-  const handleSubmit = async (e?: FormEvent) => {
+  const handleLogin = async (e?: FormEvent) => {
     e?.preventDefault();
-    if (!validate()) return;
+    if (!validateLogin()) return;
     setProblem(null);
     setSubmitting(true);
     try {
@@ -211,24 +268,83 @@ export function LoginPage() {
     }
   };
 
+  /* ---------- Register ---------- */
+  const validateRegister = (): boolean => {
+    let ok = true;
+    const e = emailSchema.safeParse(email);
+    if (!e.success) {
+      setEmailError(e.error.issues[0]?.message ?? 'Некорректный email');
+      ok = false;
+    } else { setEmailError(null); }
+    if (displayName.trim().length < 2) {
+      setDisplayNameError('Минимум 2 символа'); ok = false;
+    } else { setDisplayNameError(null); }
+    const p = passwordSchema.safeParse(password);
+    if (!p.success) {
+      setPasswordError(p.error.issues[0]?.message ?? 'Слабый пароль');
+      ok = false;
+    } else { setPasswordError(null); }
+    if (password2 !== password || !password2) {
+      setPassword2Error(password2 ? 'Пароли не совпадают' : 'Подтвердите пароль');
+      ok = false;
+    } else { setPassword2Error(null); }
+    return ok;
+  };
+
+  const handleRegister = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setProblem(null);
+    if (!validateRegister()) return;
+    setSubmitting(true);
+    try {
+      await authApi.register({
+        email,
+        password,
+        display_name: displayName.trim(),
+        locale,
+        // Intentionally no tenant_slug / invitation_token — backend
+        // plants the user in the default «public» tenant, and the user
+        // can redeem an invitation code from /me later to move into a
+        // real organisation.
+      });
+      setRegistered(true);
+    } catch (raw) {
+      setProblem(raw as Problem);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /* ---------- Render ---------- */
   const credentialsValid = useMemo(
     () => /^.+@.+\..+$/.test(email) && password.length > 0,
     [email, password],
   );
 
+  const registerCanSubmit = useMemo(
+    () =>
+      /^.+@.+\..+$/.test(email) &&
+      displayName.trim().length >= 2 &&
+      password.length >= 8 &&
+      password2.length > 0 &&
+      password === password2,
+    [email, displayName, password, password2],
+  );
+
   const inlineErrorMessage = problem
     ? problem.code === 'INVALID_CREDENTIALS'
       ? 'Неверный email или пароль'
-      : problem.detail || problem.title || 'Не удалось войти'
+      : problem.code === 'CONFLICT'
+        ? 'Аккаунт с этим email уже существует'
+        : problem.detail || problem.title || 'Не удалось'
     : null;
 
-  // Display row: same order as OAUTH_PROVIDERS + Telegram appended.
-  // Telegram doesn't speak OAuth2 — its popup is opened via the JS
-  // ``Telegram.Login.auth`` helper from src/auth/telegramLogin.ts.
   const providerRow: { id: OAuthProvider; label: string }[] = [
     ...OAUTH_PROVIDERS,
     { id: 'telegram' as OAuthProvider, label: 'Telegram' },
   ];
+
+  const isRegister = mode === 'register';
 
   return (
     <div
@@ -249,13 +365,16 @@ export function LoginPage() {
               PlagLens
             </h1>
             <p className="text-sm text-muted-foreground">
-              Войдите, чтобы продолжить
+              {isRegister
+                ? 'Создайте аккаунт, чтобы продолжить'
+                : 'Войдите, чтобы продолжить'}
             </p>
           </div>
         </header>
 
-        {/* OAuth row — round monochrome icons, top of the page as the
-            "fast path" before the email/password form. */}
+        {/* OAuth row — same in both modes. The provider's own consent
+            screen handles the «sign-up vs sign-in» distinction (it knows
+            whether this user has clicked through before). */}
         <section className="space-y-4">
           <div className="flex justify-center gap-3">
             {providerRow.map((p) => {
@@ -264,7 +383,7 @@ export function LoginPage() {
                 <button
                   key={p.id}
                   type="button"
-                  aria-label={`Войти через ${p.label}`}
+                  aria-label={`${isRegister ? 'Зарегистрироваться' : 'Войти'} через ${p.label}`}
                   title={p.label}
                   data-testid={`login-oauth-${p.id}`}
                   disabled={busy}
@@ -273,15 +392,6 @@ export function LoginPage() {
                       void onTelegramClick();
                       return;
                     }
-                    // ``next`` carries the protected path the user was
-                    // headed to before the redirect to /login. We bring
-                    // them back there post-OAuth — but only when the path
-                    // is a real protected destination. A ``next`` that
-                    // points into /auth/* (password-reset, verify-email,
-                    // oauth-callback) is nonsense as a landing target and
-                    // would short-circuit AuthProvider's refresh on
-                    // bootstrap (path.startsWith('/auth/') is treated as
-                    // anonymous). Fall back to the SPA root in that case.
                     const rawNext = params.get('next');
                     const next = rawNext ? decodeURIComponent(rawNext) : null;
                     const safeNext =
@@ -311,114 +421,262 @@ export function LoginPage() {
           </div>
         </section>
 
-        {/* Email / password form */}
-        <form onSubmit={handleSubmit} noValidate className="space-y-4" data-testid="login-form">
-          <div className="space-y-1.5">
-            <Label htmlFor="login-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-              Email
-            </Label>
-            <Input
-              id="login-email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.currentTarget.value)}
-              placeholder="you@hse.ru"
-              autoComplete="email"
-              data-testid="login-email"
-              className="h-11"
-            />
-            {emailError && (
-              <p role="alert" className="text-xs text-destructive">
-                {emailError}
+        {isRegister ? (
+          /* Registration form. No organisation field — backend lands the
+             user in a placeholder tenant until they redeem a code. */
+          registered ? (
+            <div className="space-y-4 text-center" data-testid="register-success">
+              <p className="text-sm text-foreground">
+                Готово. На <span className="font-medium">{email}</span> отправлена
+                ссылка для подтверждения.
               </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-baseline justify-between">
-              <Label htmlFor="login-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Пароль
-              </Label>
-              <Link
-                to="/auth/password-reset"
-                data-testid="login-forgot-link"
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              <Button
+                type="button"
+                className="w-full h-11 text-sm font-medium"
+                onClick={() => switchMode('login')}
               >
-                Забыли пароль?
-              </Link>
+                Войти
+              </Button>
             </div>
-            <Input
-              id="login-password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.currentTarget.value)}
-              placeholder="••••••••"
-              autoComplete="current-password"
-              data-testid="login-password"
-              className="h-11"
-            />
-            {passwordError && (
-              <p role="alert" className="text-xs text-destructive">
-                {passwordError}
-              </p>
-            )}
-          </div>
+          ) : (
+            <form
+              onSubmit={handleRegister}
+              noValidate
+              className="space-y-4"
+              data-testid="register-form"
+            >
+              <div className="space-y-1.5">
+                <Label htmlFor="register-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Email
+                </Label>
+                <Input
+                  id="register-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.currentTarget.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  data-testid="register-email"
+                  className="h-11"
+                  aria-invalid={!!emailError}
+                />
+                {emailError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {emailError}
+                  </p>
+                )}
+              </div>
 
-          {mfaToken && (
+              <div className="space-y-1.5">
+                <Label htmlFor="register-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Имя
+                </Label>
+                <Input
+                  id="register-name"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.currentTarget.value)}
+                  autoComplete="name"
+                  data-testid="register-display-name"
+                  className="h-11"
+                  aria-invalid={!!displayNameError}
+                />
+                {displayNameError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {displayNameError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="register-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Пароль
+                </Label>
+                <Input
+                  id="register-password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  data-testid="register-password"
+                  className="h-11"
+                  aria-invalid={!!passwordError}
+                />
+                {passwordError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {passwordError}
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="register-password2" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Повторите пароль
+                </Label>
+                <Input
+                  id="register-password2"
+                  type="password"
+                  value={password2}
+                  onChange={(e) => setPassword2(e.currentTarget.value)}
+                  placeholder="••••••••"
+                  autoComplete="new-password"
+                  data-testid="register-password2"
+                  className="h-11"
+                  aria-invalid={!!password2Error}
+                />
+                {password2Error && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {password2Error}
+                  </p>
+                )}
+              </div>
+
+              {inlineErrorMessage && (
+                <Alert variant="destructive" data-testid="problem-alert">
+                  <AlertDescription>{inlineErrorMessage}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                type="submit"
+                disabled={submitting || !registerCanSubmit}
+                data-testid="register-submit"
+                className="w-full h-11 text-sm font-medium"
+              >
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Создать аккаунт
+              </Button>
+            </form>
+          )
+        ) : (
+          /* Login form */
+          <form onSubmit={handleLogin} noValidate className="space-y-4" data-testid="login-form">
             <div className="space-y-1.5">
-              <Label htmlFor="login-totp" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Код 2FA
+              <Label htmlFor="login-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                Email
               </Label>
               <Input
-                id="login-totp"
-                value={totpCode}
-                onChange={(e) => setTotpCode(e.currentTarget.value)}
-                placeholder="123456"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                data-testid="login-totp"
-                className="h-11 tracking-widest text-center"
+                id="login-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.currentTarget.value)}
+                placeholder="you@hse.ru"
+                autoComplete="email"
+                data-testid="login-email"
+                className="h-11"
               />
-              {totpError && (
+              {emailError && (
                 <p role="alert" className="text-xs text-destructive">
-                  {totpError}
+                  {emailError}
                 </p>
               )}
             </div>
-          )}
 
-          {hint && !inlineErrorMessage && (
-            <Alert data-testid="login-hint">
-              <AlertDescription>{hint}</AlertDescription>
-            </Alert>
-          )}
+            <div className="space-y-1.5">
+              <div className="flex items-baseline justify-between">
+                <Label htmlFor="login-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Пароль
+                </Label>
+                <Link
+                  to="/auth/password-reset"
+                  data-testid="login-forgot-link"
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  Забыли пароль?
+                </Link>
+              </div>
+              <Input
+                id="login-password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.currentTarget.value)}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                data-testid="login-password"
+                className="h-11"
+              />
+              {passwordError && (
+                <p role="alert" className="text-xs text-destructive">
+                  {passwordError}
+                </p>
+              )}
+            </div>
 
-          {(problem || inlineErrorMessage) && (
-            <Alert variant="destructive" data-testid="problem-alert">
-              <AlertDescription>{inlineErrorMessage}</AlertDescription>
-            </Alert>
-          )}
+            {mfaToken && (
+              <div className="space-y-1.5">
+                <Label htmlFor="login-totp" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                  Код 2FA
+                </Label>
+                <Input
+                  id="login-totp"
+                  value={totpCode}
+                  onChange={(e) => setTotpCode(e.currentTarget.value)}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  data-testid="login-totp"
+                  className="h-11 tracking-widest text-center"
+                />
+                {totpError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {totpError}
+                  </p>
+                )}
+              </div>
+            )}
 
-          <Button
-            type="submit"
-            disabled={submitting || (!mfaToken && !credentialsValid)}
-            data-testid="login-submit"
-            className="w-full h-11 text-sm font-medium"
-          >
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {mfaToken ? 'Подтвердить' : 'Войти'}
-          </Button>
-        </form>
+            {hint && !inlineErrorMessage && (
+              <Alert data-testid="login-hint">
+                <AlertDescription>{hint}</AlertDescription>
+              </Alert>
+            )}
 
+            {(problem || inlineErrorMessage) && (
+              <Alert variant="destructive" data-testid="problem-alert">
+                <AlertDescription>{inlineErrorMessage}</AlertDescription>
+              </Alert>
+            )}
+
+            <Button
+              type="submit"
+              disabled={submitting || (!mfaToken && !credentialsValid)}
+              data-testid="login-submit"
+              className="w-full h-11 text-sm font-medium"
+            >
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {mfaToken ? 'Подтвердить' : 'Войти'}
+            </Button>
+          </form>
+        )}
+
+        {/* Mode toggle — internal switch (no navigation, no full-page
+            re-mount), so the OAuth row above stays in place. */}
         <div className="text-center text-xs text-muted-foreground">
-          Нет аккаунта?{' '}
-          <Link
-            to="/register"
-            data-testid="login-register-link"
-            className="font-medium text-foreground hover:underline"
-          >
-            Зарегистрируйтесь
-          </Link>
+          {isRegister ? (
+            <>
+              Уже есть аккаунт?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                data-testid="register-to-login"
+                className="font-medium text-foreground hover:underline"
+              >
+                Войти
+              </button>
+            </>
+          ) : (
+            <>
+              Нет аккаунта?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('register')}
+                data-testid="login-register-link"
+                className="font-medium text-foreground hover:underline"
+              >
+                Зарегистрируйтесь
+              </button>
+            </>
+          )}
         </div>
       </main>
     </div>

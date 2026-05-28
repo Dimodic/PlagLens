@@ -397,7 +397,11 @@ async def redeem_invitation(
     repo = InvitationRepository(session)
     users = UserRepository(session)
     code = normalize_code(payload.code)
-    inv = await repo.get_by_code(me.tenant_id, code)
+    # Tenant-agnostic lookup so a user sitting in the placeholder «public»
+    # tenant (self-registered without an org) can redeem a code that
+    # belongs to a real organisation. The cross-tenant decision lives a
+    # few lines below — we either migrate the user or reject with 403.
+    inv = await repo.get_by_code_global(code)
     if inv is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="Code not found")
     if inv.revoked_at is not None:
@@ -406,11 +410,6 @@ async def redeem_invitation(
         raise ProblemException(status=409, code="CONFLICT", title="Code already used")
     if inv.expires_at <= datetime.now(timezone.utc).replace(tzinfo=inv.expires_at.tzinfo):
         raise ProblemException(status=410, code="GONE", title="Invitation expired")
-
-    # Cross-tenant attempt — we already filter by tenant in the lookup, but be
-    # explicit for events / audit clarity.
-    if inv.tenant_id != me.tenant_id:
-        raise ProblemException(status=403, code="FORBIDDEN", title="Wrong tenant")
 
     target_user = await users.get(me.id)
     if target_user is None:
@@ -421,6 +420,42 @@ async def redeem_invitation(
     course_role: str | None = None
     requires_relogin = False
     claimed_count: int | None = None
+
+    # Cross-tenant handling: the only legal cross-tenant redeem path is the
+    # «self-registered user moves into the inviting organisation» one. The
+    # user must currently sit in the default placeholder tenant (slug from
+    # ``Settings.default_tenant_slug``). Everything else is 403.
+    if inv.tenant_id != target_user.tenant_id:
+        from ...config import settings as _settings  # local: avoid top-level cycles
+
+        tenants = TenantRepository(session)
+        default_tenant = await tenants.get_by_slug(_settings.default_tenant_slug)
+        if (
+            default_tenant is None
+            or target_user.tenant_id != default_tenant.id
+        ):
+            raise ProblemException(
+                status=403, code="FORBIDDEN", title="Wrong tenant"
+            )
+        # The destination tenant may already have a different user with the
+        # same email (some teacher pre-created them in the org). Refuse the
+        # move instead of clobbering; the user must use that account.
+        clash = await users.get_by_email(inv.tenant_id, target_user.email)
+        if clash is not None and clash.id != target_user.id:
+            raise ProblemException(
+                status=409,
+                code="CONFLICT",
+                title="Email already exists in the target organisation",
+                detail=(
+                    "В этой организации уже есть пользователь с такой почтой. "
+                    "Войдите этим аккаунтом и активируйте код повторно."
+                ),
+            )
+        target_user.tenant_id = inv.tenant_id
+        # JWT carries tenant_id, so the SPA must re-authenticate to pick up
+        # the new tenant. ``requires_relogin`` is the canonical signal the
+        # frontend already handles for global-role bumps.
+        requires_relogin = True
 
     if inv.course_id:
         # Course membership grant. course_id-bearing invitations always carry

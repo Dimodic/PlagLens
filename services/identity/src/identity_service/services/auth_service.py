@@ -101,16 +101,22 @@ class AuthService:
         email: str,
         password: str,
         display_name: str,
-        tenant_slug: str,
+        tenant_slug: str | None,
         locale: str = "ru",
     ) -> User:
-        tenant = await self.tenants.get_by_slug(tenant_slug)
+        # SPA registration form on /login doesn't ask for an organisation.
+        # When the caller omits tenant_slug we plant the user in the
+        # configurable default-tenant («public» by default — seeded by
+        # migration 0007). A real organisation is picked up later via
+        # invitation-code redeem, which migrates ``user.tenant_id``.
+        effective_slug = (tenant_slug or settings.default_tenant_slug).strip().lower()
+        tenant = await self.tenants.get_by_slug(effective_slug)
         if tenant is None:
             raise ProblemException(
                 status=404,
                 code="NOT_FOUND",
                 title="Tenant not found",
-                detail=f"No tenant with slug '{tenant_slug}'.",
+                detail=f"No tenant with slug '{effective_slug}'.",
             )
         existing = await self.users.get_by_email(tenant.id, email)
         if existing is not None:

@@ -26,6 +26,15 @@ class InvitationRepository:
         )
         return (await self.s.execute(stmt)).scalar_one_or_none()
 
+    async def get_by_code_global(self, code: str) -> Invitation | None:
+        """Tenant-agnostic lookup. Used by the redeem path to support the
+        «move user out of the default tenant» case: the redeemer's
+        ``tenant_id`` is the placeholder «public», the code belongs to
+        the real organisation's tenant, and the handler decides whether
+        to migrate the user before continuing the normal redeem flow."""
+        stmt = select(Invitation).where(Invitation.code == code)
+        return (await self.s.execute(stmt)).scalar_one_or_none()
+
     async def list_binding_invitations(
         self, *, tenant_id: str, binding_system: str
     ) -> list[Invitation]:

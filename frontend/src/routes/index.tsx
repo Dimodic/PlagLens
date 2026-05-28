@@ -84,7 +84,8 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorPage from '@/pages/ErrorPage';
 
 // Auth — public pages, lazy except LoginPage itself.
-const RegisterPage = lazy(() => import('@/pages/auth/RegisterPage'));
+// RegisterPage is gone: sign-up lives inside LoginPage (?mode=register).
+// /register is kept as a thin redirect so old bookmarks / emails still work.
 const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('@/pages/auth/VerifyEmailPage'));
@@ -953,7 +954,8 @@ export const router = createBrowserRouter([
   // lazy and need a <Suspense> parent (PublicChunk) because they sit
   // outside <AppShell />, which is where the protected Suspense lives.
   { path: '/login', element: <LoginPage />, errorElement: <ErrorPage /> },
-  { path: '/register', element: <PublicChunk><RegisterPage /></PublicChunk>, errorElement: <ErrorPage /> },
+  // /register is now a thin redirect — sign-up lives inside LoginPage.
+  { path: '/register', element: <Navigate to="/login?mode=register" replace />, errorElement: <ErrorPage /> },
   { path: '/auth/forgot', element: <PublicChunk><ForgotPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
   { path: '/auth/reset', element: <PublicChunk><ResetPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
   { path: '/auth/verify', element: <PublicChunk><VerifyEmailPage /></PublicChunk>, errorElement: <ErrorPage /> },
