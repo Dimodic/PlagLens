@@ -10,23 +10,27 @@ import pyotp
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common.events import KafkaProducer, StubProducer, make_event
-from ..common.ids import session_id, user_id
+from ..common.ids import session_id, token_id, user_id
 from ..common.problem import ProblemException
 from ..common.security import (
     decrypt_secret,
     hash_password,
     hash_token,
     issue_access_token,
+    new_opaque_token,
     new_refresh_token,
     verify_password,
 )
 from ..config import settings
+from ..models import EmailVerifyToken
 from ..models import Session as DBSession
 from ..models import User
 from ..repositories.sessions import SessionRepository
 from ..repositories.tenants import TenantRepository
+from ..repositories.tokens import EmailVerifyTokenRepository
 from ..repositories.two_factor import TwoFactorRepository
 from ..repositories.users import UserRepository
+from .email_service import EmailService, build_frontend_url
 
 # ----- 2FA helpers ---------------------------------------------------------- #
 
@@ -140,7 +144,33 @@ class AuthService:
             user=user,
             data={"user_id": user.id, "tenant_id": user.tenant_id, "email": user.email},
         )
-        # TODO: enqueue email-verify token + send email
+
+        # Email verification token + transactional send. Both are best-effort:
+        # a notification-service outage (or unset SMTP creds in local) must not
+        # fail the register call — the user can re-request the link from
+        # ``/auth/email/verify/request`` once they sign in.
+        try:
+            tokens = EmailVerifyTokenRepository(self.s)
+            plain = new_opaque_token(prefix="evt_")
+            await tokens.add(
+                EmailVerifyToken(
+                    id=token_id(),
+                    user_id=user.id,
+                    email=user.email,
+                    token_hash=hash_token(plain),
+                    expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+                )
+            )
+            await EmailService().send_email_verification(
+                to=user.email,
+                verify_url=build_frontend_url("/auth/verify", plain),
+            )
+        except Exception as exc:  # noqa: BLE001 — never let mail-bus failures escape
+            logger.warning(
+                "register: failed to dispatch verification email for %s: %s",
+                user.email,
+                exc,
+            )
         return user
 
     # -- login ------------------------------------------------------------ #
