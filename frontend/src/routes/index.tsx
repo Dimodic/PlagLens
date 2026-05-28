@@ -93,9 +93,10 @@ const OAuthCallbackPage = lazy(() => import('@/pages/auth/OAuthCallbackPage'));
 const TwoFactorEnrollPage = lazy(() => import('@/pages/auth/TwoFactorEnrollPage'));
 const DemoLoginPage = lazy(() => import('@/pages/auth/DemoLoginPage'));
 
-// Self pages.
-const MyAssignmentsPage = lazy(() => import('@/pages/me/MyAssignmentsPage'));
-const MyGradesPage = lazy(() => import('@/pages/me/MyGradesPage'));
+// Self pages. /me is the single screen the student actually uses; the
+// old standalone /me/assignments and /me/grades pages are gone — their
+// content folded into MyDashboardPage. Routes still exist as thin
+// redirects so old links (emails, notifications) keep working.
 const ProfilePage = lazy(() => import('@/pages/me/ProfilePage'));
 const MyApiKeysPage = lazy(() => import('@/pages/me/MyApiKeysPage'));
 const MyExternalBindingsPage = lazy(() => import('@/pages/me/MyExternalBindingsPage'));
@@ -134,7 +135,6 @@ const AssignmentSubmissionsPage = lazy(() => import('@/pages/assignments/Assignm
 const AssignmentDeadlinesPage = lazy(() => import('@/pages/assignments/AssignmentDeadlinesPage'));
 const SubmissionDetailPage = lazy(() => import('@/pages/submissions/SubmissionDetailPage'));
 const SubmissionUploadPage = lazy(() => import('@/pages/submissions/SubmissionUploadPage'));
-const SubmissionsListPage = lazy(() => import('@/pages/submissions/SubmissionsListPage'));
 
 // Dashboards / Reporting / Notifications.
 const MyDashboardPage = lazy(() => import('@/pages/dashboard/MyDashboardPage'));
@@ -218,13 +218,18 @@ const protectedRoutes: RouteObject[] = [
       { path: 'me/security', element: <Navigate to="/me/profile" replace /> },
       { path: 'me/api-keys', element: <MyApiKeysPage /> },
       { path: 'me/external-bindings', element: <MyExternalBindingsPage /> },
-      { path: 'me/assignments', element: <MyAssignmentsPage /> },
+      // /me/assignments folded into /me (dashboard). Detail page stays —
+      // it's where a click on a deadline lands. Same for /me/submissions:
+      // the list view is part of the dashboard now, but the detail page
+      // (with grade + feedback) keeps its own URL.
+      { path: 'me/assignments', element: <Navigate to="/me" replace /> },
       { path: 'me/assignments/:id', element: <MyAssignmentDetailPage /> },
-      { path: 'me/submissions', element: <SubmissionsListPage /> },
+      { path: 'me/submissions', element: <Navigate to="/me" replace /> },
       { path: 'me/submissions/:id', element: <MySubmissionDetailPage /> },
       // /me/inbox → /notifications (canonical inbox URL is shared across roles).
       { path: 'me/inbox', element: <Navigate to="/notifications" replace /> },
-      { path: 'me/grades', element: <MyGradesPage /> },
+      // /me/grades folded into the dashboard too.
+      { path: 'me/grades', element: <Navigate to="/me" replace /> },
       // /me/settings rolled into /me/profile (one «настройки = профиль» surface).
       { path: 'me/settings', element: <Navigate to="/me/profile" replace /> },
       { path: 'me/2fa', element: <TwoFactorEnrollPage /> },

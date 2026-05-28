@@ -3,7 +3,7 @@
  *   admin     → /admin
  *   teacher   → /courses
  *   assistant → /grading (assistant cabinet / grading queue)
- *   student   → /me/assignments
+ *   student   → /me (dashboard with deadlines + courses + grades on one screen)
  */
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/auth/useAuth';
@@ -22,7 +22,7 @@ export function HomeRedirect() {
       return <Navigate to="/grading" replace />;
     case 'student':
     default:
-      return <Navigate to="/me/assignments" replace />;
+      return <Navigate to="/me" replace />;
   }
 }
 

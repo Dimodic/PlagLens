@@ -1,313 +1,346 @@
 /**
- * MyDashboardPage — student kabinet at /me.
+ * MyDashboardPage — `/me` student cabinet, the single screen the student
+ * actually uses.
  *
- * Mirrors the teacher's /courses tree (CoursesListPage) so the student
- * has the same mental model: list of courses, with each course's ДЗ
- * inlined below it. The only difference is navigation — every leaf
- * link goes to the student's own submission view (/me/assignments/:id)
- * rather than the teacher's edit surface.
+ * Per the design call: students have NO sidebar — everything they need
+ * lives on this one page. Three sections, all hairline-divided, no card
+ * chrome:
  *
- * Design-system contract:
- *   • Flat document — PageHeader («Мои курсы») then a hairline divider
- *     list of courses. No `Section` wrapper, no Card chrome (kills the
- *     «всё в блоке» anti-pattern).
- *   • Course header is plain text — BookOpen + name + (optional)
- *     semester line. The role chip («студент») was redundant: the
- *     student knows what they are.
- *   • Tasks inside an expanded multi-task ДЗ are plain text links —
- *     no fake `>` bullets that don't actually expand.
+ *   1. «Скоро дедлайн»  — up to 5 closest future deadlines across all
+ *                          courses.
+ *   2. «Мои курсы»      — one row per course with sdano/всего + mean grade
+ *                          + a chevron to the course page.
+ *   3. «Последние оценки» — up to 5 most-recent graded submissions.
  *
- * Inbox + activity log were dropped earlier (bell handles inbox,
- * activity was teacher-only).
+ * Empty (no courses): a single CTA — «Введите код приглашения». That's
+ * literally the only thing a fresh self-registered account can do until
+ * a teacher hands them a code.
+ *
+ * The «+ По коду» action lives in the PageHeader so it's always one
+ * click away, even when sections below are full.
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import {
-  ArrowRight,
-  BookOpen,
-  ChevronDown,
-  ChevronRight,
-  KeyRound,
-} from 'lucide-react';
+import { ChevronRight, KeyRound, Loader2 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
-import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
-import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
+import { useMyAssignments } from '@/hooks/api/useAssignments';
+import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
 import { JoinByCodeDialog } from '@/components/courses/JoinByCodeDialog';
-import type { CourseBrief } from '@/api/endpoints/courses';
-import type { Homework } from '@/api/endpoints/homeworks';
-import type { AssignmentBrief } from '@/api/endpoints/assignments';
+import { cn } from '@/components/ui/utils';
 
-function formatDueShort(iso: string | null | undefined): string | null {
+type Tone = 'high' | 'mid' | 'low' | 'muted';
+
+const toneText: Record<Tone, string> = {
+  high: 'text-sev-high',
+  mid: 'text-sev-mid',
+  low: 'text-muted-foreground',
+  muted: 'text-muted-foreground/70',
+};
+
+/** Human countdown for a future deadline. Past deadlines collapse to
+ *  «Прошёл» (we don't show them anyway, but the helper handles the case
+ *  so callers don't have to guard). */
+function deadlineTag(iso: string | null | undefined): { label: string; tone: Tone } | null {
   if (!iso) return null;
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return null;
-  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+  const ts = new Date(iso).getTime();
+  if (Number.isNaN(ts)) return null;
+  const ms = ts - Date.now();
+  if (ms < 0) return { label: 'Прошёл', tone: 'muted' };
+  const hours = Math.round(ms / 3_600_000);
+  if (hours <= 24) return { label: `Через ${Math.max(1, hours)} ч.`, tone: 'high' };
+  const days = Math.round(ms / 86_400_000);
+  if (days <= 2) return { label: `Через ${days} дн.`, tone: 'mid' };
+  return { label: `Через ${days} дн.`, tone: 'low' };
 }
 
+const fmtDate = (iso: string | null | undefined) =>
+  iso
+    ? new Date(iso).toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'short',
+      })
+    : '';
+
 export default function MyDashboardPage() {
-  useDocumentTitle('Мои курсы');
+  useDocumentTitle('Главная');
+  const { user } = useAuth();
   const myCoursesQ = useMyCourses();
+  const myAssignmentsQ = useMyAssignments();
+  const mySubsQ = useMySubmissions({ limit: 200 });
+
   const myCourses = myCoursesQ.data?.data ?? [];
+  const myAssignments = myAssignmentsQ.data?.data ?? [];
+  // mySubmissions response is sometimes a bare array, sometimes Paginated.
+  // The hook's TS type covers both; normalise here.
+  const subsData = mySubsQ.data as unknown;
+  const mySubs: Array<{
+    id: string;
+    assignment_id: string;
+    course_id?: string;
+    submitted_at: string;
+    score?: number | null;
+    max_score?: number | null;
+  }> = Array.isArray(subsData)
+    ? (subsData as never)
+    : ((subsData as { data?: never[] })?.data ?? []);
+
   const [joinOpen, setJoinOpen] = useState(false);
+
+  // -- «Скоро дедлайн»: future deadline_hard_at, sorted ascending. ----- //
+  const upcoming = useMemo(() => {
+    const now = Date.now();
+    return myAssignments
+      .filter(
+        (a) =>
+          a.deadline_hard_at && new Date(a.deadline_hard_at).getTime() > now,
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.deadline_hard_at!).getTime() -
+          new Date(b.deadline_hard_at!).getTime(),
+      )
+      .slice(0, 5);
+  }, [myAssignments]);
+
+  // -- Per-course aggregates: how many of this course's assignments did
+  // -- the student grade-receive? Mean of obtained scores. Skipped when
+  // -- the student has no submissions at all (mean = «—»).
+  const courseStats = useMemo(() => {
+    const totalByCourse = new Map<string, number>();
+    for (const a of myAssignments) {
+      totalByCourse.set(a.course_id, (totalByCourse.get(a.course_id) ?? 0) + 1);
+    }
+    const gradedByCourse = new Map<string, { count: number; sum: number }>();
+    for (const s of mySubs) {
+      if (s.score == null || !s.course_id) continue;
+      const cur = gradedByCourse.get(s.course_id) ?? { count: 0, sum: 0 };
+      cur.count += 1;
+      cur.sum += Number(s.score);
+      gradedByCourse.set(s.course_id, cur);
+    }
+    return { totalByCourse, gradedByCourse };
+  }, [myAssignments, mySubs]);
+
+  // -- Last 5 graded submissions, newest first. ----------------------- //
+  const recent = useMemo(() => {
+    return mySubs
+      .filter((s) => s.score != null)
+      .sort(
+        (a, b) =>
+          new Date(b.submitted_at).getTime() -
+          new Date(a.submitted_at).getTime(),
+      )
+      .slice(0, 5);
+  }, [mySubs]);
+
+  const courseById = useMemo(
+    () => new Map(myCourses.map((c) => [c.id, c])),
+    [myCourses],
+  );
+  const assignmentById = useMemo(
+    () => new Map(myAssignments.map((a) => [a.id, a])),
+    [myAssignments],
+  );
+
+  const greeting = user?.display_name
+    ? `Привет, ${user.display_name.split(' ')[0]}`
+    : 'Главная';
+
+  const isLoading =
+    myCoursesQ.isLoading || myAssignmentsQ.isLoading || mySubsQ.isLoading;
+
+  const joinAction = (
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => setJoinOpen(true)}
+      data-testid="dashboard-join-by-code"
+    >
+      <KeyRound className="mr-2 h-4 w-4" />
+      По коду
+    </Button>
+  );
+
+  // ---- Empty state: no courses yet. ---------------------------------- //
+  if (!isLoading && myCourses.length === 0) {
+    return (
+      <Page width="regular" data-testid="my-dashboard">
+        <PageHeader title={<span data-testid="my-dashboard-title">{greeting}</span>} />
+        <EmptyState
+          data-testid="my-dashboard-empty"
+          title="У вас пока нет курсов"
+          description="Преподаватель выдаст вам код приглашения — введите его, чтобы попасть в курс."
+          action={
+            <Button onClick={() => setJoinOpen(true)} data-testid="dashboard-empty-cta">
+              <KeyRound className="mr-2 h-4 w-4" />
+              Ввести код
+            </Button>
+          }
+        />
+        <JoinByCodeDialog open={joinOpen} onOpenChange={setJoinOpen} />
+      </Page>
+    );
+  }
 
   return (
     <Page width="regular" data-testid="my-dashboard">
       <PageHeader
-        title={<span data-testid="my-dashboard-title">Мои курсы</span>}
-        action={
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setJoinOpen(true)}
-            data-testid="my-dashboard-join-by-code"
-          >
-            <KeyRound className="mr-2 h-4 w-4" />
-            Присоединиться по коду
-          </Button>
-        }
+        title={<span data-testid="my-dashboard-title">{greeting}</span>}
+        action={joinAction}
       />
 
-      {myCourses.length === 0 ? (
-        <EmptyState
-          data-testid="my-dashboard-empty"
-          title={
-            myCoursesQ.isLoading
-              ? 'Загружаем…'
-              : 'Используйте код приглашения.'
-          }
-          action={
-            !myCoursesQ.isLoading ? (
-              <Button onClick={() => setJoinOpen(true)}>Присоединиться</Button>
-            ) : undefined
-          }
-        />
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
       ) : (
-        <div
-          className="divide-y divide-border/50 border-t border-border/50"
-          data-testid="my-courses-list"
-        >
-          {myCourses.map((c) => (
-            <CourseSection key={c.id} course={c} />
-          ))}
+        <div className="space-y-10">
+          {upcoming.length > 0 && (
+            <section data-testid="dashboard-upcoming">
+              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Скоро дедлайн
+              </h2>
+              <ul className="divide-y divide-border/40 border-t border-border/40">
+                {upcoming.map((a) => {
+                  const tag = deadlineTag(a.deadline_hard_at);
+                  const course = courseById.get(a.course_id);
+                  return (
+                    <li key={a.id}>
+                      <Link
+                        to={`/me/assignments/${a.id}`}
+                        data-testid={`dashboard-upcoming-${a.id}`}
+                        className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-foreground truncate">
+                            {a.title}
+                          </div>
+                          {course && (
+                            <div className="text-xs text-muted-foreground truncate">
+                              {course.name}
+                            </div>
+                          )}
+                        </div>
+                        {tag && (
+                          <span
+                            className={cn(
+                              'text-xs shrink-0 tabular-nums',
+                              toneText[tag.tone],
+                            )}
+                          >
+                            {tag.label}
+                          </span>
+                        )}
+                        <ChevronRight
+                          aria-hidden
+                          className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                        />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
+
+          <section data-testid="dashboard-courses">
+            <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              Мои курсы
+            </h2>
+            <ul className="divide-y divide-border/40 border-t border-border/40">
+              {myCourses.map((c) => {
+                const total = courseStats.totalByCourse.get(c.id) ?? 0;
+                const graded = courseStats.gradedByCourse.get(c.id);
+                const mean =
+                  graded && graded.count > 0
+                    ? (graded.sum / graded.count).toFixed(1)
+                    : null;
+                return (
+                  <li key={c.id}>
+                    <Link
+                      to={`/courses/${c.slug}`}
+                      data-testid={`dashboard-course-${c.slug}`}
+                      className="group flex items-center gap-4 py-4 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="text-base font-medium text-foreground truncate">
+                          {c.name}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-3 text-xs text-muted-foreground">
+                          <span>
+                            {graded?.count ?? 0} из {total} сдано
+                          </span>
+                          {mean != null && (
+                            <>
+                              <span aria-hidden>·</span>
+                              <span className="tabular-nums">
+                                средний балл {mean}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <ChevronRight
+                        aria-hidden
+                        className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                      />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
+          {recent.length > 0 && (
+            <section data-testid="dashboard-recent">
+              <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
+                Последние оценки
+              </h2>
+              <ul className="divide-y divide-border/40 border-t border-border/40">
+                {recent.map((s) => {
+                  const a = assignmentById.get(s.assignment_id);
+                  const max = s.max_score ?? a?.max_score ?? null;
+                  return (
+                    <li key={s.id}>
+                      <Link
+                        to={`/me/submissions/${s.id}`}
+                        data-testid={`dashboard-recent-${s.id}`}
+                        className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-foreground truncate">
+                            {a?.title ?? 'Задание'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {fmtDate(s.submitted_at)}
+                          </div>
+                        </div>
+                        <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                          {Number(s.score).toFixed(1)}
+                          {max != null && (
+                            <span className="text-muted-foreground"> / {max}</span>
+                          )}
+                        </span>
+                        <ChevronRight
+                          aria-hidden
+                          className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                        />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </div>
       )}
 
       <JoinByCodeDialog open={joinOpen} onOpenChange={setJoinOpen} />
     </Page>
-  );
-}
-
-/** One course section in the student tree. Mirrors
- *  CoursesListPage.CourseSection — only the navigation targets on
- *  the leaves differ (`/me/assignments/:id` so a click on a task
- *  lands the student on their own submission, not the teacher's
- *  edit page).
- *
- *  Same N+1-avoidance: ONE useAssignmentsByCourse call per course,
- *  then we group assignments by homework_id client-side. Shares
- *  react-query cache keys with the teacher's CoursesListPage +
- *  CourseDetailPage so warm cache is reused across roles.
- */
-function CourseSection({ course }: { course: CourseBrief }) {
-  const hwQ = useHomeworksForCourse(course.id, { limit: 100 });
-  const asgQ = useAssignmentsByCourse(course.id, {
-    limit: 500,
-    sort: '-deadline_soft_at',
-  });
-  const homeworks = hwQ.data?.data ?? [];
-  const asgByHwId = useMemo(() => {
-    const m = new Map<string, AssignmentBrief[]>();
-    for (const a of asgQ.data?.data ?? []) {
-      if (a.homework_id == null) continue;
-      const key = String(a.homework_id);
-      const arr = m.get(key) ?? [];
-      arr.push(a);
-      m.set(key, arr);
-    }
-    return m;
-  }, [asgQ.data]);
-
-  return (
-    <section
-      data-testid={`my-course-row-${course.slug}`}
-      data-course-id={course.id}
-      className="py-8"
-    >
-      <Link
-        to={`/courses/${course.slug}`}
-        className="flex items-center justify-between gap-4 transition-colors hover:text-foreground"
-      >
-        <div className="flex items-center gap-4 min-w-0">
-          <BookOpen className="h-6 w-6 text-muted-foreground shrink-0" />
-          <div className="min-w-0">
-            <div className="text-xl font-semibold tracking-tight truncate">
-              {course.name}
-            </div>
-            {course.semester && (
-              <div className="mt-1 text-sm text-muted-foreground">
-                {course.semester}
-              </div>
-            )}
-          </div>
-        </div>
-      </Link>
-
-      <div className="mt-5 pl-10">
-        {hwQ.isLoading ? (
-          <div className="divide-y divide-border/30">
-            {[0, 1, 2].map((i) => (
-              <div
-                key={i}
-                className="flex items-center gap-3 py-3.5"
-                aria-busy="true"
-              >
-                <span aria-hidden className="w-5" />
-                <span className="h-4 flex-1 min-w-0 rounded bg-muted/50 animate-pulse" />
-              </div>
-            ))}
-          </div>
-        ) : homeworks.length === 0 ? (
-          <div className="py-2 text-sm text-muted-foreground">Нет ДЗ</div>
-        ) : (
-          <div className="divide-y divide-border/30">
-            {homeworks.map((hw) => (
-              <HomeworkSubrow
-                key={hw.id}
-                hw={hw}
-                courseSlug={course.slug}
-                assignments={asgByHwId.get(String(hw.id)) ?? []}
-                assignmentsLoading={asgQ.isLoading}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-/** Homework row inside CourseSection.
- *
- *   • Single-task ДЗ (≤1 assignment): the whole title is a Link to
- *     the student's submission view for that one task —
- *     /me/assignments/:id. If there's no assignment yet (empty
- *     homework) the row links to the homework page in read-only mode.
- *   • Multi-task ДЗ (≥2 assignments): the title toggles an inline
- *     expand. Each task in the expanded list is a plain text Link
- *     to /me/assignments/:id — no `>` bullet (it'd read as a fake
- *     expand toggle, but tasks don't have anything to expand).
- *     A small `→` icon on the right opens the full homework page.
- */
-function HomeworkSubrow({
-  hw,
-  courseSlug,
-  assignments,
-  assignmentsLoading,
-}: {
-  hw: Homework;
-  courseSlug: string;
-  assignments: AssignmentBrief[];
-  assignmentsLoading: boolean;
-}) {
-  const [open, setOpen] = useState(false);
-  const isMulti = !assignmentsLoading && assignments.length >= 2;
-  const due = formatDueShort(hw.due_at);
-  const hwHref = `/courses/${courseSlug}/homeworks/${hw.slug}`;
-  const onlyTaskHref =
-    !assignmentsLoading && assignments.length === 1
-      ? `/me/assignments/${assignments[0]!.id}`
-      : hwHref;
-
-  if (assignmentsLoading) {
-    return (
-      <div
-        data-testid={`my-hw-${hw.id}`}
-        className="flex items-center gap-3 py-3.5"
-        aria-busy="true"
-      >
-        <span aria-hidden className="w-5" />
-        <span className="h-4 flex-1 min-w-0 rounded bg-muted/50 animate-pulse" />
-      </div>
-    );
-  }
-
-  if (!isMulti) {
-    return (
-      <div data-testid={`my-hw-${hw.id}`}>
-        <Link
-          to={onlyTaskHref}
-          data-testid={`my-hw-link-${hw.id}`}
-          className="w-full flex items-center gap-3 py-3.5 text-left text-foreground hover:underline"
-        >
-          <span aria-hidden className="w-5" />
-          <span className="flex-1 min-w-0 flex items-center justify-between gap-4">
-            <span className="text-base font-medium truncate">{hw.title}</span>
-            {due && (
-              <span className="text-sm text-muted-foreground shrink-0">
-                до {due}
-              </span>
-            )}
-          </span>
-        </Link>
-      </div>
-    );
-  }
-
-  return (
-    <div data-testid={`my-hw-${hw.id}`}>
-      <div className="group/row w-full flex items-center gap-2 -mx-2 px-2 rounded hover:bg-muted/20">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-label={open ? 'Свернуть задачи' : 'Развернуть задачи'}
-          data-testid={`my-hw-toggle-${hw.id}`}
-          className="flex-1 min-w-0 flex items-center gap-3 py-3.5 text-left text-foreground"
-        >
-          <span className="text-muted-foreground" aria-hidden>
-            {open ? (
-              <ChevronDown className="h-5 w-5" />
-            ) : (
-              <ChevronRight className="h-5 w-5" />
-            )}
-          </span>
-          <span className="flex-1 min-w-0 flex items-center justify-between gap-4">
-            <span className="text-base font-medium truncate">{hw.title}</span>
-            <span className="flex items-center gap-3 shrink-0 text-sm text-muted-foreground">
-              <span className="tabular-nums">{assignments.length} задач</span>
-              {due && <span>до {due}</span>}
-            </span>
-          </span>
-        </button>
-        <Link
-          to={hwHref}
-          data-testid={`my-hw-link-${hw.id}`}
-          aria-label="К странице ДЗ"
-          title="К странице ДЗ"
-          className="shrink-0 p-1 rounded text-muted-foreground/40 hover:text-foreground group-hover/row:text-muted-foreground/80"
-        >
-          <ArrowRight className="h-4 w-4" />
-        </Link>
-      </div>
-      {open && (
-        <ul className="pl-9 pb-3 space-y-1">
-          {assignments.map((a) => (
-            <li key={a.id}>
-              <Link
-                to={`/me/assignments/${a.id}`}
-                data-testid={`my-task-link-${a.id}`}
-                className="block truncate py-1 text-sm text-muted-foreground hover:text-foreground"
-              >
-                {a.title}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
   );
 }
