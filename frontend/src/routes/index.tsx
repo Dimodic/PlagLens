@@ -84,9 +84,9 @@ import NotFoundPage from '@/pages/NotFoundPage';
 import ErrorPage from '@/pages/ErrorPage';
 
 // Auth — public pages, lazy except LoginPage itself.
-// RegisterPage is gone: sign-up lives inside LoginPage (?mode=register).
-// /register is kept as a thin redirect so old bookmarks / emails still work.
-const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'));
+// RegisterPage / ForgotPasswordPage are gone: both flows live inside
+// LoginPage (?mode=register / ?mode=forgot). /register and /auth/forgot
+// are kept as thin redirects so old bookmarks / emails still work.
 const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'));
 const VerifyEmailPage = lazy(() => import('@/pages/auth/VerifyEmailPage'));
 const OAuthCallbackPage = lazy(() => import('@/pages/auth/OAuthCallbackPage'));
@@ -974,7 +974,8 @@ export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage />, errorElement: <ErrorPage /> },
   // /register is now a thin redirect — sign-up lives inside LoginPage.
   { path: '/register', element: <Navigate to="/login?mode=register" replace />, errorElement: <ErrorPage /> },
-  { path: '/auth/forgot', element: <PublicChunk><ForgotPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
+  // /auth/forgot is now a thin redirect — recovery lives inside LoginPage.
+  { path: '/auth/forgot', element: <Navigate to="/login?mode=forgot" replace />, errorElement: <ErrorPage /> },
   { path: '/auth/reset', element: <PublicChunk><ResetPasswordPage /></PublicChunk>, errorElement: <ErrorPage /> },
   { path: '/auth/verify', element: <PublicChunk><VerifyEmailPage /></PublicChunk>, errorElement: <ErrorPage /> },
   {

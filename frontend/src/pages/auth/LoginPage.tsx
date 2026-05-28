@@ -30,9 +30,9 @@
  *     like a single element of the page, not a brand carnival.
  */
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { CheckCircle2, Loader2 } from 'lucide-react';
 import { authApi } from '@/api/endpoints/auth';
 import { tokenStore } from '@/api/client';
 import { startOAuth, OAUTH_PROVIDERS, telegramAuthApi } from '@/api/endpoints/oauth';
@@ -48,7 +48,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { openTelegramLogin } from '@/auth/telegramLogin';
 import { emailSchema, passwordSchema } from '@/utils/validators';
 
-type Mode = 'login' | 'register';
+type Mode = 'login' | 'register' | 'forgot';
 
 // Monochrome brand glyphs taken from simple-icons (CC0). All four use
 // `fill: currentColor` so the row stays in lockstep with the theme. The
@@ -104,14 +104,23 @@ export function LoginPage() {
   const { login, reloadMe } = useAuth();
   const notify = useNotifications();
 
-  // ?mode=register lets external links (and the /register redirect)
-  // deep-link into the sign-up form. Default to sign-in.
-  const initialMode: Mode = params.get('mode') === 'register' ? 'register' : 'login';
+  // ?mode=register / ?mode=forgot let external links (and the /register
+  // + /auth/forgot redirects) deep-link into a specific mode. Default
+  // to sign-in.
+  const queryMode = params.get('mode');
+  const initialMode: Mode =
+    queryMode === 'register'
+      ? 'register'
+      : queryMode === 'forgot'
+        ? 'forgot'
+        : 'login';
   const [mode, setMode] = useState<Mode>(initialMode);
   useDocumentTitle(
     mode === 'register'
       ? t('auth.register.title')
-      : t('auth.login.title'),
+      : mode === 'forgot'
+        ? t('auth.forgot.title')
+        : t('auth.login.title'),
   );
 
   // Shared input state — email is reused across both modes; password
@@ -138,6 +147,10 @@ export function LoginPage() {
   const [password2Error, setPassword2Error] = useState<string | null>(null);
   const [registered, setRegistered] = useState(false);
 
+  // Forgot-only state. We don't ask for tenant — backend resolves by
+  // unique email (login uses the same trick).
+  const [forgotSent, setForgotSent] = useState(false);
+
   // Inline confirm-password validation: as soon as the user has typed
   // anything in the second field we mirror «не совпадает» against the
   // primary password. Cleared when either field is empty so we don't
@@ -159,10 +172,11 @@ export function LoginPage() {
     setDisplayNameError(null);
     setPassword2Error(null);
     setRegistered(false);
+    setForgotSent(false);
     // Keep the URL in sync so a refresh / share preserves the mode.
     const nextParams = new URLSearchParams(params);
-    if (next === 'register') nextParams.set('mode', 'register');
-    else nextParams.delete('mode');
+    if (next === 'login') nextParams.delete('mode');
+    else nextParams.set('mode', next);
     setParams(nextParams, { replace: true });
   };
 
@@ -315,6 +329,29 @@ export function LoginPage() {
     }
   };
 
+  /* ---------- Forgot password ---------- */
+  const handleForgot = async (e?: FormEvent) => {
+    e?.preventDefault();
+    setProblem(null);
+    if (!/^.+@.+\..+$/.test(email)) {
+      setEmailError('Некорректный email');
+      return;
+    }
+    setEmailError(null);
+    setSubmitting(true);
+    try {
+      // Note: backend's 202 response is opaque (it never reveals
+      // whether the email exists), so we always land in the success
+      // state regardless of the actual outcome.
+      await authApi.passwordForgot(email);
+      setForgotSent(true);
+    } catch (raw) {
+      setProblem(raw as Problem);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   /* ---------- Render ---------- */
   const credentialsValid = useMemo(
     () => /^.+@.+\..+$/.test(email) && password.length > 0,
@@ -345,6 +382,7 @@ export function LoginPage() {
   ];
 
   const isRegister = mode === 'register';
+  const isForgot = mode === 'forgot';
 
   return (
     <div
@@ -367,14 +405,18 @@ export function LoginPage() {
             <p className="text-sm text-muted-foreground">
               {isRegister
                 ? 'Создайте аккаунт, чтобы продолжить'
-                : 'Войдите, чтобы продолжить'}
+                : isForgot
+                  ? 'Введите e-mail — пришлём ссылку для сброса пароля'
+                  : 'Войдите, чтобы продолжить'}
             </p>
           </div>
         </header>
 
-        {/* OAuth row — same in both modes. The provider's own consent
-            screen handles the «sign-up vs sign-in» distinction (it knows
-            whether this user has clicked through before). */}
+        {/* OAuth row — irrelevant for «forgot password» (those users
+            don't have a password to reset; they sign in through the
+            provider). Hidden in that mode to keep the screen focused
+            on the single «введи email» input. */}
+        {!isForgot && (
         <section className="space-y-4">
           <div className="flex justify-center gap-3">
             {providerRow.map((p) => {
@@ -420,8 +462,79 @@ export function LoginPage() {
             <span className="flex-1 border-t border-border" aria-hidden />
           </div>
         </section>
+        )}
 
-        {isRegister ? (
+        {isForgot ? (
+          /* Forgot-password form. One email input + a submit. No tenant
+             slug — the backend resolves by unique email (same trick
+             /auth/login uses). Success state intentionally lies a bit:
+             the backend's 202 is opaque (doesn't reveal whether the
+             address exists) so we always show «check your inbox». */
+          forgotSent ? (
+            <div
+              className="space-y-4 text-center"
+              data-testid="forgot-success"
+            >
+              <div className="flex flex-col items-center gap-2 text-sm text-foreground">
+                <CheckCircle2 className="h-6 w-6 text-foreground/70" />
+                <p>
+                  Если такой аккаунт существует, на{' '}
+                  <span className="font-medium">{email}</span> отправлена
+                  ссылка для сброса пароля.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <form
+              onSubmit={handleForgot}
+              noValidate
+              className="space-y-4"
+              data-testid="forgot-form"
+            >
+              <div className="space-y-1.5">
+                <Label
+                  htmlFor="forgot-email"
+                  className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
+                >
+                  Email
+                </Label>
+                <Input
+                  id="forgot-email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.currentTarget.value)}
+                  placeholder="you@example.com"
+                  autoComplete="email"
+                  autoFocus
+                  data-testid="forgot-email"
+                  className="h-11"
+                  aria-invalid={!!emailError}
+                />
+                {emailError && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {emailError}
+                  </p>
+                )}
+              </div>
+
+              {inlineErrorMessage && (
+                <Alert variant="destructive" data-testid="problem-alert">
+                  <AlertDescription>{inlineErrorMessage}</AlertDescription>
+                </Alert>
+              )}
+
+              <Button
+                type="submit"
+                disabled={submitting || !/^.+@.+\..+$/.test(email)}
+                data-testid="forgot-submit"
+                className="w-full h-11 text-sm font-medium"
+              >
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Отправить ссылку
+              </Button>
+            </form>
+          )
+        ) : isRegister ? (
           /* Registration form. No organisation field — backend lands the
              user in a placeholder tenant until they redeem a code. */
           registered ? (
@@ -577,13 +690,14 @@ export function LoginPage() {
                 <Label htmlFor="login-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
                   Пароль
                 </Label>
-                <Link
-                  to="/auth/forgot"
+                <button
+                  type="button"
+                  onClick={() => switchMode('forgot')}
                   data-testid="login-forgot-link"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   Забыли пароль?
-                </Link>
+                </button>
               </div>
               <Input
                 id="login-password"
@@ -652,7 +766,16 @@ export function LoginPage() {
         {/* Mode toggle — internal switch (no navigation, no full-page
             re-mount), so the OAuth row above stays in place. */}
         <div className="text-center text-xs text-muted-foreground">
-          {isRegister ? (
+          {isForgot ? (
+            <button
+              type="button"
+              onClick={() => switchMode('login')}
+              data-testid="forgot-to-login"
+              className="font-medium text-foreground hover:underline"
+            >
+              Назад к входу
+            </button>
+          ) : isRegister ? (
             <>
               Уже есть аккаунт?{' '}
               <button

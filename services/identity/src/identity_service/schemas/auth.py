@@ -112,7 +112,14 @@ class MeResponse(BaseModel):
 
 class PasswordForgotRequest(BaseModel):
     email: str
-    tenant_slug: str
+    # Optional. Self-registered users live in the default «public» tenant
+    # and the SPA's recovery form no longer asks for org slug — same
+    # mental model as ``/auth/login`` (POST body's ``tenant_slug`` is also
+    # optional there). Omitted → server resolves by unique-email lookup;
+    # ambiguous email (one address in multiple tenants) returns 202 with
+    # no email sent — the user must use the admin-provided link or include
+    # tenant_slug explicitly.
+    tenant_slug: str | None = None
 
 
 class PasswordResetRequest(BaseModel):

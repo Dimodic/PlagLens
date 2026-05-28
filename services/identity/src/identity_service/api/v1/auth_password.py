@@ -44,24 +44,35 @@ async def password_forgot(
     users = UserRepository(session)
     tokens = PasswordResetTokenRepository(session)
     email = EmailService()
-    tenant = await tenants.get_by_slug(payload.tenant_slug)
+    # Resolve the user. Two code paths:
+    #   * tenant_slug provided — admin-style lookup, same as before.
+    #   * tenant_slug omitted — the SPA's recovery form. We do the same
+    #     unique-email lookup login uses, so self-registered users
+    #     (planted in the default «public» tenant) don't have to know
+    #     their tenant slug. Ambiguous email → silently no-op; the user
+    #     either passes an explicit slug or contacts admin.
+    user = None
+    if payload.tenant_slug:
+        tenant = await tenants.get_by_slug(payload.tenant_slug)
+        if tenant is not None:
+            user = await users.get_by_email(tenant.id, payload.email)
+    else:
+        user = await users.find_unique_active_by_email(payload.email)
     # Always 202 — never reveal whether an email exists.
-    if tenant is not None:
-        user = await users.get_by_email(tenant.id, payload.email)
-        if user is not None:
-            plain = new_opaque_token(prefix="prt_")
-            await tokens.add(
-                PasswordResetToken(
-                    id=token_id(),
-                    user_id=user.id,
-                    token_hash=hash_token(plain),
-                    expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
-                )
+    if user is not None:
+        plain = new_opaque_token(prefix="prt_")
+        await tokens.add(
+            PasswordResetToken(
+                id=token_id(),
+                user_id=user.id,
+                token_hash=hash_token(plain),
+                expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
             )
-            await email.send_password_reset(
-                to=user.email,
-                reset_url=build_frontend_url("/auth/reset", plain),
-            )
+        )
+        await email.send_password_reset(
+            to=user.email,
+            reset_url=build_frontend_url("/auth/reset", plain),
+        )
     return Response(status_code=status.HTTP_202_ACCEPTED)
 
 
