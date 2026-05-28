@@ -191,10 +191,16 @@ export default function MyDashboardPage() {
       arr = arr.filter((s) => s.score == null);
     if (courseFilter !== 'all')
       arr = arr.filter((s) => String(s.course_id) === courseFilter);
-    arr.sort(
-      (a, b) =>
-        new Date(b.submitted_at).getTime() -
-        new Date(a.submitted_at).getTime(),
+    // Sort by assignment title using natural order (A < B < … < J < K),
+    // so a Y.Contest task list reads like the contest itself rather
+    // than scrambled by submitted_at. ``localeCompare(..., { numeric:
+    // true })`` keeps multi-digit numbers in human order too («Задача
+    // 2» < «Задача 10»).
+    arr.sort((a, b) =>
+      (a.assignment_title ?? '').localeCompare(b.assignment_title ?? '', 'ru', {
+        numeric: true,
+        sensitivity: 'base',
+      }),
     );
     return arr;
   }, [mySubs, statusFilter, courseFilter]);

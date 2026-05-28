@@ -1,17 +1,24 @@
 /**
- * MySubmissionDetailPage — student view of a submission at /me/submissions/:id.
+ * MySubmissionDetailPage — `/me/submissions/:id`, student view.
  *
- * Quiet header with the assignment + version + uploaded-at, a code viewer for
- * the student's own file, a grade card (only when the rubric became visible to
- * students), a single similarity number (no pairs are exposed to the student),
- * and a shared AI summary if the teacher published one.
+ * Stripped to the bare facts a student needs:
  *
- * The teacher-side detail at /submissions/:id stays mounted at its existing
- * page and is unchanged.
+ *   • Header: assignment title, submitted-at, language. No internal
+ *     ``ASSIGNMENT 12`` / ``sub_…`` ids — those leaked DB plumbing.
+ *   • Code: inline (one CodeViewer; teacher may comment on a line).
+ *   • Grade: a single line with score + multiplier + graded-at.
+ *   • Teacher feedback (when `grade.comment` / per-line feedback is on
+ *     and `visible_to_student` is true).
+ *
+ * Things the staff page has and the student doesn't need (removed):
+ *   • Files picker — a Y.Contest submission is one file; the picker
+ *     is dead chrome.
+ *   • Plagiarism number / blurb — not actionable for the student.
+ *   • «Открыть входящие» footer button — that's the staff inbox.
+ *   • Duplicate «К заданию» at the bottom — one in the header is enough.
  */
 import dayjs from 'dayjs';
 import { Link, useParams } from 'react-router-dom';
-import { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import {
   useFeedback,
@@ -25,7 +32,6 @@ import { CodeViewer } from '@/components/submissions/CodeViewer';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Page } from '@/components/layout/Page';
 
 function relTime(iso: string | Date | null | undefined): string {
@@ -58,14 +64,13 @@ function initials(name?: string | null): string {
 
 export default function MySubmissionDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useDocumentTitle('Моя посылка');
   const { data: submission, isLoading } = useSubmission(id);
   const { data: filesData } = useSubmissionFiles(id);
   const files = filesData?.data ?? [];
-  const [activeFileId, setActiveFileId] = useState<string | undefined>(
-    undefined,
-  );
-  const fileId = activeFileId ?? files[0]?.id;
+  // Y.Contest submissions are single-file; we don't expose a picker.
+  // If multiple files ever land here we just render the first one — the
+  // student rarely needs to navigate between siblings.
+  const fileId = files[0]?.id;
   const { data: fileContent } = useSubmissionFileContent(id, fileId);
   const { data: grade } = useGrade(id);
   const { data: feedbackData } = useFeedback(id);
@@ -73,68 +78,44 @@ export default function MySubmissionDetailPage() {
     (f) => f.visible_to_student,
   );
 
+  const sub = submission as
+    | (typeof submission & { assignment_title?: string | null })
+    | null
+    | undefined;
+  const titleStr = sub?.assignment_title || 'Моя посылка';
+  useDocumentTitle(titleStr);
+
   if (!id) return null;
-  if (isLoading || !submission) {
+  if (isLoading || !submission || !sub) {
     return (
-      <div className="space-y-6">
+      <Page>
         <SkeletonList rows={6} rowHeight={48} />
-      </div>
+      </Page>
     );
   }
-
-  const flagged =
-    !!submission.flags?.suspicious || !!submission.flags?.manually_flagged;
-
-  const submissionAny = submission as unknown as {
-    plagiarism?: { max_similarity?: number };
-    last_run_score?: number;
-    similarity_score?: number;
-    plagiarism_runs?: Array<{ score?: number; max_similarity?: number }>;
-  };
-  const similarityRaw =
-    submissionAny.plagiarism?.max_similarity ??
-    submissionAny.last_run_score ??
-    submissionAny.similarity_score ??
-    submissionAny.plagiarism_runs?.[0]?.max_similarity ??
-    submissionAny.plagiarism_runs?.[0]?.score ??
-    null;
-  const similarity = typeof similarityRaw === 'number' ? similarityRaw : null;
-  const hasSimilarity = similarity !== null;
-
-  const similarityToneClass = hasSimilarity
-    ? (similarity as number) >= 0.65
-      ? 'text-sev-high'
-      : (similarity as number) >= 0.4
-        ? 'text-sev-mid'
-        : 'text-sev-low'
-    : 'text-muted-foreground';
 
   return (
     <Page>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1">
-          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            assignment {submission.assignment_id}
-          </div>
-          <h1 className="text-[2rem] font-bold tracking-tight leading-tight">
-            Посылка{' '}
-            <span className="tabular-nums">v{submission.version}</span>
+        <div className="space-y-1 min-w-0">
+          <h1 className="text-[2rem] font-bold tracking-tight leading-tight truncate">
+            {titleStr}
           </h1>
           <p className="text-sm text-muted-foreground">
             Загружено{' '}
-            {dayjs(submission.submitted_at).format('DD.MM.YYYY HH:mm')} ·{' '}
-            {submission.language} · {submission.status}
-            {submission.is_late && (
+            {dayjs(sub.submitted_at).format('DD.MM.YYYY HH:mm')} ·{' '}
+            {sub.language}
+            {sub.is_late && (
               <>
                 {' · '}
-                <span className="text-sev-mid">late</span>
+                <span className="text-sev-mid">опоздание</span>
               </>
             )}
           </p>
         </div>
         <div className="flex-none">
           <Button asChild variant="ghost" size="sm">
-            <Link to={`/me/assignments/${submission.assignment_id}`}>
+            <Link to={`/me/assignments/${sub.assignment_id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
               К заданию
             </Link>
@@ -142,158 +123,76 @@ export default function MySubmissionDetailPage() {
         </div>
       </div>
 
-      {/* Files */}
-      {files.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xl font-bold">Файлы</h2>
-          <div className="flex flex-wrap gap-1 overflow-x-auto">
-            {files.map((f) => {
-              const on = (activeFileId ?? files[0]?.id) === f.id;
-              return (
-                <button
-                  type="button"
-                  key={f.id}
-                  onClick={() => setActiveFileId(f.id)}
-                  className={`whitespace-nowrap rounded-md px-3 py-1.5 text-xs transition-colors ${
-                    on
-                      ? 'bg-muted font-medium text-foreground'
-                      : 'text-muted-foreground hover:bg-muted/40'
-                  }`}
-                >
-                  {f.path}
-                </button>
-              );
-            })}
-          </div>
-          {fileContent && (
-            <div className="overflow-hidden rounded-lg border border-border/70">
-              <CodeViewer
-                fileName={files.find((f) => f.id === fileId)?.path ?? '—'}
-                code={fileContent}
-                language={submission.language}
-                maxHeight={420}
-              />
-            </div>
-          )}
-        </section>
-      )}
-
-      {/* Grade */}
-      {grade && (
-        <section className="space-y-3">
-          <h2 className="text-xl font-bold">Оценка</h2>
-          <Card className="border-border/70">
-            <CardContent className="grid grid-cols-1 gap-6 p-5 md:grid-cols-3">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Балл
-                </div>
-                <div
-                  className="mt-2 text-2xl font-semibold tabular-nums tracking-tight"
-                  data-testid={`grade-${id}`}
-                >
-                  {grade.score.toFixed(1)} / {grade.max_score.toFixed(1)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Множитель
-                </div>
-                <div className="mt-2 text-2xl font-semibold tabular-nums tracking-tight">
-                  ×{grade.applied_multiplier.toFixed(2)}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Дата
-                </div>
-                <div className="mt-2 text-sm text-foreground/80">
-                  {dayjs(grade.graded_at).format('DD.MM.YYYY HH:mm')}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      {/* Feedback */}
-      {feedback.length > 0 && (
-        <section className="space-y-3">
-          <h2 className="text-xl font-bold">Комментарий преподавателя</h2>
-          <Card className="border-border/70">
-            <CardContent className="p-0">
-              {feedback.map((f, idx) => (
-                <div
-                  key={f.id}
-                  className={`flex gap-4 px-5 py-4 ${
-                    idx > 0 ? 'border-t border-border/70' : ''
-                  }`}
-                >
-                  <Avatar className="h-9 w-9 flex-none">
-                    <AvatarFallback className="bg-accent text-xs text-accent-foreground">
-                      {initials(f.author_id)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs text-muted-foreground">
-                      {relTime(f.created_at)}
-                      {f.source === 'llm_curated' && (
-                        <>
-                          {' · '}
-                          <span className="text-primary">LLM-сводка</span>
-                        </>
-                      )}
-                    </div>
-                    <p className="mt-2 max-w-[760px] whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
-                      {f.body}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </section>
-      )}
-
-      {/* Plagiarism — students only see a single number */}
-      <section className="space-y-3">
-        <div className="flex items-end justify-between">
-          <h2 className="text-xl font-bold">Антиплагиат</h2>
-          {hasSimilarity ? (
-            <span
-              className={`font-mono text-2xl font-semibold tabular-nums tracking-tight ${similarityToneClass}`}
-            >
-              {Math.round((similarity as number) * 100)}%
-            </span>
-          ) : (
-            <span className="text-sm text-muted-foreground">—</span>
-          )}
+      {/* Code — inline, single file. Teachers may comment on a line so
+          students need to see the same view a teacher sees. */}
+      {fileContent && (
+        <div className="overflow-hidden rounded-lg border border-border/70">
+          <CodeViewer
+            fileName={files.find((f) => f.id === fileId)?.path ?? '—'}
+            code={fileContent}
+            language={sub.language}
+            maxHeight={520}
+          />
         </div>
-        <Card className="border-border/70">
-          <CardContent className="p-5 text-sm leading-relaxed text-foreground/80">
-            <p className="max-w-[760px]">
-              {!hasSimilarity
-                ? 'Проверка на сходство ещё не запускалась.'
-                : flagged
-                  ? 'Найдено существенное сходство с другим решением. Преподаватель может попросить вас рассказать, как вы пришли к этому решению.'
-                  : 'Сходство ниже порога — задание принято к проверке.'}
-            </p>
-          </CardContent>
-        </Card>
-      </section>
+      )}
 
-      {/* Bottom actions */}
-      <div className="flex justify-end gap-2">
-        <Button asChild variant="outline">
-          <Link to={`/me/assignments/${submission.assignment_id}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            К заданию
-          </Link>
-        </Button>
-        <Button asChild variant="ghost" aria-label="Открыть входящие">
-          <Link to="/notifications">Открыть входящие</Link>
-        </Button>
-      </div>
+      {/* Grade — one quiet line: «Оценка 8.5 / 10  ×1.0  · 15.05.2026 14:32». */}
+      {grade && (
+        <section
+          className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-border/40 pt-5"
+          data-testid={`grade-${id}`}
+        >
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Оценка
+          </h2>
+          <span className="text-2xl font-semibold tabular-nums tracking-tight">
+            {grade.score.toFixed(1)}
+            <span className="text-muted-foreground"> / {grade.max_score.toFixed(1)}</span>
+          </span>
+          {grade.applied_multiplier !== 1 && (
+            <span className="text-sm text-muted-foreground">
+              ×{grade.applied_multiplier.toFixed(2)}
+            </span>
+          )}
+          <span className="text-sm text-muted-foreground">
+            · {dayjs(grade.graded_at).format('DD.MM.YYYY HH:mm')}
+          </span>
+        </section>
+      )}
+
+      {/* Feedback — comments from the teacher (or curated LLM summary). */}
+      {feedback.length > 0 && (
+        <section className="space-y-3 border-t border-border/40 pt-5">
+          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+            Комментарий
+          </h2>
+          <ul className="space-y-4">
+            {feedback.map((f) => (
+              <li key={f.id} className="flex gap-3">
+                <Avatar className="h-8 w-8 flex-none">
+                  <AvatarFallback className="bg-muted text-xs text-foreground/80">
+                    {initials(f.author_id)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs text-muted-foreground">
+                    {relTime(f.created_at)}
+                    {f.source === 'llm_curated' && (
+                      <>
+                        {' · '}
+                        <span className="text-primary">LLM-сводка</span>
+                      </>
+                    )}
+                  </div>
+                  <p className="mt-1.5 max-w-[760px] whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">
+                    {f.body}
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </Page>
   );
 }
