@@ -65,7 +65,33 @@ export function useDeleteIntegration() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => integrationsApi.delete(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: integrationKeys.all }),
+    // Optimistic: drop the row from every cached list immediately so
+    // the UI doesn't keep showing a deleted integration. Global query
+    // defaults (`staleTime: 60s`, `placeholderData: keepPreviousData`)
+    // were sometimes serving the stale list on the refetch that follows
+    // — the user saw the row stick around until F5. Patching the cache
+    // is instant and survives those defaults.
+    onMutate: async (id: string) => {
+      await qc.cancelQueries({ queryKey: integrationKeys.all });
+      // Also stop the per-config import-jobs polling. ActivitySummary's
+      // useQueries fires on every entry in the list with a 15s interval;
+      // after deletion the next tick hits a row that no longer exists
+      // and the gateway responds 404 → a red «not found» toast pops up
+      // for no reason.
+      qc.cancelQueries({ queryKey: ['integration', id] });
+      qc.removeQueries({ queryKey: ['integration', id] });
+
+      qc.setQueriesData<{ data?: Array<{ id: string }> }>(
+        { queryKey: ['integrations', 'list'] },
+        (old) => {
+          if (!old || !Array.isArray(old.data)) return old;
+          return { ...old, data: old.data.filter((r) => r.id !== id) };
+        },
+      );
+    },
+    // Re-fetch the server's authoritative copy in case our optimistic
+    // patch and the backend disagree (e.g. multi-tab edits).
+    onSettled: () => qc.invalidateQueries({ queryKey: integrationKeys.all }),
   });
 }
 
