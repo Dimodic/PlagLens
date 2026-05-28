@@ -46,8 +46,12 @@ export function GradeForm({
     initial?.score !== undefined ? String(initial.score) : '0',
   );
   const [comment, setComment] = useState<string>(initial?.comment ?? '');
+  // Default the «show to student» flag to true — in an academic
+  // setting an оценка that's been saved is expected to be visible
+  // immediately. A teacher can still untick it for «черновая
+  // оценка» drafts that shouldn't reach the student yet.
   const [commentVisible, setCommentVisible] = useState<boolean>(
-    initial?.comment_visible_to_student ?? false,
+    initial?.comment_visible_to_student ?? true,
   );
   const [scoreError, setScoreError] = useState<string | null>(null);
 

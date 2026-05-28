@@ -10,7 +10,11 @@ from pydantic import BaseModel, ConfigDict, Field
 class GradeIn(BaseModel):
     score: float = Field(ge=0)
     max_score: float | None = Field(default=None, ge=0)
-    comment_visible_to_student: bool = False
+    # Defaults to True — in an academic setting a saved grade is
+    # expected to be visible to the student immediately. The teacher
+    # can still pass ``False`` to keep a draft grade hidden until the
+    # release moment (e.g. cohort-wide release).
+    comment_visible_to_student: bool = True
     comment: str | None = None
 
 
@@ -57,7 +61,7 @@ class GradeHistoryEntry(BaseModel):
 class BulkGradeItem(BaseModel):
     submission_id: str
     score: float = Field(ge=0)
-    comment_visible_to_student: bool = False
+    comment_visible_to_student: bool = True
 
 
 class BulkGradeIn(BaseModel):
