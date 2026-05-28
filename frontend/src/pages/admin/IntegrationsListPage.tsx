@@ -572,7 +572,7 @@ export function IntegrationsListPage() {
       <PageHeader
         title={
           <span data-testid="integrations-title">
-            {isAdmin ? 'Авторизация интеграций' : 'Интеграции курса'}
+            {isAdmin ? 'Интеграции' : 'Интеграции курса'}
           </span>
         }
         // Admin never creates concrete integrations — those are per-course
@@ -697,7 +697,7 @@ function OAuthProvidersPanel() {
           })}
         </nav>
 
-        <div className="md:border-l md:border-border/60 p-6 md:p-8">
+        <div className="md:border-l md:border-border/60 p-6 md:p-8 md:min-h-[480px]">
           {selected ? (
             <IntegrationOAuthDetail provider={selected} />
           ) : (

@@ -47,7 +47,7 @@ function isConfigured(p: OAuthProviderInfo): boolean {
 }
 
 export default function LoginProvidersPage() {
-  useDocumentTitle('Вход через соцсети');
+  useDocumentTitle('Авторизация');
 
   const { data, isPending, error } = useOAuthProviders();
   const providers = (data ?? [])
@@ -72,7 +72,7 @@ export default function LoginProvidersPage() {
 
   return (
     <Page width="regular">
-      <PageHeader title="Вход через соцсети" />
+      <PageHeader title="Авторизация" />
 
       {error && (
         <Alert variant="destructive">
@@ -138,8 +138,12 @@ export default function LoginProvidersPage() {
             })}
           </nav>
 
-          {/* Detail pane — inline edit, one thin divider on md+. */}
-          <div className="md:border-l md:border-border/60 p-6 md:p-8">
+          {/* Detail pane — inline edit, one thin divider on md+. Pinned
+              min-height so switching between configured and unconfigured
+              providers doesn't shrink/grow the form and shift the layout
+              (configured rows carry inline hints like "(оставьте пустым…)"
+              that bare rows don't). */}
+          <div className="md:border-l md:border-border/60 p-6 md:p-8 md:min-h-[480px]">
             {selected ? (
               <ProviderDetail provider={selected} />
             ) : (
