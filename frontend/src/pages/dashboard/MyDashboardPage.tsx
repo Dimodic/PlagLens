@@ -21,11 +21,15 @@
  */
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useQueries } from '@tanstack/react-query';
 import { ChevronRight, KeyRound, Loader2 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useMyAssignments } from '@/hooks/api/useAssignments';
+import { assignmentKeys } from '@/hooks/api/useAssignments';
+import { assignmentsApi } from '@/api/endpoints/assignments';
+import type { AssignmentBrief } from '@/api/endpoints/assignments';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
@@ -147,10 +151,34 @@ export default function MyDashboardPage() {
     () => new Map(myCourses.map((c) => [c.id, c])),
     [myCourses],
   );
-  const assignmentById = useMemo(
-    () => new Map(myAssignments.map((a) => [a.id, a])),
-    [myAssignments],
-  );
+
+  // /users/me/assignments is ``published_only=True`` — Yandex.Contest
+  // binding-imports often produce assignments that aren't published
+  // (e.g. teacher's draft contests), and the resulting submissions
+  // would render as «Задание» because the lookup misses. To recover
+  // those titles, hit /courses/:id/assignments for every course the
+  // student belongs to — that endpoint is unfiltered and the rows
+  // merge cleanly into the same id-keyed map.
+  const perCourseAssignmentsQ = useQueries({
+    queries: myCourses.map((c) => ({
+      queryKey: [...assignmentKeys.byCourse(c.id), { dashboard: true }],
+      queryFn: () =>
+        assignmentsApi.listInCourse(c.id, { limit: 500 }),
+      enabled: !!c.id,
+    })),
+  });
+
+  const assignmentById = useMemo(() => {
+    const m = new Map<string, AssignmentBrief>(
+      myAssignments.map((a) => [a.id, a]),
+    );
+    for (const q of perCourseAssignmentsQ) {
+      for (const a of q.data?.data ?? []) {
+        if (!m.has(a.id)) m.set(a.id, a);
+      }
+    }
+    return m;
+  }, [myAssignments, perCourseAssignmentsQ]);
 
   const greeting = user?.display_name
     ? `Привет, ${user.display_name.split(' ')[0]}`

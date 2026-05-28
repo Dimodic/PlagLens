@@ -163,7 +163,7 @@ export default function CourseDetailPage() {
   // sub-route bookmarks can redirect cleanly.
   const [searchParams, setSearchParams] = useSearchParams();
   const rawTab = searchParams.get('tab');
-  const tab: CourseTab = (COURSE_TABS as readonly string[]).includes(
+  const requestedTab: CourseTab = (COURSE_TABS as readonly string[]).includes(
     rawTab ?? '',
   )
     ? (rawTab as CourseTab)
@@ -174,6 +174,9 @@ export default function CourseDetailPage() {
     else params.set('tab', next);
     setSearchParams(params);
   };
+  // Students can't view the staff tabs even via direct URL — they
+  // either don't render the contents (RBAC server-side) or surface a
+  // half-broken empty view. Pin the tab to «homeworks» for them.
 
   // ----- Inline-expand homework rows -----
   //
@@ -237,6 +240,27 @@ export default function CourseDetailPage() {
     }
     return hasGlobalRole(user, ['teacher']);
   }, [course, user]);
+
+  // Staff = anyone who can see the management surfaces (Members, Stats,
+  // Suspicious tabs, etc.). Pure students only get the ДЗ list — no role
+  // chrome, no rosters, no plagiarism dashboard. They submit, see their
+  // grade and comment, that's it.
+  const isStaff = useMemo(() => {
+    if (!user) return false;
+    if (hasGlobalRole(user, ['admin', 'teacher', 'assistant'])) return true;
+    if (
+      course &&
+      hasCourseRole(user, course.id, ['owner', 'co_owner', 'assistant'])
+    ) {
+      return true;
+    }
+    return false;
+  }, [course, user]);
+
+  // Resolve the actual tab the body renders: staff get what the URL
+  // asks for, students are pinned to «homeworks» regardless of
+  // ``?tab=…`` shenanigans.
+  const tab: CourseTab = isStaff ? requestedTab : 'homeworks';
 
   const homeworksQ = useHomeworksForCourse(course?.id, { limit: 100 });
   // YC imports easily push the assignment count past 100; keep the cap high
@@ -589,35 +613,36 @@ export default function CourseDetailPage() {
 
       {problem && <ProblemAlert problem={problem} />}
 
-      {/* Tabs — four real tabs: ДЗ, Участники, Статистика, Подозрительные.
-          Groups, Invitations, Dashboard, Exports, Scheduled exports and
-          the legacy Google Sheets link were dropped — their routes
-          redirect back here. Suspicious survived because it has its
-          own decision-making workflow that doesn't fit on the Stats
-          dashboard. */}
-      <Tabs value={tab} onValueChange={handleTabChange}>
-        <TabsList className="flex flex-wrap h-auto">
-          <TabsTrigger value="homeworks">
-            <span data-testid="course-detail-tab-homeworks">ДЗ</span>
-            {(homeworksQ.data?.data ?? []).length > 0 && (
-              <span className="ml-2 text-xs tabular-nums text-muted-foreground">
-                {(homeworksQ.data?.data ?? []).length}
+      {/* Tabs — staff sees four (ДЗ / Участники / Статистика / Подозрительные).
+          Students see no tabs at all: their view is just the homeworks
+          list — they submit, see their grade and comment, leave. The
+          rosters + plagiarism dashboard would be confusing and partly
+          forbidden by RBAC anyway. */}
+      {isStaff && (
+        <Tabs value={tab} onValueChange={handleTabChange}>
+          <TabsList className="flex flex-wrap h-auto">
+            <TabsTrigger value="homeworks">
+              <span data-testid="course-detail-tab-homeworks">ДЗ</span>
+              {(homeworksQ.data?.data ?? []).length > 0 && (
+                <span className="ml-2 text-xs tabular-nums text-muted-foreground">
+                  {(homeworksQ.data?.data ?? []).length}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="members">
+              <span data-testid="course-detail-tab-members">Участники</span>
+            </TabsTrigger>
+            <TabsTrigger value="stats">
+              <span data-testid="course-detail-tab-stats">Статистика</span>
+            </TabsTrigger>
+            <TabsTrigger value="suspicious">
+              <span data-testid="course-detail-tab-suspicious">
+                Подозрительные
               </span>
-            )}
-          </TabsTrigger>
-          <TabsTrigger value="members">
-            <span data-testid="course-detail-tab-members">Участники</span>
-          </TabsTrigger>
-          <TabsTrigger value="stats">
-            <span data-testid="course-detail-tab-stats">Статистика</span>
-          </TabsTrigger>
-          <TabsTrigger value="suspicious">
-            <span data-testid="course-detail-tab-suspicious">
-              Подозрительные
-            </span>
-          </TabsTrigger>
-        </TabsList>
-      </Tabs>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {/* Homeworks list (default tab content) */}
       {tab === 'homeworks' && (
