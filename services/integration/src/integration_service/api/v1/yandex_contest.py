@@ -2505,3 +2505,103 @@ async def sync_contest_structure(
     courses = await adapter.list_remote_courses(cfg)
     target = next((c for c in courses if str(c.external_id) == str(contest_id)), None)
     return {"ok": True, "contest_id": contest_id, "found": target is not None}
+
+
+@router.post("/{config_id}/migrate-author-ids")
+async def migrate_author_ids(
+    config_id: str,
+    contest_id: int,
+    p: Principal = Depends(principal_dep),
+    session: AsyncSession = Depends(session_dep),
+) -> dict[str, Any]:
+    """One-shot migration: replace unstable per-contest participantIds with
+    stable yandex logins on existing submissions + external_bindings.
+
+    Background — before commit 4871fdf, the yc-import-as-homework path built
+    ``author_id = "yc:<participantId>"`` using the numeric id Y.Contest puts
+    on each submission row. That id is contest-scoped — a re-import of the
+    same student into another contest produces a different participantId,
+    so the same human ends up as two unrelated «authors» and breaks
+    cross-contest user attribution / binding.
+
+    This endpoint hits ``/v2/contests/{contest_id}/participants`` (which DOES
+    return the stable yandex login), builds a ``participantId → login`` map,
+    and rewrites every ``yc:<pid>``-prefixed row inside ``tenant_id`` so it
+    now reads ``yc:<login>``. Also runs the same swap on
+    ``identity.external_bindings`` so a redeemed code's binding survives.
+
+    Admin-only. Idempotent — already-migrated rows (``yc:<login>``) don't
+    match the pattern and are left alone.
+    """
+    if not (p.is_admin or p.is_super_admin):
+        raise ProblemException(403, "FORBIDDEN", "Forbidden", "Admin role required")
+
+    cfg = await _get_cfg(config_id, p, session)
+    adapter = YandexContestAdapter()
+    pres = await adapter.import_participants(cfg, {"contest_id": contest_id})
+    pid_to_login: dict[str, str] = {}
+    for rp in pres.participants:
+        if rp.participant_id and rp.login:
+            pid_to_login[str(rp.participant_id)] = str(rp.login)
+    if not pid_to_login:
+        return {
+            "ok": True,
+            "contest_id": contest_id,
+            "mapped": 0,
+            "submissions_updated": 0,
+            "bindings_updated": 0,
+            "detail": "no participants with a login surfaced for this contest",
+        }
+
+    # Cross-schema UPDATEs: integration sits on the same physical Postgres
+    # as submission + identity, so we run them through a raw text exec
+    # rather than fan out HTTP calls. tenant_id scopes the submission
+    # update; identity bindings are tenant-agnostic by schema so we scope
+    # by `system='yandex_contest'` + the from-key pattern.
+    from sqlalchemy import text
+
+    subs_total = 0
+    binds_total = 0
+    for pid, login in pid_to_login.items():
+        from_key = f"yc:{pid}"
+        to_key = f"yc:{login}"
+        # 1) submissions in this tenant whose author_id is the unstable form.
+        subs_res = await session.execute(
+            text(
+                "UPDATE submission.submissions "
+                "SET author_id = :to_key "
+                "WHERE tenant_id = :tenant "
+                "AND source = 'yandex_contest' "
+                "AND author_id = :from_key"
+            ),
+            {"to_key": to_key, "tenant": cfg.tenant_id, "from_key": from_key},
+        )
+        subs_total += subs_res.rowcount or 0
+        # 2) bindings (tenant-agnostic; system narrows it). Only the
+        # external_id changes; user_id keeps pointing to the same person.
+        binds_res = await session.execute(
+            text(
+                "UPDATE identity.external_bindings "
+                "SET external_id = :to_key "
+                "WHERE system = 'yandex_contest' "
+                "AND external_id = :from_key"
+            ),
+            {"to_key": to_key, "from_key": from_key},
+        )
+        binds_total += binds_res.rowcount or 0
+    await session.commit()
+    logger.info(
+        "yc.migrate_author_ids.done",
+        contest_id=contest_id,
+        tenant_id=cfg.tenant_id,
+        mapped=len(pid_to_login),
+        submissions_updated=subs_total,
+        bindings_updated=binds_total,
+    )
+    return {
+        "ok": True,
+        "contest_id": contest_id,
+        "mapped": len(pid_to_login),
+        "submissions_updated": subs_total,
+        "bindings_updated": binds_total,
+    }
