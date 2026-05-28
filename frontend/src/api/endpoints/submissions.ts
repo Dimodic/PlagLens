@@ -207,6 +207,10 @@ export interface SubmissionListFilters extends ListParams {
   min_score?: number;
   max_score?: number;
   version?: number;
+  /** Single-assignment filter. Both /users/me/submissions and the staff
+   *  inbox accept this. Plural ``assignment_ids`` below is staff-only —
+   *  the student-side handler in self_service.py ignores it. */
+  assignment_id?: string;
   /** Staff inbox only — narrow to one assistant's distributed pile. */
   assigned_grader_id?: string;
   /** Staff inbox only — narrow to a whole homework's assignments (the
@@ -246,6 +250,7 @@ function appendFilters(
   f: SubmissionListFilters,
 ): Record<string, string | number> {
   if (f.author_id) base.author_id = f.author_id;
+  if (f.assignment_id) base.assignment_id = f.assignment_id;
   if (f.status) base.status = f.status;
   if (f.late !== undefined) base.late = String(f.late);
   if (f.suspicious !== undefined) base.suspicious = String(f.suspicious);

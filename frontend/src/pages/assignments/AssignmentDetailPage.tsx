@@ -76,6 +76,13 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -94,7 +101,7 @@ function statusBadge(status: string) {
   return <StatusPill tone="success">Активен</StatusPill>;
 }
 
-type TabId = 'submissions' | 'stats' | 'plagiarism' | 'ai' | 'about';
+type TabId = 'submissions' | 'stats' | 'plagiarism' | 'ai' | 'about' | 'mine';
 
 type RunStatus =
   | 'queued'
@@ -178,6 +185,9 @@ export default function AssignmentDetailPage() {
     return false;
   }, [user, assignment]);
 
+  // Students get «Описание» as the default but can flip to «Мои посылки»
+  // for their attempts on this assignment; staff land on the teacher
+  // queue («Посылки» tab) so triage is one click away.
   const initialTab: TabId = isTeacher ? 'submissions' : 'about';
   // Persisted per-assignment so leaving for a plagiarism run / a
   // submission and coming back lands on the tab the user left off on,
@@ -252,7 +262,13 @@ export default function AssignmentDetailPage() {
 
   // Non-teachers only ever see the "Описание" tab — clamp here so a
   // stale persisted value (or a teacher tab) can never leak through.
-  const activeTab: TabId = isTeacher ? tab : 'about';
+  // Students can now toggle between «about» (description) and «mine»
+  // (their submissions on this assignment); staff get the full tab set.
+  const activeTab: TabId = isTeacher
+    ? tab
+    : tab === 'mine'
+      ? 'mine'
+      : 'about';
   const latestTotal = latestSorted.length;
   const latestPageStart = (subsPage - 1) * SUBS_PAGE_SIZE;
   const submissionList = latestSorted.slice(
@@ -476,6 +492,9 @@ export default function AssignmentDetailPage() {
                 the condition (it's the source of truth for grading) but in
                 a tab, not as a giant block above every other tab. */}
             <TabsTrigger value="about">Описание</TabsTrigger>
+            {!isTeacher && (
+              <TabsTrigger value="mine">Мои посылки</TabsTrigger>
+            )}
             {isTeacher && (
               <>
                 <TabsTrigger value="submissions">
@@ -503,7 +522,7 @@ export default function AssignmentDetailPage() {
           <div className="mt-6">
             {/* MAIN */}
             <div className="min-w-0 space-y-6">
-              <TabsContent value="about" className="mt-0 space-y-8">
+              <TabsContent value="about" className="mt-0">
                 {assignment.description ? (
                   // Plain prose, no Card chrome — design-system §7 antipattern:
                   // "Card вокруг каждой секции". YC HTML rendered via
@@ -520,11 +539,13 @@ export default function AssignmentDetailPage() {
                     Описание не задано.
                   </div>
                 )}
-
-                {!isTeacher && (
-                  <MyAssignmentSubmissions assignmentId={String(assignment.id)} />
-                )}
               </TabsContent>
+
+              {!isTeacher && (
+                <TabsContent value="mine" className="mt-0">
+                  <MyAssignmentSubmissions assignmentId={String(assignment.id)} />
+                </TabsContent>
+              )}
 
               <TabsContent value="submissions" className="mt-0">
                 {/* No "Все посылки →" link — the submissions are right
@@ -1434,11 +1455,12 @@ function SubmissionTimeline({
 }
 
 /* ---------------------------------------------------------------------- */
-/* MyAssignmentSubmissions — student-only sub-section on the «about» tab. */
-/* Surfaces the student's own OK / Accepted attempts on this assignment   */
-/* with a click-through to the submission detail. CE / WA / PE rows are   */
-/* filtered out (they never reach the teacher's queue either; showing     */
-/* them here would imply they're «pending» when they're really dead).     */
+/* MyAssignmentSubmissions — student-only content of the «Мои посылки»     */
+/* tab on /assignments/:id. List of THIS student's attempts on THIS        */
+/* assignment with a verdict filter (Все / OK / Ошибки). Singular          */
+/* `assignment_id` is critical — the student-side handler in               */
+/* self_service.py ignores `assignment_ids[]`, so passing a list here used */
+/* to return every submission across the whole course instead.             */
 /* ---------------------------------------------------------------------- */
 
 function isAccepted(v: string | null | undefined): boolean {
@@ -1457,93 +1479,134 @@ const fmtSubDate = (iso: string | null | undefined) =>
       })
     : '';
 
-function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
-  // Reuses the same /users/me/submissions query the dashboard already
-  // primed — assignment_ids=[…] hits FastAPI's repeated query params
-  // contract for ``list[str] = Query()``.
-  const q = useMySubmissions({ assignment_ids: [assignmentId] });
-  const subsRaw = q.data as unknown;
-  const subs: Array<{
-    id: string;
-    submitted_at: string;
-    external_verdict?: string | null;
-    score?: number | null;
-    max_score?: number | null;
-  }> = Array.isArray(subsRaw)
-    ? (subsRaw as never)
-    : ((subsRaw as { data?: never[] })?.data ?? []);
+type MyFilter = 'all' | 'ok' | 'failed';
 
-  const accepted = subs
-    .filter((s) => isAccepted(s.external_verdict))
-    .sort(
+interface MySub {
+  id: string;
+  submitted_at: string;
+  external_verdict?: string | null;
+  score?: number | null;
+  max_score?: number | null;
+}
+
+function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
+  // assignment_id (singular) hits the student-side filter; the plural
+  // `assignment_ids` form is staff-only and would silently return every
+  // submission across the course.
+  const q = useMySubmissions({ assignment_id: assignmentId });
+  const [filter, setFilter] = useState<MyFilter>('all');
+
+  const subsRaw = q.data as unknown;
+  const subs: MySub[] = Array.isArray(subsRaw)
+    ? (subsRaw as MySub[])
+    : ((subsRaw as { data?: MySub[] })?.data ?? []);
+
+  const visible = useMemo(() => {
+    let arr = subs.slice();
+    if (filter === 'ok') arr = arr.filter((s) => isAccepted(s.external_verdict));
+    else if (filter === 'failed')
+      arr = arr.filter((s) => s.external_verdict && !isAccepted(s.external_verdict));
+    arr.sort(
       (a, b) =>
         new Date(b.submitted_at).getTime() -
         new Date(a.submitted_at).getTime(),
     );
+    return arr;
+  }, [subs, filter]);
 
   if (q.isLoading) {
     return (
-      <section className="border-t border-border/40 pt-6">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Мои посылки
-        </h2>
-        <p className="text-sm text-muted-foreground">Загружаем…</p>
-      </section>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Загружаем…
+      </p>
     );
   }
 
-  if (accepted.length === 0) {
+  if (subs.length === 0) {
     return (
-      <section className="border-t border-border/40 pt-6">
-        <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Мои посылки
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          На проверку ещё не уехало ни одной OK-посылки.
-        </p>
-      </section>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        По этому заданию посылок пока нет.
+      </p>
     );
   }
 
   return (
-    <section className="border-t border-border/40 pt-6" data-testid="assignment-my-subs">
-      <h2 className="mb-3 text-sm font-medium uppercase tracking-wider text-muted-foreground">
-        Мои посылки
-      </h2>
-      <ul className="divide-y divide-border/40 border-t border-border/40">
-        {accepted.map((s) => {
-          const hasScore = s.score != null;
-          return (
-            <li key={s.id}>
-              <Link
-                to={`/me/submissions/${s.id}`}
-                data-testid={`assignment-my-sub-${s.id}`}
-                className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
-              >
-                <span className="text-sm text-foreground truncate flex-1">
-                  Посылка от {fmtSubDate(s.submitted_at)}
-                </span>
-                {hasScore ? (
-                  <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
-                    {Number(s.score).toFixed(1)}
-                    {s.max_score != null && (
-                      <span className="text-muted-foreground"> / {s.max_score}</span>
-                    )}
+    <div className="space-y-4" data-testid="assignment-my-subs">
+      <div className="flex justify-end">
+        <Select
+          value={filter}
+          onValueChange={(v) => setFilter((v as MyFilter) ?? 'all')}
+        >
+          <SelectTrigger
+            className="h-8 w-[160px] text-xs"
+            data-testid="my-subs-filter"
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Все</SelectItem>
+            <SelectItem value="ok">OK</SelectItem>
+            <SelectItem value="failed">С ошибкой</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      {visible.length === 0 ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          Под фильтр ничего не подходит.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border/40 border-t border-border/40">
+          {visible.map((s) => {
+            const hasScore = s.score != null;
+            const ok = isAccepted(s.external_verdict);
+            return (
+              <li key={s.id}>
+                <Link
+                  to={`/me/submissions/${s.id}`}
+                  data-testid={`assignment-my-sub-${s.id}`}
+                  className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
+                >
+                  <span className="text-sm text-foreground truncate flex-1">
+                    Посылка от {fmtSubDate(s.submitted_at)}
                   </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    на проверке
-                  </span>
-                )}
-                <ChevronRight
-                  aria-hidden
-                  className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                />
-              </Link>
-            </li>
-          );
-        })}
-      </ul>
-    </section>
+                  {s.external_verdict && (
+                    <span
+                      className={cn(
+                        'text-xs shrink-0',
+                        ok ? 'text-muted-foreground' : 'text-sev-high',
+                      )}
+                      title="Вердикт Y.Contest"
+                    >
+                      {s.external_verdict}
+                    </span>
+                  )}
+                  {ok &&
+                    (hasScore ? (
+                      <span className="text-sm font-medium text-foreground tabular-nums shrink-0">
+                        {Number(s.score).toFixed(1)}
+                        {s.max_score != null && (
+                          <span className="text-muted-foreground">
+                            {' '}
+                            / {s.max_score}
+                          </span>
+                        )}
+                      </span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        на проверке
+                      </span>
+                    ))}
+                  <ChevronRight
+                    aria-hidden
+                    className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
+                  />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }
