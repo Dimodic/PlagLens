@@ -79,7 +79,11 @@ export default function MySubmissionDetailPage() {
   );
 
   const sub = submission as
-    | (typeof submission & { assignment_title?: string | null })
+    | (typeof submission & {
+        assignment_title?: string | null;
+        homework_title?: string | null;
+        course_name?: string | null;
+      })
     | null
     | undefined;
   const titleStr = sub?.assignment_title || 'Моя посылка';
@@ -98,13 +102,22 @@ export default function MySubmissionDetailPage() {
     <Page>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div className="space-y-1 min-w-0">
+          {/* Context line above the title — «<course> · <homework>» so
+              the student knows which assignment they're looking at
+              without scrolling back to the dashboard. Falls through
+              gracefully when the backend didn't denormalise these
+              (legacy rows / non-Y.Contest sources). */}
+          {(sub.course_name || sub.homework_title) && (
+            <div className="text-xs text-muted-foreground truncate">
+              {[sub.course_name, sub.homework_title].filter(Boolean).join(' · ')}
+            </div>
+          )}
           <h1 className="text-[2rem] font-bold tracking-tight leading-tight truncate">
             {titleStr}
           </h1>
           <p className="text-sm text-muted-foreground">
             Загружено{' '}
-            {dayjs(sub.submitted_at).format('DD.MM.YYYY HH:mm')} ·{' '}
-            {sub.language}
+            {dayjs(sub.submitted_at).format('DD.MM.YYYY HH:mm')}
             {sub.is_late && (
               <>
                 {' · '}

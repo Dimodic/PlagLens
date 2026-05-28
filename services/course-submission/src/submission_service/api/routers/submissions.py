@@ -229,6 +229,13 @@ async def get_submission(
     ensure_can_view_submission(user, sub)
     detail = SubmissionDetail.model_validate(sub)
     detail.files = [SubmissionFileOut.model_validate(f) for f in await repo.list_files(sub.id)]
+    # The list endpoints denormalise assignment_title / course_name /
+    # homework_title via ``_enrich_titles``; do the same on detail so
+    # students don't see «Моя посылка» as the page heading. SubmissionDetail
+    # inherits from SubmissionOut, so the same enrich works on it.
+    from submission_service.api.routers.self_service import _enrich_titles
+
+    await _enrich_titles(session, [detail])
     return detail
 
 

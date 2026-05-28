@@ -326,11 +326,8 @@ function HomeworkSubrow({ hw }: { hw: Homework }) {
                     className="flex items-center justify-between gap-3 py-1.5 text-sm text-muted-foreground hover:text-foreground"
                   >
                     <span className="truncate">{a.title}</span>
-                    {a.language_hint && (
-                      <span className="text-xs font-mono shrink-0">
-                        {a.language_hint}
-                      </span>
-                    )}
+                    {/* language_hint dropped: it lives next to the code on
+                        the submission detail, not on the assignment list. */}
                   </Link>
                 </li>
               ))}

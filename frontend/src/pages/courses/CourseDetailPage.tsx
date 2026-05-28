@@ -791,11 +791,10 @@ export default function CourseDetailPage() {
                                     <span className="min-w-0 flex-1 truncate text-foreground">
                                       {a.title}
                                     </span>
-                                    {a.language_hint && (
-                                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                                        {a.language_hint}
-                                      </span>
-                                    )}
+                                    {/* language_hint dropped — language is
+                                        shown next to the actual code on the
+                                        submission detail; in the assignment
+                                        list it's repeat noise. */}
                                     {a.status === 'archived' && (
                                       <span className="text-xs text-muted-foreground/70">
                                         в архиве
