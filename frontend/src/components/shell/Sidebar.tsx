@@ -89,7 +89,7 @@ function buildSections(
     // Every item has a UNIQUE icon: previously "Обзор" and "Учреждения"
     // both used LayoutGrid, which broke visual scan in the icon-only rail.
     const items: NavLeaf[] = [
-      { id: 'a_home', screenId: 'a_home', label: t('nav.overview'), icon: ic(LayoutGrid), to: '/admin/overview' },
+      { id: 'a_home', screenId: 'a_home', label: t('nav.overview'), icon: ic(LayoutGrid), to: '/admin' },
     ];
     if (isSuperAdmin) {
       items.push({

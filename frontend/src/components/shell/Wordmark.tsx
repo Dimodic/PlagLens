@@ -38,6 +38,13 @@ export function Wordmark({
   ariaLabel = 'plaglens',
   'data-testid': testId,
 }: WordmarkProps) {
+  // The mark is sized once, in pixels, and used identically in both
+  // variants — so expanding the rail into the drawer doesn't make the
+  // «P» jump size. The full wordmark's text is then sized to that mark
+  // (cap-height ≈ mark height) rather than the other way round, per the
+  // «P stays put, everything adapts to it» rule.
+  const MARK = 'h-[22px] w-auto';
+
   if (variant === 'compact') {
     return (
       <Link
@@ -46,7 +53,7 @@ export function Wordmark({
         aria-label={ariaLabel}
         className={`inline-flex items-center justify-center text-foreground select-none ${className ?? ''}`}
       >
-        <BrandMark cropped className="h-6 w-auto" />
+        <BrandMark cropped className={MARK} />
       </Link>
     );
   }
@@ -56,16 +63,19 @@ export function Wordmark({
       to={to}
       data-testid={testId ?? 'wordmark'}
       aria-label={ariaLabel}
-      className={`inline-flex items-baseline text-foreground select-none text-lg leading-none ${className ?? ''}`}
+      className={`inline-flex items-baseline text-foreground select-none ${className ?? ''}`}
     >
-      {/* The mark is the capital «P» — cap-height, baseline-aligned,
-          a hair of optical kerning so it hugs the "l" without overlap. */}
-      <BrandMark cropped className="h-[0.74em] w-auto mr-[0.04em]" />
+      {/* Same 22px mark as the rail — it is the capital «P», sitting on
+          the text baseline so it reads as the first letter. */}
+      <BrandMark cropped className={`${MARK} mr-[0.06em]`} />
       <span
+        // ~30px so the cap-height of «lagLens» lands at the mark's
+        // height; the «P» reads as the matching first capital.
+        className="text-[1.875rem] leading-none"
         style={{
           fontFamily: FONT_STACK,
           fontWeight: 600,
-          letterSpacing: '-0.02em',
+          letterSpacing: '-0.03em',
         }}
       >
         lagLens

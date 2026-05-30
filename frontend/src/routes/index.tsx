@@ -149,7 +149,7 @@ const PreferencesPage = lazy(() => import('@/pages/notifications/PreferencesPage
 const WebPushSettingsPage = lazy(() => import('@/pages/notifications/WebPushSettingsPage'));
 
 // Admin / Audit / Settings.
-const AdminDashboardPage = lazy(() => import('@/pages/admin/AdminDashboardPage'));
+// AdminDashboardPage retired — «Обзор» is now TenantDashboardPage at /admin.
 const TenantsListPage = lazy(() => import('@/pages/admin/TenantsListPage'));
 const TenantCreatePage = lazy(() => import('@/pages/admin/TenantCreatePage'));
 const TenantDetailPage = lazy(() => import('@/pages/admin/TenantDetailPage'));
@@ -558,17 +558,14 @@ const protectedRoutes: RouteObject[] = [
           </RoleGuard>
         ),
       },
-      // ----- P5c admin overview -----
+      // ----- admin overview -----
+      // The old standalone AdminDashboardPage is retired: «Обзор» is now
+      // the dashboard at /admin (global-by-default + tenant picker), so
+      // both the landing and the nav item point to one page. This route
+      // stays as a redirect so old links / bookmarks don't 404.
       {
         path: 'admin/overview',
-        element: (
-          <RoleGuard
-            global={['admin']}
-            fallback={<NotFoundPage />}
-          >
-            <AdminDashboardPage />
-          </RoleGuard>
-        ),
+        element: <Navigate to="/admin" replace />,
       },
 
       // ----- Tenants (super_admin) -----

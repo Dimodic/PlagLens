@@ -227,62 +227,130 @@ class DashboardService:
         except Exception:  # noqa: BLE001 — defensive; see docstring
             return 0
 
-    async def tenant_overview(self, tenant_id: str) -> dict[str, Any]:
-        # Live aggregation from the authoritative schemas (course /
-        # submission / plagiarism / identity) rather than the Kafka-fed
-        # TenantStats read-model. The read-model is only populated by
-        # event projections, so anything that arrived via bulk import or
-        # direct SQL (the Yandex.Contest path, the migrations) left it at
-        # zero — which read as a dead dashboard. All services share one
-        # Postgres, so a cross-schema read here is cheap and always
-        # reflects reality. Field names mirror what the SPA reads.
-        async def gen():
-            active_courses = await self._scalar(
-                "SELECT count(*) FROM course.courses "
-                "WHERE tenant_id = :t AND deleted_at IS NULL "
-                "AND status <> 'archived'",
-                t=tenant_id,
-            )
-            submissions_total = await self._scalar(
-                "SELECT count(*) FROM submission.submissions "
-                "WHERE tenant_id = :t AND deleted_at IS NULL",
-                t=tenant_id,
-            )
-            plagiarism_runs_total = await self._scalar(
-                "SELECT count(*) FROM plagiarism.plagiarism_runs "
-                "WHERE tenant_id = :t",
-                t=tenant_id,
-            )
-            dau = await self._scalar(
-                "SELECT count(*) FROM identity.users "
-                "WHERE tenant_id = :t AND deleted_at IS NULL "
-                "AND last_login_at >= now() - interval '1 day'",
-                t=tenant_id,
-            )
-            mau = await self._scalar(
-                "SELECT count(*) FROM identity.users "
-                "WHERE tenant_id = :t AND deleted_at IS NULL "
-                "AND last_login_at >= now() - interval '30 days'",
-                t=tenant_id,
-            )
-            storage = await self._scalar(
-                "SELECT coalesce(sum(total_size_bytes), 0) "
-                "FROM submission.submissions "
-                "WHERE tenant_id = :t AND deleted_at IS NULL",
-                t=tenant_id,
-            )
-            return {
-                "tenant_id": tenant_id,
-                "active_courses": active_courses,
-                "submissions_total": submissions_total,
-                "plagiarism_runs_total": plagiarism_runs_total,
-                "active_users_dau": dau,
-                "active_users_mau": mau,
-                "storage_used_bytes": storage,
-            }
+    async def _compute_overview(self, tenant_id: str | None) -> dict[str, Any]:
+        """The six KPIs, computed live from the authoritative schemas
+        (course / submission / plagiarism / identity). ``tenant_id=None``
+        means «whole instance» — drop the tenant filter and aggregate
+        across every tenant (the admin's default «global» view).
 
-        data, cached = await self._cached(f"{tenant_id}:tenant:overview", gen, self.overview_ttl)
+        Why live and not the Kafka-fed TenantStats read-model: that model
+        is only populated by event projections, so anything that arrived
+        via bulk import or direct SQL (the Yandex.Contest path, the
+        migrations) left it at zero — a dead dashboard. All services share
+        one Postgres, so a cross-schema read here is cheap and honest.
+        """
+        if tenant_id:
+            p = {"t": tenant_id}
+            courses_w = (
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND status <> 'archived'"
+            )
+            subs_w = "WHERE tenant_id = :t AND deleted_at IS NULL"
+            plag_w = "WHERE tenant_id = :t"
+            dau_w = (
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '1 day'"
+            )
+            mau_w = (
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '30 days'"
+            )
+        else:
+            p = {}
+            courses_w = "WHERE deleted_at IS NULL AND status <> 'archived'"
+            subs_w = "WHERE deleted_at IS NULL"
+            plag_w = ""
+            dau_w = (
+                "WHERE deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '1 day'"
+            )
+            mau_w = (
+                "WHERE deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '30 days'"
+            )
+        return {
+            "tenant_id": tenant_id or "all",
+            "active_courses": await self._scalar(
+                f"SELECT count(*) FROM course.courses {courses_w}", **p
+            ),
+            "submissions_total": await self._scalar(
+                f"SELECT count(*) FROM submission.submissions {subs_w}", **p
+            ),
+            "plagiarism_runs_total": await self._scalar(
+                f"SELECT count(*) FROM plagiarism.plagiarism_runs {plag_w}", **p
+            ),
+            "active_users_dau": await self._scalar(
+                f"SELECT count(*) FROM identity.users {dau_w}", **p
+            ),
+            "active_users_mau": await self._scalar(
+                f"SELECT count(*) FROM identity.users {mau_w}", **p
+            ),
+            "storage_used_bytes": await self._scalar(
+                "SELECT coalesce(sum(total_size_bytes), 0) "
+                f"FROM submission.submissions {subs_w}",
+                **p,
+            ),
+        }
+
+    async def tenant_overview(self, tenant_id: str) -> dict[str, Any]:
+        data, cached = await self._cached(
+            f"{tenant_id}:tenant:overview",
+            lambda: self._compute_overview(tenant_id),
+            self.overview_ttl,
+        )
         data["cached"] = cached
+        return data
+
+    async def instance_overview(self) -> dict[str, Any]:
+        """Whole-instance roll-up — the admin dashboard's default view."""
+        data, cached = await self._cached(
+            "instance:overview",
+            lambda: self._compute_overview(None),
+            self.overview_ttl,
+        )
+        data["cached"] = cached
+        return data
+
+    async def instance_integrations_health(self) -> dict[str, Any]:
+        async def gen():
+            from sqlalchemy import text
+
+            _STATUS_MAP = {
+                "active": "healthy",
+                "pending_auth": "degraded",
+                "disabled": "degraded",
+                "error": "down",
+                "failed": "down",
+            }
+            try:
+                rows = (
+                    await self.repo.session.execute(
+                        text(
+                            "SELECT DISTINCT ON (kind) "
+                            "coalesce(display_name, kind) AS name, "
+                            "kind, status, updated_at "
+                            "FROM integration.integration_configs "
+                            "ORDER BY kind, updated_at DESC"
+                        )
+                    )
+                ).mappings().all()
+            except Exception:  # noqa: BLE001
+                rows = []
+            items = [
+                {
+                    "integration": r["name"] or r["kind"],
+                    "status": _STATUS_MAP.get(str(r["status"]), "degraded"),
+                    "last_check_at": (
+                        r["updated_at"].isoformat() if r["updated_at"] else None
+                    ),
+                }
+                for r in rows
+            ]
+            return {"tenant_id": "all", "integrations": items}
+
+        data, _ = await self._cached(
+            "instance:integ-health", gen, self.detail_ttl
+        )
         return data
 
     async def tenant_active_courses(self, tenant_id: str) -> dict[str, Any]:

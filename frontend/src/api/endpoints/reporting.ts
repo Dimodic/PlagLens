@@ -684,6 +684,19 @@ export const reportingApi = {
       // a plain array (the hook + component map over it directly).
       .then((r) => r.data.integrations ?? []),
 
+  // ---- F2. Whole-instance roll-up (admin default «all orgs» view) ----
+  instanceOverview: () =>
+    api
+      .get<TenantDashboard>('/admin/dashboard/overview')
+      .then((r) => r.data),
+
+  instanceIntegrationsHealth: () =>
+    api
+      .get<{ tenant_id: string; integrations: IntegrationsHealthItem[] }>(
+        '/admin/dashboard/integrations-health',
+      )
+      .then((r) => r.data.integrations ?? []),
+
   // ---- G. Global ----
   globalDashboard: () =>
     api.get<GlobalDashboard>('/admin/dashboard/global').then((r) => r.data),

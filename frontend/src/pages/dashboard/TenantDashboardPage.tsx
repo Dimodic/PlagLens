@@ -15,9 +15,10 @@ import {
   UserCheck,
   Users,
 } from 'lucide-react';
-import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import {
+  useInstanceIntegrationsHealth,
+  useInstanceOverview,
   useTenantDashboard,
   useTenantIntegrationsHealth,
 } from '@/hooks/api/useDashboards';
@@ -55,47 +56,53 @@ function fmt(v: number | undefined | null): string {
   return String(v);
 }
 
+/** Sentinel select value for the «whole instance» (all tenants) view. */
+const ALL = '__all__';
+
 export default function TenantDashboardPage() {
-  useDocumentTitle('Дашборд тенанта');
-  const { user } = useAuth();
+  useDocumentTitle('Обзор');
   const { id: paramId } = useParams<{ id: string }>();
-  // Which tenant the dashboard shows. Seeds from the URL param (deep
-  // link) or the admin's own tenant, then the dropdown takes over —
-  // an admin's own «system» tenant is usually empty, so they need a
-  // one-click way to look at a tenant that actually has data.
-  const [selected, setSelected] = useState<string | undefined>(
-    paramId ?? user?.tenant.id,
-  );
+  // What the dashboard shows. Default is the whole-instance roll-up
+  // («Все организации») — the admin's own tenant is usually empty, so
+  // global is the useful landing view. A deep link with :id pins to
+  // that tenant; otherwise the dropdown drives it.
+  const [selected, setSelected] = useState<string>(paramId ?? ALL);
+  const isAll = selected === ALL;
+
   const tenantsQ = useTenants({ limit: 100 });
   const tenants = tenantsQ.data?.data ?? [];
-  const tenantId = selected ?? paramId ?? user?.tenant.id;
-  const dash = useTenantDashboard(tenantId);
-  const integrations = useTenantIntegrationsHealth(tenantId);
 
-  const data = dash.data;
+  // Two query pairs, gated so only the active scope fetches.
+  const instanceDash = useInstanceOverview(isAll);
+  const instanceInteg = useInstanceIntegrationsHealth(isAll);
+  const tenantDash = useTenantDashboard(isAll ? undefined : selected);
+  const tenantInteg = useTenantIntegrationsHealth(isAll ? undefined : selected);
 
-  const tenantPicker =
-    tenants.length > 1 ? (
-      <Select value={tenantId} onValueChange={setSelected}>
-        <SelectTrigger
-          className="h-9 w-[220px]"
-          data-testid="tenant-dashboard-picker"
-        >
-          <SelectValue placeholder="Выберите организацию" />
-        </SelectTrigger>
-        <SelectContent>
-          {tenants.map((t) => (
-            <SelectItem key={t.id} value={t.id}>
-              {t.name}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    ) : null;
+  const data = isAll ? instanceDash.data : tenantDash.data;
+  const integrations = isAll ? instanceInteg : tenantInteg;
+
+  const tenantPicker = (
+    <Select value={selected} onValueChange={setSelected}>
+      <SelectTrigger
+        className="h-9 w-[240px]"
+        data-testid="tenant-dashboard-picker"
+      >
+        <SelectValue placeholder="Все организации" />
+      </SelectTrigger>
+      <SelectContent>
+        <SelectItem value={ALL}>Все организации</SelectItem>
+        {tenants.map((t) => (
+          <SelectItem key={t.id} value={t.id}>
+            {t.name}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   return (
     <Page width="regular">
-      <PageHeader title="Дашборд тенанта" action={tenantPicker} />
+      <PageHeader title="Обзор" action={tenantPicker} />
 
       <StatsPanel
         data-testid="tenant-dashboard-kpis"
