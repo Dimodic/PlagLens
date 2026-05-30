@@ -19,18 +19,11 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { FormEvent, useEffect, useState } from 'react';
-import dayjs from 'dayjs';
 import {
-  AlertCircle,
   Copy,
   ExternalLink,
   Loader2,
-  MoreHorizontal,
-  PlayCircle,
   Plus,
-  Power,
-  RefreshCw,
-  Trash2,
 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { Button } from '@/components/ui/button';
@@ -38,7 +31,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
@@ -63,22 +55,16 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   useCreateIntegration,
-  useDeleteIntegration,
-  useDisableIntegration,
-  useEnableIntegration,
   useIntegrations,
-  useSyncNow,
-  useTestIntegration,
 } from '@/hooks/api/useIntegrations';
 import {
   type IntegrationConfig,
   type IntegrationKind,
-  type IntegrationStatus,
 } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
 import { GoogleSheetsServiceAccountDialog } from '@/components/integrations/GoogleSheetsServiceAccountDialog';
-import { CourseSyncDialog } from '@/components/integrations/CourseSyncDialog';
+import { CourseIntegrationDetail } from '@/components/integrations/CourseIntegrationDetail';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
 
 const KIND_TITLES: Record<IntegrationKind, string> = {
@@ -90,217 +76,85 @@ const KIND_TITLES: Record<IntegrationKind, string> = {
   google_sheets: 'Google Sheets',
 };
 
-// Status surfacing is opinionated: "active" is the default — saying so
-// on every tile is noise. We only emit a label when the tile needs
-// attention (auth required, error, manually disabled).
-const STATUS_PROBLEM: Record<
-  IntegrationStatus | string,
-  { label: string; tone: string } | null
-> = {
-  active: null,
-  pending_auth: { label: 'нужна авторизация', tone: 'text-sev-mid' },
-  error: { label: 'ошибка', tone: 'text-sev-high' },
-  disabled: { label: 'отключено', tone: 'text-muted-foreground/70' },
-};
-
-/** Slice an array into pairs. The last pair may have a single element
- *  when the input is odd-length — the grid renders it as a lone tile
- *  on the left of its row, which is fine; the empty cell collapses
- *  invisibly. */
-function chunkPairs<T>(arr: T[]): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += 2) {
-    out.push(arr.slice(i, i + 2));
-  }
-  return out;
-}
-
-interface TileProps {
-  integration: IntegrationConfig;
+interface CourseIntegrationsPanelProps {
+  items: IntegrationConfig[];
+  isPending: boolean;
+  error: Problem | null;
   onChanged: () => void;
-  /** Open the sync modal for this integration (teacher view). */
-  onOpen: (integration: IntegrationConfig) => void;
 }
 
-function IntegrationTile({ integration, onChanged, onOpen }: TileProps) {
-  const notify = useNotifications();
-  const test = useTestIntegration();
-  const enableM = useEnableIntegration();
-  const disableM = useDisableIntegration();
-  const deleteM = useDeleteIntegration();
-  const syncM = useSyncNow(integration.id);
+/** Teacher integrations — master-detail, same shape as the admin OAuth
+ *  panel: connected sources on the left, the selected source's sync /
+ *  autosync controls on the right. No Client ID / Secret — teachers
+ *  connect via OAuth, so the detail pane is purely operational. */
+function CourseIntegrationsPanel({
+  items,
+  isPending,
+  error,
+  onChanged,
+}: CourseIntegrationsPanelProps) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const isActive = integration.status === 'active';
-  const title = KIND_TITLES[integration.kind] ?? integration.kind;
-  const customName =
-    integration.display_name && integration.display_name !== title
-      ? integration.display_name
-      : null;
-  const problem = STATUS_PROBLEM[integration.status];
+  useEffect(() => {
+    if (selectedId === null && items.length > 0) setSelectedId(items[0].id);
+    // If the selected one was removed, fall back to the first.
+    if (selectedId && !items.some((i) => i.id === selectedId)) {
+      setSelectedId(items[0]?.id ?? null);
+    }
+  }, [selectedId, items]);
 
-  const onTest = async () => {
-    try {
-      const res = await test.mutateAsync(integration.id);
-      const why = res.detail ?? res.message;
-      if (res.ok) notify.success(why ?? 'Подключение работает');
-      else
-        notify.error(
-          why ? `Подключение не отвечает: ${why}` : 'Подключение не отвечает',
-        );
-      onChanged();
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
-    }
-  };
+  if (error) return <ProblemAlert problem={error} />;
+  if (isPending) return <SkeletonList rows={3} rowHeight={56} />;
+  if (items.length === 0) {
+    // Empty state has no action — the header owns the «+ Подключить» CTA.
+    return <EmptyState title="Интеграций пока нет" />;
+  }
 
-  const onSync = async () => {
-    try {
-      await syncM.mutateAsync({});
-      notify.success('Импорт запущен в фоне');
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
-    }
-  };
-
-  const onToggle = async () => {
-    try {
-      if (isActive) {
-        await disableM.mutateAsync(integration.id);
-        notify.success('Интеграция отключена');
-      } else {
-        await enableM.mutateAsync(integration.id);
-        notify.success('Интеграция включена');
-      }
-      onChanged();
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
-    }
-  };
-
-  const onDelete = async () => {
-    if (
-      !confirm(
-        `Удалить интеграцию «${integration.display_name}»? Это действие необратимо.`,
-      )
-    ) {
-      return;
-    }
-    try {
-      await deleteM.mutateAsync(integration.id);
-      notify.success('Интеграция удалена');
-      onChanged();
-    } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось удалить');
-    }
-  };
+  const selected = items.find((i) => i.id === selectedId) ?? null;
 
   return (
-    <div
-      data-testid={`integration-row-${integration.id}`}
-      className="group relative -mx-2 rounded-md px-2 py-2 transition-colors hover:bg-muted/30"
-    >
-      <button
-        type="button"
-        onClick={() => onOpen(integration)}
-        className="absolute inset-0 z-0 rounded-md"
-        aria-label={`Настроить синхронизацию · ${title}`}
-        data-testid={`integration-open-${integration.id}`}
-      />
-      <div className="relative z-0 pointer-events-none flex items-baseline gap-2">
-        <h3 className="text-sm font-medium text-foreground truncate">
-          {title}
-        </h3>
-        {customName && (
-          <span className="text-xs text-muted-foreground truncate">
-            {customName}
-          </span>
+    <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
+      <nav aria-label="Интеграции курса" className="flex flex-col py-2">
+        {items.map((it) => {
+          const isSel = it.id === selectedId;
+          const isActive = it.status === 'active';
+          return (
+            <button
+              key={it.id}
+              type="button"
+              onClick={() => setSelectedId(it.id)}
+              className={cn(
+                'flex w-full items-center gap-3 rounded-md px-4 py-3 text-left transition-colors',
+                isSel ? 'bg-muted/40' : 'hover:bg-muted/20',
+              )}
+              data-testid={`integration-row-${it.id}`}
+              aria-current={isSel ? 'page' : undefined}
+            >
+              <ProviderIcon kind={it.kind} className="h-5 w-5 shrink-0" />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-foreground">
+                  {KIND_TITLES[it.kind] ?? it.kind}
+                </span>
+                <span
+                  className={cn(
+                    'block text-xs',
+                    isActive ? 'text-muted-foreground' : 'text-sev-mid font-medium',
+                  )}
+                >
+                  {isActive ? 'подключено' : 'ожидает авторизации'}
+                </span>
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="py-2 md:pl-8">
+        {selected ? (
+          <CourseIntegrationDetail integration={selected} onChanged={onChanged} />
+        ) : (
+          <p className="text-sm text-muted-foreground">Выберите источник слева.</p>
         )}
-        {problem && (
-          <span
-            className={cn('ml-auto text-xs flex-none', problem.tone)}
-            data-testid={`integration-status-${integration.id}`}
-          >
-            {problem.label}
-          </span>
-        )}
-      </div>
-      {/*
-        Subtitle shows the freshest useful fact, not architectural meta.
-        Course-id was tagged onto every row even when the integration is
-        tenant-wide ("Без курса") — useless for the teacher, who just wants
-        to know when this connection last did anything. Drop the course-id
-        chip; show only the last-sync line.
-      */}
-      <p className="relative z-0 pointer-events-none mt-0.5 text-xs text-muted-foreground truncate">
-        {integration.last_sync_at
-          ? `последний импорт ${dayjs(integration.last_sync_at).format('D MMM, HH:mm')}`
-          : 'импортов ещё не было'}
-      </p>
-      {integration.last_sync_error && (
-        <p className="relative z-0 pointer-events-none mt-1 flex items-start gap-1 text-xs text-sev-high">
-          <AlertCircle className="mt-0.5 h-3 w-3 flex-none" />
-          <span className="break-words">
-            {integration.last_sync_error}
-          </span>
-        </p>
-      )}
-      <div className="relative z-10 mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={onSync}
-          disabled={syncM.isPending || !isActive}
-          aria-label="Запустить импорт"
-          title={
-            !isActive ? 'Сначала активируйте интеграцию' : 'Запустить импорт'
-          }
-        >
-          <PlayCircle className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={onTest}
-          disabled={test.isPending}
-          aria-label="Проверить подключение"
-          title="Проверить подключение"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7"
-              data-testid={`integration-menu-${integration.id}`}
-              aria-label="Ещё действия"
-            >
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuItem
-              onClick={onToggle}
-              disabled={enableM.isPending || disableM.isPending}
-            >
-              <Power className="mr-2 h-4 w-4" />
-              {isActive ? 'Отключить' : 'Включить'}
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={onDelete}
-              disabled={deleteM.isPending}
-              className="text-destructive focus:text-destructive"
-              data-testid={`integration-delete-${integration.id}`}
-            >
-              <Trash2 className="mr-2 h-4 w-4" />
-              Удалить
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
       </div>
     </div>
   );
@@ -325,11 +179,6 @@ export function IntegrationsListPage() {
     null,
   );
 
-  // Teacher: which integration's sync modal is open (course/ДЗ + sync /
-  // autosync). Opened by clicking an integration row.
-  const [syncIntegration, setSyncIntegration] = useState<IntegrationConfig | null>(
-    null,
-  );
 
   // OAuth-redirect helper used by Y.Contest / Stepik / Google Sheets.
   // Server returns oauth_authorize_url when the provider is configured
@@ -421,42 +270,6 @@ export function IntegrationsListPage() {
 
   // The "Sources" tab is what teachers and admins both see; "Авторизация"
   // (the OAuth-providers directory) is admin-only.
-  const sourcesPanel = (
-    <>
-      {error && <ProblemAlert problem={error as unknown as Problem} />}
-      {isPending && !data ? (
-        <SkeletonList rows={3} rowHeight={48} />
-      ) : items.length === 0 ? (
-        // Empty state intentionally has no action — the page header already
-        // owns the single primary "+ Подключить" button.
-        <EmptyState title="Интеграций пока нет" />
-      ) : (
-        <>
-          <div
-            className="flex flex-col divide-y divide-border/40"
-            data-testid="integrations-list"
-          >
-            {chunkPairs(items).map((row, rowIdx) => (
-              <div
-                key={rowIdx}
-                className="grid grid-cols-1 gap-x-8 gap-y-3 py-4 sm:grid-cols-2 first:pt-0 last:pb-0"
-              >
-                {row.map((it) => (
-                  <IntegrationTile
-                    key={it.id}
-                    integration={it}
-                    onChanged={() => refetch()}
-                    onOpen={setSyncIntegration}
-                  />
-                ))}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-    </>
-  );
-
   return (
     <Page width="regular">
       <PageHeader
@@ -477,7 +290,14 @@ export function IntegrationsListPage() {
         // actual integration rows in their courses.
         <OAuthProvidersPanel />
       ) : (
-        sourcesPanel
+        // Teacher: master-detail like the admin page — connected sources
+        // on the left, sync / autosync controls on the right.
+        <CourseIntegrationsPanel
+          items={items}
+          isPending={isPending && !data}
+          error={(error as unknown as Problem) ?? null}
+          onChanged={() => refetch()}
+        />
       )}
 
       <TokenIntegrationDialog
@@ -485,14 +305,6 @@ export function IntegrationsListPage() {
         kind={tokenDialogKind}
         onOpenChange={(o) => {
           if (!o) setTokenDialogKind(null);
-        }}
-      />
-
-      <CourseSyncDialog
-        integration={syncIntegration}
-        open={syncIntegration !== null}
-        onOpenChange={(o) => {
-          if (!o) setSyncIntegration(null);
         }}
       />
     </Page>
