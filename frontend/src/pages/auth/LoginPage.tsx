@@ -44,7 +44,6 @@ import type { OAuthProvider, Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { openTelegramLogin } from '@/auth/telegramLogin';
 import { emailSchema, passwordSchema } from '@/utils/validators';
 import { BrandMark } from '@/components/shell/BrandMark';
@@ -369,12 +368,20 @@ export function LoginPage() {
     [email, displayName, password, password2],
   );
 
+  // Map the few problem codes we expect to friendly Russian. Bad-login
+  // comes back as ``UNAUTHENTICATED`` (title "Invalid credentials") — we
+  // never want that raw English string leaking into the form, so anything
+  // unmapped falls back to a generic Russian line rather than
+  // ``problem.title``.
   const inlineErrorMessage = problem
-    ? problem.code === 'INVALID_CREDENTIALS'
+    ? problem.code === 'INVALID_CREDENTIALS' ||
+      problem.code === 'UNAUTHENTICATED'
       ? 'Неверный email или пароль'
       : problem.code === 'CONFLICT'
         ? 'Аккаунт с этим email уже существует'
-        : problem.detail || problem.title || 'Не удалось'
+        : problem.code === 'TOO_MANY_REQUESTS'
+          ? 'Слишком много попыток. Попробуйте позже'
+          : 'Не удалось войти. Попробуйте ещё раз'
     : null;
 
   const providerRow: { id: OAuthProvider; label: string }[] = [
@@ -514,9 +521,13 @@ export function LoginPage() {
               </div>
 
               {inlineErrorMessage && (
-                <Alert variant="destructive" data-testid="problem-alert">
-                  <AlertDescription>{inlineErrorMessage}</AlertDescription>
-                </Alert>
+                <p
+                  role="alert"
+                  data-testid="problem-alert"
+                  className="text-sm text-destructive"
+                >
+                  {inlineErrorMessage}
+                </p>
               )}
 
               <Button
@@ -641,9 +652,13 @@ export function LoginPage() {
               </div>
 
               {inlineErrorMessage && (
-                <Alert variant="destructive" data-testid="problem-alert">
-                  <AlertDescription>{inlineErrorMessage}</AlertDescription>
-                </Alert>
+                <p
+                  role="alert"
+                  data-testid="problem-alert"
+                  className="text-sm text-destructive"
+                >
+                  {inlineErrorMessage}
+                </p>
               )}
 
               <Button
@@ -736,15 +751,22 @@ export function LoginPage() {
             )}
 
             {hint && !inlineErrorMessage && (
-              <Alert data-testid="login-hint">
-                <AlertDescription>{hint}</AlertDescription>
-              </Alert>
+              <p
+                data-testid="login-hint"
+                className="text-sm leading-relaxed text-muted-foreground"
+              >
+                {hint}
+              </p>
             )}
 
             {(problem || inlineErrorMessage) && (
-              <Alert variant="destructive" data-testid="problem-alert">
-                <AlertDescription>{inlineErrorMessage}</AlertDescription>
-              </Alert>
+              <p
+                role="alert"
+                data-testid="problem-alert"
+                className="text-sm text-destructive"
+              >
+                {inlineErrorMessage}
+              </p>
             )}
 
             <Button
