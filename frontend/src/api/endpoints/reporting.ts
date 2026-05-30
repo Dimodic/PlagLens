@@ -280,12 +280,14 @@ export interface TenantDashboard {
   active_courses: number;
   active_users_dau: number;
   active_users_mau: number;
-  submissions_30d: number;
-  ai_tokens_total_30d: number;
-  ai_cost_total_30d: number;
-  plagiarism_runs_30d: number;
+  /** Total submissions in the tenant (computed live from the source
+   *  schema). Replaces the old ``submissions_30d`` — historical imports
+   *  fall outside a 30-day window, so a total is the honest headline. */
+  submissions_total: number;
+  /** Total plagiarism runs in the tenant. */
+  plagiarism_runs_total: number;
   storage_used_bytes: number;
-  generated_at: string;
+  cached?: boolean;
 }
 
 export interface IntegrationsHealthItem {
@@ -675,10 +677,12 @@ export const reportingApi = {
 
   tenantIntegrationsHealth: (tenantId: string) =>
     api
-      .get<IntegrationsHealthItem[]>(
+      .get<{ tenant_id: string; integrations: IntegrationsHealthItem[] }>(
         `/tenants/${tenantId}/dashboard/integrations-health`,
       )
-      .then((r) => r.data),
+      // The endpoint wraps the list in an envelope; unwrap so callers get
+      // a plain array (the hook + component map over it directly).
+      .then((r) => r.data.integrations ?? []),
 
   // ---- G. Global ----
   globalDashboard: () =>

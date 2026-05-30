@@ -70,8 +70,8 @@ export default function TenantDashboardPage() {
           },
           {
             icon: <FileText className="h-4 w-4" />,
-            label: 'Посылок 30д',
-            value: fmt(data?.submissions_30d),
+            label: 'Посылок',
+            value: fmt(data?.submissions_total),
           },
           {
             icon: <UserCheck className="h-4 w-4" />,
@@ -87,9 +87,9 @@ export default function TenantDashboardPage() {
           },
           {
             icon: <ShieldCheck className="h-4 w-4" />,
-            label: 'Проверок 30д',
-            value: fmt(data?.plagiarism_runs_30d),
-            tooltip: 'Запусков проверки на заимствования за последние 30 дней',
+            label: 'Проверок',
+            value: fmt(data?.plagiarism_runs_total),
+            tooltip: 'Запусков проверки на заимствования',
           },
           {
             icon: <Database className="h-4 w-4" />,

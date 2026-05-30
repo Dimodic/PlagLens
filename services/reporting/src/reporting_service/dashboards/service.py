@@ -215,27 +215,70 @@ class DashboardService:
 
     # --- Tenant -------------------------------------------------------
 
+    async def _scalar(self, sql: str, **params: Any) -> int:
+        """Run a one-cell aggregate against the shared Postgres and coerce
+        to int. Returns 0 on any error (missing grant / schema) so a single
+        unreachable source never 500s the whole dashboard."""
+        from sqlalchemy import text
+
+        try:
+            res = await self.repo.session.execute(text(sql), params)
+            return int(res.scalar() or 0)
+        except Exception:  # noqa: BLE001 — defensive; see docstring
+            return 0
+
     async def tenant_overview(self, tenant_id: str) -> dict[str, Any]:
+        # Live aggregation from the authoritative schemas (course /
+        # submission / plagiarism / identity) rather than the Kafka-fed
+        # TenantStats read-model. The read-model is only populated by
+        # event projections, so anything that arrived via bulk import or
+        # direct SQL (the Yandex.Contest path, the migrations) left it at
+        # zero — which read as a dead dashboard. All services share one
+        # Postgres, so a cross-schema read here is cheap and always
+        # reflects reality. Field names mirror what the SPA reads.
         async def gen():
-            t = await self.repo.tenant(tenant_id)
-            if t is None:
-                return {
-                    "tenant_id": tenant_id,
-                    "active_courses": 0,
-                    "active_users": 0,
-                    "submissions_30d": 0,
-                    "plagiarism_runs_30d": 0,
-                    "ai_tokens_total_30d": 0,
-                    "ai_cost_total_30d": 0.0,
-                }
+            active_courses = await self._scalar(
+                "SELECT count(*) FROM course.courses "
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND status <> 'archived'",
+                t=tenant_id,
+            )
+            submissions_total = await self._scalar(
+                "SELECT count(*) FROM submission.submissions "
+                "WHERE tenant_id = :t AND deleted_at IS NULL",
+                t=tenant_id,
+            )
+            plagiarism_runs_total = await self._scalar(
+                "SELECT count(*) FROM plagiarism.plagiarism_runs "
+                "WHERE tenant_id = :t",
+                t=tenant_id,
+            )
+            dau = await self._scalar(
+                "SELECT count(*) FROM identity.users "
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '1 day'",
+                t=tenant_id,
+            )
+            mau = await self._scalar(
+                "SELECT count(*) FROM identity.users "
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '30 days'",
+                t=tenant_id,
+            )
+            storage = await self._scalar(
+                "SELECT coalesce(sum(total_size_bytes), 0) "
+                "FROM submission.submissions "
+                "WHERE tenant_id = :t AND deleted_at IS NULL",
+                t=tenant_id,
+            )
             return {
                 "tenant_id": tenant_id,
-                "active_courses": t.active_courses,
-                "active_users": t.active_users,
-                "submissions_30d": t.submissions_30d,
-                "plagiarism_runs_30d": t.plagiarism_runs_30d,
-                "ai_tokens_total_30d": t.ai_tokens_total_30d,
-                "ai_cost_total_30d": round(t.ai_cost_total_30d, 4),
+                "active_courses": active_courses,
+                "submissions_total": submissions_total,
+                "plagiarism_runs_total": plagiarism_runs_total,
+                "active_users_dau": dau,
+                "active_users_mau": mau,
+                "storage_used_bytes": storage,
             }
 
         data, cached = await self._cached(f"{tenant_id}:tenant:overview", gen, self.overview_ttl)
@@ -266,12 +309,28 @@ class DashboardService:
 
     async def tenant_active_users(self, tenant_id: str) -> dict[str, Any]:
         async def gen():
-            t = await self.repo.tenant(tenant_id)
+            dau = await self._scalar(
+                "SELECT count(*) FROM identity.users "
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '1 day'",
+                t=tenant_id,
+            )
+            mau = await self._scalar(
+                "SELECT count(*) FROM identity.users "
+                "WHERE tenant_id = :t AND deleted_at IS NULL "
+                "AND last_login_at >= now() - interval '30 days'",
+                t=tenant_id,
+            )
+            total = await self._scalar(
+                "SELECT count(*) FROM identity.users "
+                "WHERE tenant_id = :t AND deleted_at IS NULL",
+                t=tenant_id,
+            )
             return {
                 "tenant_id": tenant_id,
-                "active_users": t.active_users if t else 0,
-                "dau": 0,
-                "mau": t.active_users if t else 0,
+                "active_users": total,
+                "dau": dau,
+                "mau": mau,
             }
 
         data, _ = await self._cached(
@@ -280,8 +339,49 @@ class DashboardService:
         return data
 
     async def tenant_integrations_health(self, tenant_id: str) -> dict[str, Any]:
+        # Live from integration.integration_configs. Maps the config
+        # ``status`` enum to the dashboard's health tone vocabulary.
         async def gen():
-            return {"tenant_id": tenant_id, "integrations": []}
+            from sqlalchemy import text
+
+            _STATUS_MAP = {
+                "active": "healthy",
+                "pending_auth": "degraded",
+                "disabled": "degraded",
+                "error": "down",
+                "failed": "down",
+            }
+            try:
+                # One row per integration *kind* — the latest config's
+                # status. A tenant can accumulate several configs of the
+                # same kind (re-auth, tests); a health table wants the
+                # current state per integration, not every historical row.
+                rows = (
+                    await self.repo.session.execute(
+                        text(
+                            "SELECT DISTINCT ON (kind) "
+                            "coalesce(display_name, kind) AS name, "
+                            "kind, status, updated_at "
+                            "FROM integration.integration_configs "
+                            "WHERE tenant_id = :t "
+                            "ORDER BY kind, updated_at DESC"
+                        ),
+                        {"t": tenant_id},
+                    )
+                ).mappings().all()
+            except Exception:  # noqa: BLE001
+                rows = []
+            items = [
+                {
+                    "integration": r["name"] or r["kind"],
+                    "status": _STATUS_MAP.get(str(r["status"]), "degraded"),
+                    "last_check_at": (
+                        r["updated_at"].isoformat() if r["updated_at"] else None
+                    ),
+                }
+                for r in rows
+            ]
+            return {"tenant_id": tenant_id, "integrations": items}
 
         data, _ = await self._cached(
             f"{tenant_id}:tenant:integ-health", gen, self.detail_ttl
@@ -305,7 +405,13 @@ class DashboardService:
 
     async def tenant_storage_usage(self, tenant_id: str) -> dict[str, Any]:
         async def gen():
-            return {"tenant_id": tenant_id, "courses": [], "total_bytes": 0}
+            total = await self._scalar(
+                "SELECT coalesce(sum(total_size_bytes), 0) "
+                "FROM submission.submissions "
+                "WHERE tenant_id = :t AND deleted_at IS NULL",
+                t=tenant_id,
+            )
+            return {"tenant_id": tenant_id, "courses": [], "total_bytes": total}
 
         data, _ = await self._cached(
             f"{tenant_id}:tenant:storage", gen, self.detail_ttl
