@@ -280,7 +280,9 @@ export function UsersListPage() {
                       key={u.id}
                       data-testid={`user-row-${u.id}`}
                       onClick={() => navigate(`/admin/users/${u.id}`)}
-                      className="cursor-pointer transition-colors hover:bg-muted/40"
+                      // No per-row divider — 150+ hairlines read as noise.
+                      // Rows are separated by height + hover tint instead.
+                      className="cursor-pointer border-b-0 transition-colors hover:bg-muted/40"
                     >
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
