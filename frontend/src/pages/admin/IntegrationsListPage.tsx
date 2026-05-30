@@ -19,22 +19,10 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { FormEvent, useEffect, useState } from 'react';
-import {
-  Copy,
-  ExternalLink,
-  Loader2,
-  Plus,
-} from 'lucide-react';
+import { Copy, ExternalLink, Loader2 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { Button } from '@/components/ui/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
-import { EmptyState } from '@/components/common/EmptyState';
 import { SkeletonList } from '@/components/common/Skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { cn } from '@/components/ui/utils';
@@ -80,68 +68,84 @@ interface CourseIntegrationsPanelProps {
   items: IntegrationConfig[];
   isPending: boolean;
   error: Problem | null;
+  connecting: boolean;
+  onConnect: (kind: IntegrationKind) => void;
   onChanged: () => void;
 }
 
+/** Every source a teacher can connect, in the order they appear in the
+ *  left menu. The menu lists them all (configured or not), like the
+ *  admin OAuth panel — there's no separate «+ Подключить» button. */
+const CONNECTABLE_KINDS: IntegrationKind[] = [
+  'yandex_contest',
+  'stepik',
+  'google_sheets',
+  'ejudge',
+  'manual',
+];
+
 /** Teacher integrations — master-detail, same shape as the admin OAuth
- *  panel: connected sources on the left, the selected source's sync /
- *  autosync controls on the right. No Client ID / Secret — teachers
- *  connect via OAuth, so the detail pane is purely operational. */
+ *  panel: ALL sources on the left (connected or not); the right pane is
+ *  the selected source's sync/autosync controls, a «connect» prompt if
+ *  it isn't set up yet, or a placeholder until something is selected. */
 function CourseIntegrationsPanel({
   items,
   isPending,
   error,
+  connecting,
+  onConnect,
   onChanged,
 }: CourseIntegrationsPanelProps) {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (selectedId === null && items.length > 0) setSelectedId(items[0].id);
-    // If the selected one was removed, fall back to the first.
-    if (selectedId && !items.some((i) => i.id === selectedId)) {
-      setSelectedId(items[0]?.id ?? null);
-    }
-  }, [selectedId, items]);
+  // Nothing selected by default — keeps the page calm and shows the
+  // «выберите интеграцию» hint instead of dumping one source's controls.
+  const [selectedKind, setSelectedKind] = useState<IntegrationKind | null>(null);
 
   if (error) return <ProblemAlert problem={error} />;
-  if (isPending) return <SkeletonList rows={3} rowHeight={56} />;
-  if (items.length === 0) {
-    // Empty state has no action — the header owns the «+ Подключить» CTA.
-    return <EmptyState title="Интеграций пока нет" />;
-  }
+  if (isPending) return <SkeletonList rows={5} rowHeight={56} />;
 
-  const selected = items.find((i) => i.id === selectedId) ?? null;
+  const configFor = (kind: IntegrationKind) =>
+    items.find((i) => i.kind === kind) ?? null;
+  const selectedConfig = selectedKind ? configFor(selectedKind) : null;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
       <nav aria-label="Интеграции курса" className="flex flex-col py-2">
-        {items.map((it) => {
-          const isSel = it.id === selectedId;
-          const isActive = it.status === 'active';
+        {CONNECTABLE_KINDS.map((kind) => {
+          const cfg = configFor(kind);
+          const connected = !!cfg && cfg.status === 'active';
+          const isSel = kind === selectedKind;
           return (
             <button
-              key={it.id}
+              key={kind}
               type="button"
-              onClick={() => setSelectedId(it.id)}
+              onClick={() => setSelectedKind(kind)}
               className={cn(
                 'flex w-full items-center gap-3 rounded-md px-4 py-3 text-left transition-colors',
                 isSel ? 'bg-muted/40' : 'hover:bg-muted/20',
               )}
-              data-testid={`integration-row-${it.id}`}
+              data-testid={`integration-kind-${kind}`}
               aria-current={isSel ? 'page' : undefined}
             >
-              <ProviderIcon kind={it.kind} className="h-5 w-5 shrink-0" />
-              <span className="min-w-0">
+              <ProviderIcon kind={kind} className="h-5 w-5 shrink-0" />
+              <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">
-                  {KIND_TITLES[it.kind] ?? it.kind}
+                  {KIND_TITLES[kind] ?? kind}
                 </span>
                 <span
                   className={cn(
-                    'block text-xs',
-                    isActive ? 'text-muted-foreground' : 'text-sev-mid font-medium',
+                    'block text-xs truncate',
+                    connected
+                      ? 'text-muted-foreground'
+                      : cfg
+                        ? 'text-sev-mid font-medium'
+                        : 'text-muted-foreground/60',
                   )}
                 >
-                  {isActive ? 'подключено' : 'ожидает авторизации'}
+                  {connected
+                    ? 'подключено'
+                    : cfg
+                      ? 'ожидает авторизации'
+                      : 'не подключено'}
                 </span>
               </span>
             </button>
@@ -149,13 +153,63 @@ function CourseIntegrationsPanel({
         })}
       </nav>
 
-      <div className="py-2 md:pl-8">
-        {selected ? (
-          <CourseIntegrationDetail integration={selected} onChanged={onChanged} />
+      <div className="md:border-l md:border-border/60 p-6 md:p-8 md:min-h-[420px]">
+        {!selectedKind ? (
+          <div className="flex h-full min-h-[200px] items-center justify-center">
+            <p className="max-w-xs text-center text-sm text-muted-foreground">
+              Выберите интеграцию слева, чтобы настроить синхронизацию или
+              подключить новый источник.
+            </p>
+          </div>
+        ) : selectedConfig ? (
+          <CourseIntegrationDetail
+            integration={selectedConfig}
+            onChanged={onChanged}
+          />
         ) : (
-          <p className="text-sm text-muted-foreground">Выберите источник слева.</p>
+          <ConnectPrompt
+            kind={selectedKind}
+            connecting={connecting}
+            onConnect={onConnect}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+/** Right-pane prompt for a not-yet-connected source. */
+function ConnectPrompt({
+  kind,
+  connecting,
+  onConnect,
+}: {
+  kind: IntegrationKind;
+  connecting: boolean;
+  onConnect: (kind: IntegrationKind) => void;
+}) {
+  const title = KIND_TITLES[kind] ?? kind;
+  const viaOauth = kind === 'yandex_contest' || kind === 'stepik' || kind === 'google_sheets';
+  return (
+    <div className="space-y-5">
+      <header className="flex items-center gap-2">
+        <ProviderIcon kind={kind} className="h-7 w-7 shrink-0" />
+        <h2 className="text-xl font-semibold text-foreground">{title}</h2>
+        <span className="ml-auto text-xs text-muted-foreground/60">не подключено</span>
+      </header>
+      <p className="max-w-md text-sm text-muted-foreground">
+        {viaOauth
+          ? 'Подключение откроет страницу авторизации провайдера. После входа источник появится здесь, и можно будет настроить синхронизацию.'
+          : 'Подключите источник по токену или загрузите архив с решениями.'}
+      </p>
+      <Button
+        onClick={() => onConnect(kind)}
+        disabled={connecting}
+        data-testid={`integration-connect-${kind}`}
+      >
+        {connecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Подключить
+      </Button>
     </div>
   );
 }
@@ -212,64 +266,18 @@ export function IntegrationsListPage() {
     );
   };
 
-  // Header action — single primary "+ Подключить" button. All concrete
-  // providers live behind a 5-item dropdown:
-  //   • Y.Contest / Stepik / Google Sheets — OAuth, redirect to provider
-  //   • eJudge / Manual ZIP — token-modal (inline TokenIntegrationDialog)
-  // The previous "Через мастер настройки" 4-step wizard is gone.
-  const connectAction = (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button data-testid="integrations-new-button">
-          <Plus className="mr-2 h-4 w-4" />
-          Подключить
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuItem
-          onClick={() => startOAuthIntegration('yandex_contest', 'Yandex.Contest')}
-          disabled={createMut.isPending}
-          data-testid="integrations-connect-yandex-contest"
-        >
-          <ProviderIcon kind="yandex_contest" className="mr-2 h-4 w-4" />
-          Yandex.Contest
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => startOAuthIntegration('stepik', 'Stepik')}
-          disabled={createMut.isPending}
-          data-testid="integrations-connect-stepik"
-        >
-          <ProviderIcon kind="stepik" className="mr-2 h-4 w-4" />
-          Stepik
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => startOAuthIntegration('google_sheets', 'Google Sheets')}
-          disabled={createMut.isPending}
-          data-testid="integrations-connect-google-sheets"
-        >
-          <ProviderIcon kind="google_sheets" className="mr-2 h-4 w-4" />
-          Google Sheets
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTokenDialogKind('ejudge')}
-          data-testid="integrations-connect-ejudge"
-        >
-          <ProviderIcon kind="ejudge" className="mr-2 h-4 w-4" />
-          eJudge · по токену
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onClick={() => setTokenDialogKind('manual')}
-          data-testid="integrations-connect-manual"
-        >
-          <ProviderIcon kind="manual" className="mr-2 h-4 w-4" />
-          Ручная загрузка (ZIP)
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  // Connecting a source — no header button anymore. The teacher picks a
+  // kind from the left menu; if it's not yet connected the detail pane
+  // shows a «Подключить» button that calls this. OAuth kinds redirect to
+  // the provider; eJudge / Manual open the inline token modal.
+  const onConnect = (kind: IntegrationKind) => {
+    if (kind === 'ejudge' || kind === 'manual') {
+      setTokenDialogKind(kind);
+      return;
+    }
+    startOAuthIntegration(kind, KIND_TITLES[kind] ?? kind);
+  };
 
-  // The "Sources" tab is what teachers and admins both see; "Авторизация"
-  // (the OAuth-providers directory) is admin-only.
   return (
     <Page width="regular">
       <PageHeader
@@ -278,10 +286,6 @@ export function IntegrationsListPage() {
             {isAdmin ? 'Интеграции' : 'Интеграции курса'}
           </span>
         }
-        // Admin never creates concrete integrations — those are per-course
-        // and belong to the teacher. The "+ Подключить" CTA is hidden for
-        // admin; they only manage OAuth app credentials on this page.
-        action={isAdmin ? null : connectAction}
       />
 
       {isAdmin ? (
@@ -290,12 +294,15 @@ export function IntegrationsListPage() {
         // actual integration rows in their courses.
         <OAuthProvidersPanel />
       ) : (
-        // Teacher: master-detail like the admin page — connected sources
-        // on the left, sync / autosync controls on the right.
+        // Teacher: master-detail like the admin page — every source in the
+        // left menu (connected or not), sync / autosync (or a connect
+        // prompt) on the right.
         <CourseIntegrationsPanel
           items={items}
           isPending={isPending && !data}
           error={(error as unknown as Problem) ?? null}
+          connecting={createMut.isPending}
+          onConnect={onConnect}
           onChanged={() => refetch()}
         />
       )}
