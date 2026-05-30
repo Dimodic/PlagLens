@@ -29,21 +29,41 @@ const TONE_CLASS: Record<Tone, string> = {
   white: 'text-white',
 };
 
+/** Tight bounding box of the glyph within the 100×100 design canvas
+ *  (P bowl + lens span x:28→76, y:16→84). Used for the `cropped`
+ *  variant so the mark fills its box edge-to-edge — needed when it's
+ *  used as the literal first letter of the wordmark, where the design
+ *  canvas's built-in padding would otherwise make it float off the
+ *  baseline. The full canvas is kept for the tile (the glyph is meant
+ *  to sit inset there). */
+const TIGHT_VIEWBOX = '28 16 48 68';
+const FULL_VIEWBOX = '0 0 100 100';
+
 interface BrandMarkProps {
   /** Glyph colour. Ignored when `tile` is set (tile is always white-on-brand). */
   tone?: Tone;
   /** Render the glyph on a rounded indigo tile (app-icon lockup). */
   tile?: boolean;
+  /** Crop to the glyph's tight bounding box (for inline / wordmark use). */
+  cropped?: boolean;
   /** Extra classes — set the size here (e.g. `h-14 w-14`). */
   className?: string;
   /** Accessible label; omit (and set aria-hidden) when paired with a wordmark. */
   title?: string;
 }
 
-function Glyph({ className, title }: { className?: string; title?: string }) {
+function Glyph({
+  className,
+  title,
+  cropped,
+}: {
+  className?: string;
+  title?: string;
+  cropped?: boolean;
+}) {
   return (
     <svg
-      viewBox="0 0 100 100"
+      viewBox={cropped ? TIGHT_VIEWBOX : FULL_VIEWBOX}
       className={className}
       role={title ? 'img' : undefined}
       aria-label={title}
@@ -58,6 +78,7 @@ function Glyph({ className, title }: { className?: string; title?: string }) {
 export function BrandMark({
   tone = 'brand',
   tile = false,
+  cropped = false,
   className,
   title,
 }: BrandMarkProps) {
@@ -77,7 +98,9 @@ export function BrandMark({
       </span>
     );
   }
-  return <Glyph className={cn(TONE_CLASS[tone], className)} title={title} />;
+  return (
+    <Glyph className={cn(TONE_CLASS[tone], className)} title={title} cropped={cropped} />
+  );
 }
 
 export default BrandMark;
