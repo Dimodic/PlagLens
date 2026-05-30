@@ -47,6 +47,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { openTelegramLogin } from '@/auth/telegramLogin';
 import { emailSchema, passwordSchema } from '@/utils/validators';
+import { BrandMark } from '@/components/shell/BrandMark';
 
 type Mode = 'login' | 'register' | 'forgot';
 
@@ -392,12 +393,7 @@ export function LoginPage() {
       <main className="w-full max-w-sm space-y-10">
         {/* Brand */}
         <header className="flex flex-col items-center gap-3 text-center">
-          <span
-            aria-hidden
-            className="grid h-14 w-14 place-items-center rounded-2xl bg-foreground text-background text-2xl font-semibold tracking-tight"
-          >
-            P
-          </span>
+          <BrandMark tile className="h-14 w-14" title="PlagLens" />
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               PlagLens

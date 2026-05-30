@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
+import { BrandMark } from '@/components/shell/BrandMark';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
@@ -65,9 +66,7 @@ export function OAuthCallbackPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
-            <span className="text-base font-semibold">P</span>
-          </div>
+          <BrandMark tile className="h-10 w-10 rounded-md" title="PlagLens" />
           <h1 className="text-xl font-semibold tracking-tight">
             {t('auth.oauth.completing')}
           </h1>

@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
+import { BrandMark } from '@/components/shell/BrandMark';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface FieldErrors {
@@ -152,9 +153,7 @@ function SingleCardShell({ heading, sub, children }: ShellProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
-          <div className="grid h-10 w-10 place-items-center rounded-md bg-primary text-primary-foreground">
-            <span className="text-base font-semibold">P</span>
-          </div>
+          <BrandMark tile className="h-10 w-10 rounded-md" title="PlagLens" />
           <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
           <p className="text-sm text-muted-foreground">{sub}</p>
         </div>

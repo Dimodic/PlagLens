@@ -21,6 +21,7 @@ import type { Problem } from '@/api/types';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { cn } from '@/components/ui/utils';
+import { BrandMark } from '@/components/shell/BrandMark';
 
 interface DemoAccount {
   email: string;
@@ -125,12 +126,7 @@ export function DemoLoginPage() {
       <div className="w-full max-w-md space-y-10">
         {/* Brand block — same scale and rhythm as the /login page. */}
         <header className="flex flex-col items-center gap-3 text-center">
-          <span
-            aria-hidden
-            className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground text-xl font-semibold"
-          >
-            P
-          </span>
+          <BrandMark tile className="h-12 w-12 rounded-xl" title="PlagLens" />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Демо-режим
           </h1>

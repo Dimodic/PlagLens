@@ -1,18 +1,20 @@
 /**
- * PlagLens wordmark — lowercase "plaglens".
+ * PlagLens wordmark — the P-lens mark as the literal first letter,
+ * followed by the rest of the word.
  *
  * Visual:
- *   full    → text "plaglens" in Outfit / Inter @ 500, foreground colour
- *   compact → single lowercase "p"
+ *   full    → [mark] "laglens"   (mark replaces the leading "p")
+ *   compact → [mark] only        (sidebar rail)
  *
- * Outfit is the closest free system-available rounded geometric sans. We
- * declare a CSS font-family stack so if Outfit is missing the user-agent
- * falls back to Inter (already loaded) → system-ui.
+ * The mark carries the only brand colour in the system (indigo); the
+ * wordmark text stays in `foreground` so the lockup reads as one quiet
+ * unit, not a coloured banner.
  */
 import { Link } from 'react-router-dom';
+import { BrandMark } from './BrandMark';
 
 interface WordmarkProps {
-  /** "full" = the word "plaglens". "compact" = single "p" (rail). */
+  /** "full" = mark + "laglens". "compact" = mark only (rail). */
   variant?: 'full' | 'compact';
   className?: string;
   /** Optional click target; defaults to "/". */
@@ -38,22 +40,21 @@ export function Wordmark({
       to={to}
       data-testid={testId ?? 'wordmark'}
       aria-label={ariaLabel}
-      className={`inline-flex items-center text-foreground select-none ${className ?? ''}`}
+      className={`inline-flex items-center gap-1.5 text-foreground select-none ${className ?? ''}`}
     >
-      <span
-        className={
-          variant === 'full'
-            ? 'text-lg leading-none lowercase'
-            : 'text-lg leading-none lowercase block w-full text-center'
-        }
-        style={{
-          fontFamily: FONT_STACK,
-          fontWeight: 500,
-          letterSpacing: '-0.01em',
-        }}
-      >
-        {variant === 'full' ? 'plaglens' : 'p'}
-      </span>
+      <BrandMark className={variant === 'compact' ? 'h-5 w-5' : 'h-[1.05rem] w-[1.05rem]'} />
+      {variant === 'full' && (
+        <span
+          className="text-lg leading-none lowercase"
+          style={{
+            fontFamily: FONT_STACK,
+            fontWeight: 500,
+            letterSpacing: '-0.01em',
+          }}
+        >
+          laglens
+        </span>
+      )}
     </Link>
   );
 }

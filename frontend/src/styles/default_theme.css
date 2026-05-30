@@ -34,6 +34,13 @@
   --destructive: oklch(0.58 0.21 25);
   --destructive-foreground: oklch(0.99 0 0);
 
+  /* Brand — the only chromatic accent in the system, reserved for the
+   * PlagLens mark (the P-lens glyph). Indigo #4F46E5 from the design
+   * system. NOT a general-purpose accent: the rest of the UI stays
+   * monochrome. White is what the mark turns into on the brand tile. */
+  --brand: #4f46e5;
+  --brand-foreground: #ffffff;
+
   /* Lines & inputs */
   --border: oklch(0.918 0.005 260);
   --input: transparent;
@@ -96,6 +103,11 @@
   --destructive: oklch(0.62 0.2 25);
   --destructive-foreground: oklch(0.99 0 0);
 
+  /* Brand — lifted a step brighter (indigo-500) so the mark keeps
+   * contrast against the dark surface. */
+  --brand: #6366f1;
+  --brand-foreground: #ffffff;
+
   --border: oklch(0.27 0.012 260);
   --input: oklch(0.23 0.012 260);
   --input-background: oklch(0.21 0.012 260);
@@ -142,6 +154,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-input-background: var(--input-background);
