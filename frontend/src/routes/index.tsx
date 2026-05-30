@@ -134,6 +134,7 @@ const HomeworkCreatePage = lazy(() => import('@/pages/homeworks/HomeworkCreatePa
 const HomeworkAssignmentCreatePage = lazy(() => import('@/pages/homeworks/HomeworkAssignmentCreatePage'));
 const AssignmentSettingsPage = lazy(() => import('@/pages/assignments/AssignmentSettingsPage'));
 const AssignmentSubmissionsPage = lazy(() => import('@/pages/assignments/AssignmentSubmissionsPage'));
+const SubmissionsListPage = lazy(() => import('@/pages/submissions/SubmissionsListPage'));
 const AssignmentDeadlinesPage = lazy(() => import('@/pages/assignments/AssignmentDeadlinesPage'));
 const SubmissionDetailPage = lazy(() => import('@/pages/submissions/SubmissionDetailPage'));
 const SubmissionUploadPage = lazy(() => import('@/pages/submissions/SubmissionUploadPage'));
@@ -345,6 +346,12 @@ const protectedRoutes: RouteObject[] = [
       { path: 'assignments/:id/upload', element: <SubmissionUploadPage /> },
 
       // Submissions
+      // Staff «Все посылки» — cross-course triage queue. (Students don't
+      // get a nav link here; their submissions live in the /me tree.)
+      // The teacher/assistant sidebar «Посылки» points here; it used to
+      // point at /me/submissions, which now redirects to the student
+      // dashboard — hence staff landing on the student view.
+      { path: 'submissions', element: <SubmissionsListPage /> },
       { path: 'submissions/:id', element: <SubmissionDetailPage /> },
 
       { path: 'grading', element: <GradingQueuePage /> },

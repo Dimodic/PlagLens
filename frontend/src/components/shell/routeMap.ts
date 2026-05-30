@@ -82,6 +82,7 @@ export function resolveScreen(pathname: string, role: GlobalRole | undefined): S
   if (/^\/assignments\/[^/]+\/plagiarism/.test(p)) return 'similarity';
   if (/^\/assignments\/[^/]+\/ai-analyses/.test(p)) return 'llm';
   if (/^\/assignments\/[^/]+/.test(p)) return isStudent ? 's_assignment' : 'assignment';
+  if (p === '/submissions') return 'submissions';
   if (/^\/submissions\/[^/]+\/ai-report/.test(p)) return 'llm';
   if (/^\/submissions\/[^/]+/.test(p)) return isStudent ? 's_submission' : 'submission';
 

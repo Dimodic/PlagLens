@@ -132,7 +132,7 @@ function buildSections(
         items: [
           { id: 'grading', screenId: 'grading', label: 'Кабинет', icon: ic(ClipboardCheck), to: '/grading' },
           { id: 'courses', screenId: 'courses', label: t('nav.courses'), icon: ic(LayoutGrid), to: '/courses' },
-          { id: 'submissions', screenId: 'submissions', label: 'Все посылки', icon: ic(Table2), to: '/me/submissions' },
+          { id: 'submissions', screenId: 'submissions', label: 'Все посылки', icon: ic(Table2), to: '/submissions' },
           { id: 'reports', screenId: 'reports', label: t('nav.reports'), icon: ic(FileSpreadsheet), to: '/reports' },
         ],
       },
@@ -156,7 +156,7 @@ function buildSections(
       label: t('nav.workspace'),
       items: [
         { id: 'courses', screenId: 'courses', label: t('nav.courses'), icon: ic(LayoutGrid), to: '/courses' },
-        { id: 'submissions', screenId: 'submissions', label: t('nav.submissions'), icon: ic(Table2), to: '/me/submissions' },
+        { id: 'submissions', screenId: 'submissions', label: t('nav.submissions'), icon: ic(Table2), to: '/submissions' },
         { id: 'similarity', screenId: 'reports', label: t('nav.reports'), icon: ic(FileSpreadsheet), to: '/reports' },
       ],
     },
