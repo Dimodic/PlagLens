@@ -269,9 +269,12 @@ export function UsersListPage() {
             </TableHeader>
             <TableBody>
               {rows.map((u) => {
+                  // Blank, not «—», when the user never logged in: most
+                  // imported accounts have no login, and a column of
+                  // dashes just adds visual noise.
                   const lastSeen = u.last_login_at
                     ? dayjs(u.last_login_at).fromNow()
-                    : '—';
+                    : '';
                   return (
                     <TableRow
                       key={u.id}
@@ -298,10 +301,15 @@ export function UsersListPage() {
                       </TableCell>
                       <TableCell>{roleBadge(u.global_role)}</TableCell>
                       <TableCell>
+                        {/* «Активен» is the norm (almost every row), so
+                            render it as quiet text rather than a green
+                            pill — only «отключён» needs to stand out. */}
                         {u.status === 'active' ? (
-                          <StatusPill tone="success">активен</StatusPill>
+                          <span className="text-xs text-muted-foreground">
+                            активен
+                          </span>
                         ) : (
-                          <StatusPill tone="neutral">отключён</StatusPill>
+                          <StatusPill tone="destructive">отключён</StatusPill>
                         )}
                       </TableCell>
                       <TableCell>

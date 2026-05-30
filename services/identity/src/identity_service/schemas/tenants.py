@@ -15,6 +15,9 @@ class TenantOut(BaseModel):
     status: str = "active"
     created_at: datetime
     deleted_at: datetime | None = None
+    # Live count of non-deleted users in the tenant. Filled by the list /
+    # detail endpoints; 0 when not computed.
+    users_count: int = 0
 
 
 class TenantCreate(BaseModel):

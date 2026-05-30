@@ -58,7 +58,7 @@ async def _emit_tenant_event(request: Request, event_type: str, t: Tenant) -> No
         logger.warning("Failed to publish %s: %s", event_type, exc)
 
 
-def _tenant_to_out(t: Tenant) -> TenantOut:
+def _tenant_to_out(t: Tenant, users_count: int = 0) -> TenantOut:
     return TenantOut(
         id=t.id,
         slug=t.slug,
@@ -67,7 +67,22 @@ def _tenant_to_out(t: Tenant) -> TenantOut:
         status=t.status,
         created_at=t.created_at,
         deleted_at=t.deleted_at,
+        users_count=users_count,
     )
+
+
+async def _user_counts(session: AsyncSession) -> dict[str, int]:
+    """Non-deleted user count per tenant, in one grouped query."""
+    from sqlalchemy import func, select
+
+    from ...models import User
+
+    rows = await session.execute(
+        select(User.tenant_id, func.count())
+        .where(User.deleted_at.is_(None))
+        .group_by(User.tenant_id)
+    )
+    return {tid: int(c) for tid, c in rows.all()}
 
 
 @router.get("", response_model=Page[TenantOut], summary="List tenants (super_admin)")
@@ -83,8 +98,9 @@ async def list_tenants(
     # account and is not a real institution, so the institutions list starts
     # empty until an admin creates one.
     rows = [t for t in rows if t.slug != "system"]
+    counts = await _user_counts(session)
     return Page[TenantOut](
-        data=[_tenant_to_out(t) for t in rows],
+        data=[_tenant_to_out(t, counts.get(t.id, 0)) for t in rows],
         pagination=Pagination(limit=limit, has_more=False, next_cursor=None),
     )
 
@@ -135,7 +151,7 @@ async def get_tenant(
         raise ProblemException(status=404, code="NOT_FOUND", title="Tenant not found")
     if user.global_role != "admin":
         await assert_same_tenant(user, t.id)
-    return _tenant_to_out(t)
+    return _tenant_to_out(t, (await _user_counts(session)).get(t.id, 0))
 
 
 @router.patch(
