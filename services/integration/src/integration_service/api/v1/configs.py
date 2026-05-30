@@ -149,18 +149,35 @@ async def create_config(
         settings=payload.settings or {},
         created_by=p.user_id,
     )
+
+    # For OAuth kinds, the admin must have set up the provider's app
+    # (client_id/secret) first. Check BEFORE persisting — otherwise an
+    # unconfigured provider leaves a ghost ``pending_auth`` row that the
+    # UI has to create-then-delete (which made the page flicker). Refuse
+    # up-front with a clear message instead.
+    is_oauth_kind = cfg.kind in ("stepik", "yandex_contest", "google_sheets") and (
+        cfg.settings or {}
+    ).get("auth_mode") != "sa"
+    provider = None
+    if is_oauth_kind:
+        provider = await get_provider_for_tenant(cfg.kind, cfg.tenant_id, cfg)
+        if not (provider and provider.client_id):
+            raise ProblemException(
+                409,
+                "OAUTH_NOT_CONFIGURED",
+                "OAuth не настроен",
+                "OAuth для этого источника ещё не настроен. Попросите "
+                "администратора заполнить ключи в «Интеграции → Авторизация».",
+            )
+
     repo = IntegrationConfigRepo(session)
     await repo.add(cfg)
     await session.commit()
 
     oauth_url: Optional[str] = None
-    if cfg.kind in ("stepik", "yandex_contest", "google_sheets") and (
-        cfg.settings or {}
-    ).get("auth_mode") != "sa":
-        provider = await get_provider_for_tenant(cfg.kind, cfg.tenant_id, cfg)
-        if provider and provider.client_id:
-            state = await create_state(cfg.id, p.tenant_id)
-            oauth_url = build_authorize_url(provider, state)
+    if is_oauth_kind and provider:
+        state = await create_state(cfg.id, p.tenant_id)
+        oauth_url = build_authorize_url(provider, state)
 
     s = get_settings()
     response.headers["Location"] = f"{s.api_prefix}/integrations/{cfg.id}"

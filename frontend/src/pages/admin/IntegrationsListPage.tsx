@@ -43,7 +43,6 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   useCreateIntegration,
-  useDeleteIntegration,
   useIntegrations,
 } from '@/hooks/api/useIntegrations';
 import {
@@ -167,11 +166,7 @@ function CourseIntegrationsPanel({
             onChanged={onChanged}
           />
         ) : (
-          <ConnectPrompt
-            kind={selectedKind}
-            onTokenConnect={onTokenConnect}
-            onChanged={onChanged}
-          />
+          <ConnectPrompt kind={selectedKind} onTokenConnect={onTokenConnect} />
         )}
       </div>
     </div>
@@ -180,29 +175,24 @@ function CourseIntegrationsPanel({
 
 /** Right-pane prompt for a not-yet-connected source.
  *
- *  OAuth kinds (yc/stepik/sheets) connect inline: we create the config,
- *  and if the provider's OAuth isn't set up by the admin the server
- *  returns no authorize URL — we then roll back the just-created config
- *  (so no «ожидает авторизации» ghost row is left behind) and show the
- *  error right here on the page, not as a toast. Token kinds defer to the
- *  page's modal. */
+ *  OAuth kinds (yc/stepik/sheets) connect inline. When the admin hasn't
+ *  set up the provider's app the backend refuses with a 409 (no config
+ *  is created) — we show that reason inline on the page, not as a toast.
+ *  Token kinds defer to the page's modal. */
 function ConnectPrompt({
   kind,
   onTokenConnect,
-  onChanged,
 }: {
   kind: IntegrationKind;
   onTokenConnect: (kind: IntegrationKind) => void;
-  onChanged: () => void;
 }) {
   const createMut = useCreateIntegration();
-  const deleteMut = useDeleteIntegration();
   const [problem, setProblem] = useState<string | null>(null);
 
   const title = KIND_TITLES[kind] ?? kind;
   const viaOauth =
     kind === 'yandex_contest' || kind === 'stepik' || kind === 'google_sheets';
-  const busy = createMut.isPending || deleteMut.isPending;
+  const busy = createMut.isPending;
 
   const connect = () => {
     if (!viaOauth) {
@@ -218,18 +208,16 @@ function ConnectPrompt({
             window.location.assign(res.oauth_authorize_url);
             return;
           }
-          // Not configured by the admin → undo the dangling config and
-          // surface the reason inline.
-          if (res.config?.id) deleteMut.mutate(res.config.id);
+          // Defensive — backend now 409s when unconfigured, so this
+          // branch shouldn't fire.
           setProblem(
             'OAuth для этого источника ещё не настроен. Попросите администратора заполнить ключи в «Интеграции → Авторизация».',
           );
-          onChanged();
         },
-        onError: (p) =>
-          setProblem(
-            (p as unknown as Problem).title || 'Не удалось подключить',
-          ),
+        onError: (p) => {
+          const pr = p as unknown as Problem;
+          setProblem(pr.detail || pr.title || 'Не удалось подключить');
+        },
       },
     );
   };
