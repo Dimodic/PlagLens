@@ -18,13 +18,10 @@
  *
  * Same testids preserved so Playwright specs don't break.
  */
-import { Link } from 'react-router-dom';
 import { FormEvent, useEffect, useState } from 'react';
 import dayjs from 'dayjs';
-import { useQueries } from '@tanstack/react-query';
 import {
   AlertCircle,
-  ChevronRight,
   Copy,
   ExternalLink,
   Loader2,
@@ -74,7 +71,6 @@ import {
   useTestIntegration,
 } from '@/hooks/api/useIntegrations';
 import {
-  integrationsApi,
   type IntegrationConfig,
   type IntegrationKind,
   type IntegrationStatus,
@@ -82,6 +78,7 @@ import {
 import type { Problem } from '@/api/types';
 import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
 import { GoogleSheetsServiceAccountDialog } from '@/components/integrations/GoogleSheetsServiceAccountDialog';
+import { CourseSyncDialog } from '@/components/integrations/CourseSyncDialog';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
 
 const KIND_TITLES: Record<IntegrationKind, string> = {
@@ -118,21 +115,14 @@ function chunkPairs<T>(arr: T[]): T[][] {
   return out;
 }
 
-function openLink(integration: IntegrationConfig): string {
-  // Detail page is mounted at both /integrations/:id (teacher+admin) and
-  // /admin/integrations/:id (admin only). Use the teacher-friendly mirror.
-  // Per-kind import flows (Y.Contest contest pick, Stepik course pick)
-  // live on the course detail page, not here — those tiles still open
-  // the integration's generic detail (audit + cron + revoke).
-  return `/integrations/${integration.id}`;
-}
-
 interface TileProps {
   integration: IntegrationConfig;
   onChanged: () => void;
+  /** Open the sync modal for this integration (teacher view). */
+  onOpen: (integration: IntegrationConfig) => void;
 }
 
-function IntegrationTile({ integration, onChanged }: TileProps) {
+function IntegrationTile({ integration, onChanged, onOpen }: TileProps) {
   const notify = useNotifications();
   const test = useTestIntegration();
   const enableM = useEnableIntegration();
@@ -209,10 +199,12 @@ function IntegrationTile({ integration, onChanged }: TileProps) {
       data-testid={`integration-row-${integration.id}`}
       className="group relative -mx-2 rounded-md px-2 py-2 transition-colors hover:bg-muted/30"
     >
-      <Link
-        to={openLink(integration)}
+      <button
+        type="button"
+        onClick={() => onOpen(integration)}
         className="absolute inset-0 z-0 rounded-md"
-        aria-label={`Открыть ${title}`}
+        aria-label={`Настроить синхронизацию · ${title}`}
+        data-testid={`integration-open-${integration.id}`}
       />
       <div className="relative z-0 pointer-events-none flex items-baseline gap-2">
         <h3 className="text-sm font-medium text-foreground truncate">
@@ -315,115 +307,6 @@ function IntegrationTile({ integration, onChanged }: TileProps) {
 }
 
 /* ----------------------------------------------------------------- */
-/* Activity summary — one row per integration, not per import.       */
-
-interface ActivitySummaryProps {
-  integrations: IntegrationConfig[];
-}
-
-function ActivitySummary({ integrations }: ActivitySummaryProps) {
-  const jobQueries = useQueries({
-    queries: integrations.map((it) => ({
-      queryKey: ['integration', it.id, 'jobs', { limit: 30 }],
-      queryFn: () => integrationsApi.listImportJobs(it.id, { limit: 30 }),
-      enabled: !!it.id,
-      refetchInterval: 15_000,
-    })),
-  });
-
-  const groups = integrations
-    .map((it, idx) => {
-      const jobs = jobQueries[idx]?.data?.data ?? [];
-      if (jobs.length === 0) return null;
-      const completed = jobs.filter((j) => j.status === 'completed').length;
-      const failed = jobs.filter((j) => j.status === 'failed').length;
-      const running = jobs.filter((j) => j.status === 'running').length;
-      const queued = jobs.filter((j) => j.status === 'queued').length;
-      const lastAt = jobs[0]?.started_at ?? jobs[0]?.finished_at ?? null;
-      const title = KIND_TITLES[it.kind] ?? it.kind;
-      return {
-        integration: it,
-        title,
-        total: jobs.length,
-        completed,
-        failed,
-        running,
-        queued,
-        lastAt,
-      };
-    })
-    .filter(Boolean) as Array<{
-    integration: IntegrationConfig;
-    title: string;
-    total: number;
-    completed: number;
-    failed: number;
-    running: number;
-    queued: number;
-    lastAt: string | null;
-  }>;
-
-  if (groups.length === 0) return null;
-
-  return (
-    <section className="space-y-3 border-t border-border/60 pt-6">
-      <h2 className="text-base font-semibold text-foreground">
-        Активность
-      </h2>
-      <ul className="flex flex-col gap-1" data-testid="imports-history">
-        {groups.map((g) => (
-          <li key={g.integration.id} data-testid={`imports-summary-${g.integration.id}`}>
-            <Link
-              to={openLink(g.integration)}
-              className="group flex items-baseline gap-2 -mx-2 rounded-md px-2 py-1.5 transition-colors hover:bg-muted/30"
-            >
-              <span className="text-sm font-medium text-foreground truncate">
-                {g.title}
-              </span>
-              <span className="text-xs text-muted-foreground truncate">
-                {summarise(g)}
-              </span>
-              <ChevronRight
-                className="ml-auto h-3.5 w-3.5 flex-none text-muted-foreground/40 transition-colors group-hover:text-muted-foreground"
-                aria-hidden
-              />
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
-function summarise(g: {
-  total: number;
-  completed: number;
-  failed: number;
-  running: number;
-  queued: number;
-  lastAt: string | null;
-}): string {
-  const parts: string[] = [];
-  parts.push(`${g.total} ${pluralImports(g.total)}`);
-  if (g.failed > 0) parts.push(`${g.failed} с ошибкой`);
-  if (g.running > 0) parts.push(`${g.running} в работе`);
-  if (g.queued > 0) parts.push(`${g.queued} в очереди`);
-  if (g.lastAt) {
-    parts.push(`последний ${dayjs(g.lastAt).format('D MMM HH:mm')}`);
-  }
-  return parts.join(' · ');
-}
-
-function pluralImports(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'импортов';
-  if (mod10 === 1) return 'импорт';
-  if (mod10 >= 2 && mod10 <= 4) return 'импорта';
-  return 'импортов';
-}
-
-/* ----------------------------------------------------------------- */
 /* Page                                                              */
 
 export function IntegrationsListPage() {
@@ -439,6 +322,12 @@ export function IntegrationsListPage() {
   // Which kind the inline token dialog is currently editing. ``null`` →
   // dialog closed. Set from the dropdown click on eJudge / Manual.
   const [tokenDialogKind, setTokenDialogKind] = useState<IntegrationKind | null>(
+    null,
+  );
+
+  // Teacher: which integration's sync modal is open (course/ДЗ + sync /
+  // autosync). Opened by clicking an integration row.
+  const [syncIntegration, setSyncIntegration] = useState<IntegrationConfig | null>(
     null,
   );
 
@@ -557,12 +446,12 @@ export function IntegrationsListPage() {
                     key={it.id}
                     integration={it}
                     onChanged={() => refetch()}
+                    onOpen={setSyncIntegration}
                   />
                 ))}
               </div>
             ))}
           </div>
-          <ActivitySummary integrations={items} />
         </>
       )}
     </>
@@ -596,6 +485,14 @@ export function IntegrationsListPage() {
         kind={tokenDialogKind}
         onOpenChange={(o) => {
           if (!o) setTokenDialogKind(null);
+        }}
+      />
+
+      <CourseSyncDialog
+        integration={syncIntegration}
+        open={syncIntegration !== null}
+        onOpenChange={(o) => {
+          if (!o) setSyncIntegration(null);
         }}
       />
     </Page>
