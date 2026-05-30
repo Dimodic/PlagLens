@@ -3,6 +3,7 @@
  *
  * Shown at /admin (uses user's own tenant) or /admin/dashboard/tenant/:id.
  */
+import { useState } from 'react';
 import dayjs from 'dayjs';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -20,10 +21,18 @@ import {
   useTenantDashboard,
   useTenantIntegrationsHealth,
 } from '@/hooks/api/useDashboards';
+import { useTenants } from '@/hooks/api/useTenants';
 import { StatusPill } from '@/components/common/StatusPill';
 import { StatsPanel } from '@/components/common/StatsPanel';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -50,15 +59,43 @@ export default function TenantDashboardPage() {
   useDocumentTitle('Дашборд тенанта');
   const { user } = useAuth();
   const { id: paramId } = useParams<{ id: string }>();
-  const tenantId = paramId ?? user?.tenant.id;
+  // Which tenant the dashboard shows. Seeds from the URL param (deep
+  // link) or the admin's own tenant, then the dropdown takes over —
+  // an admin's own «system» tenant is usually empty, so they need a
+  // one-click way to look at a tenant that actually has data.
+  const [selected, setSelected] = useState<string | undefined>(
+    paramId ?? user?.tenant.id,
+  );
+  const tenantsQ = useTenants({ limit: 100 });
+  const tenants = tenantsQ.data?.data ?? [];
+  const tenantId = selected ?? paramId ?? user?.tenant.id;
   const dash = useTenantDashboard(tenantId);
   const integrations = useTenantIntegrationsHealth(tenantId);
 
   const data = dash.data;
 
+  const tenantPicker =
+    tenants.length > 1 ? (
+      <Select value={tenantId} onValueChange={setSelected}>
+        <SelectTrigger
+          className="h-9 w-[220px]"
+          data-testid="tenant-dashboard-picker"
+        >
+          <SelectValue placeholder="Выберите организацию" />
+        </SelectTrigger>
+        <SelectContent>
+          {tenants.map((t) => (
+            <SelectItem key={t.id} value={t.id}>
+              {t.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    ) : null;
+
   return (
     <Page width="regular">
-      <PageHeader title="Дашборд тенанта" />
+      <PageHeader title="Дашборд тенанта" action={tenantPicker} />
 
       <StatsPanel
         data-testid="tenant-dashboard-kpis"
