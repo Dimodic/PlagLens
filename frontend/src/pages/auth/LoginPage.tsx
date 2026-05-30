@@ -221,6 +221,14 @@ export function LoginPage() {
       `Аккаунт с этим email уже существует, но к нему не привязан ${niceProvider}. ` +
         `Войдите паролем, затем привяжите ${niceProvider} в разделе «Профиль → Безопасность».`,
     );
+    // Strip the one-shot OAuth-error params from the URL so a reload (or
+    // a shared link) doesn't resurrect the hint. We keep any unrelated
+    // params (e.g. ?next=…). The hint already lives in React state.
+    const cleaned = new URLSearchParams(params);
+    cleaned.delete('error');
+    cleaned.delete('provider');
+    cleaned.delete('email');
+    setParams(cleaned, { replace: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
