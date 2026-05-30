@@ -161,12 +161,19 @@ function CourseIntegrationsPanel({
             </p>
           </div>
         ) : selectedConfig ? (
+          // key per source so switching sources gives each pane fresh
+          // state (no stale inline error / course selection bleed-through).
           <CourseIntegrationDetail
+            key={selectedConfig.id}
             integration={selectedConfig}
             onChanged={onChanged}
           />
         ) : (
-          <ConnectPrompt kind={selectedKind} onTokenConnect={onTokenConnect} />
+          <ConnectPrompt
+            key={selectedKind}
+            kind={selectedKind}
+            onTokenConnect={onTokenConnect}
+          />
         )}
       </div>
     </div>
