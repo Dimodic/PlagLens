@@ -369,9 +369,12 @@ function DrawerContents({ sections, activeScreen, pathname }: ContentsProps) {
   const allItems = sections.flatMap((s) => s.items);
   return (
     <div className="flex h-full flex-col">
-      {/* Same as RailContents: no border-b — header line owns the top edge. */}
-      <div className="flex h-14 items-center px-4">
-        <Wordmark variant="full" data-testid="wordmark-drawer" />
+      {/* Same as RailContents: no border-b — header line owns the top edge.
+          No px-4 here: the wordmark is `railAligned`, so its mark sits in
+          the same 72px centred slot as the rail glyph and stays put when
+          the rail expands into the drawer. */}
+      <div className="flex h-14 items-center">
+        <Wordmark variant="full" railAligned data-testid="wordmark-drawer" />
       </div>
       <nav className="scroll-thin flex-1 overflow-y-auto px-3 py-3">
         <ul className="flex flex-col gap-1">

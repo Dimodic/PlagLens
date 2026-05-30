@@ -1,11 +1,13 @@
 /**
- * TenantDashboardPage — admin tenant overview.
+ * TenantDashboardPage — admin «Обзор».
  *
- * Shown at /admin (uses user's own tenant) or /admin/dashboard/tenant/:id.
+ * Defaults to a whole-instance roll-up («Все организации»); the picker
+ * narrows to a single tenant. Shown at /admin and
+ * /admin/dashboard/tenant/:id (deep link pins that tenant).
  */
 import { useState } from 'react';
 import dayjs from 'dayjs';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import {
   Building2,
   Database,
@@ -23,10 +25,8 @@ import {
   useTenantIntegrationsHealth,
 } from '@/hooks/api/useDashboards';
 import { useTenants } from '@/hooks/api/useTenants';
-import { StatusPill } from '@/components/common/StatusPill';
 import { StatsPanel } from '@/components/common/StatsPanel';
 import { Page, PageHeader } from '@/components/layout/Page';
-import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -34,26 +34,47 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 
-function integrationBadge(status: string) {
-  if (status === 'healthy')
-    return <StatusPill tone="success">{status}</StatusPill>;
-  if (status === 'degraded')
-    return <StatusPill tone="warning">{status}</StatusPill>;
-  return <StatusPill tone="destructive">{status}</StatusPill>;
+function statusDot(status: string): string {
+  if (status === 'healthy') return 'bg-sev-low';
+  if (status === 'degraded') return 'bg-sev-mid';
+  return 'bg-sev-high';
 }
 
-function fmt(v: number | undefined | null): string {
+function statusText(status: string): string {
+  if (status === 'healthy') return 'работает';
+  if (status === 'degraded') return 'ожидает';
+  return 'ошибка';
+}
+
+/** Count formatter: grouped (« 3 174 ») up to 100k, then compact
+ *  (« 104 тыс. », « 1,2 млн ») so a six-figure submission count can't
+ *  blow out the KPI tile. */
+function fmtCount(v: number | undefined | null): string {
   if (v === undefined || v === null) return '—';
-  return String(v);
+  if (v >= 100_000) {
+    return new Intl.NumberFormat('ru-RU', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(v);
+  }
+  return new Intl.NumberFormat('ru-RU').format(v);
+}
+
+/** Bytes → human units (Russian), picking the unit so the value never
+ *  reads as a useless « 0.00 GB ». */
+function fmtBytes(b: number | undefined | null): string {
+  if (b === undefined || b === null) return '—';
+  if (b <= 0) return '0';
+  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  let n = b;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i += 1;
+  }
+  const digits = i > 0 && n < 100 ? 1 : 0;
+  return `${n.toFixed(digits).replace('.', ',')} ${units[i]}`;
 }
 
 /** Sentinel select value for the «whole instance» (all tenants) view. */
@@ -110,79 +131,71 @@ export default function TenantDashboardPage() {
           {
             icon: <Building2 className="h-4 w-4" />,
             label: 'Курсов',
-            value: fmt(data?.active_courses),
+            value: fmtCount(data?.active_courses),
           },
           {
             icon: <FileText className="h-4 w-4" />,
             label: 'Посылок',
-            value: fmt(data?.submissions_total),
+            value: fmtCount(data?.submissions_total),
           },
           {
             icon: <UserCheck className="h-4 w-4" />,
             label: 'DAU',
-            value: fmt(data?.active_users_dau),
+            value: fmtCount(data?.active_users_dau),
             tooltip: 'Daily Active Users — уникальных пользователей зашло за последние 24 часа',
           },
           {
             icon: <Users className="h-4 w-4" />,
             label: 'MAU',
-            value: fmt(data?.active_users_mau),
+            value: fmtCount(data?.active_users_mau),
             tooltip: 'Monthly Active Users — уникальных пользователей зашло за последние 30 дней',
           },
           {
             icon: <ShieldCheck className="h-4 w-4" />,
             label: 'Проверок',
-            value: fmt(data?.plagiarism_runs_total),
+            value: fmtCount(data?.plagiarism_runs_total),
             tooltip: 'Запусков проверки на заимствования',
           },
           {
             icon: <Database className="h-4 w-4" />,
             label: 'Хранилище',
-            value:
-              data?.storage_used_bytes !== undefined
-                ? `${(data.storage_used_bytes / 1024 / 1024 / 1024).toFixed(2)} GB`
-                : '—',
+            value: fmtBytes(data?.storage_used_bytes),
             tooltip: 'Объём файлов в MinIO (решения студентов, экспорты, отчёты)',
           },
         ]}
       />
 
+      {/* Integration health — flat list, no card chrome (minimalism). */}
       <section className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-base font-semibold tracking-tight">Состояние интеграций</h2>
-          <Button asChild variant="link" className="h-auto p-0">
-            <Link to="/admin/dashboard/global">Глобальный дашборд</Link>
-          </Button>
-        </div>
+        <h2 className="text-base font-semibold tracking-tight">
+          Состояние интеграций
+        </h2>
         {integrations.isLoading ? (
           <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
         ) : !integrations.data?.length ? (
-          <p className="text-sm text-muted-foreground">Нет данных.</p>
+          <p className="text-sm text-muted-foreground">Нет настроенных интеграций.</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Интеграция</TableHead>
-                  <TableHead>Статус</TableHead>
-                  <TableHead>Последняя проверка</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {integrations.data.map((it) => (
-                  <TableRow
-                    key={it.integration}
-                    data-testid={`integration-${it.integration}`}
-                  >
-                    <TableCell>{it.integration}</TableCell>
-                    <TableCell>{integrationBadge(it.status)}</TableCell>
-                    <TableCell>
-                      {dayjs(it.last_check_at).format('DD.MM HH:mm')}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          <div className="divide-y divide-border/50" data-testid="tenant-integrations">
+            {integrations.data.map((it) => (
+              <div
+                key={it.integration}
+                className="flex items-center gap-4 py-3"
+                data-testid={`integration-${it.integration}`}
+              >
+                <span
+                  className={`h-2 w-2 flex-none rounded-full ${statusDot(it.status)}`}
+                />
+                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                  {it.integration}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground">
+                  {statusText(it.status)}
+                </span>
+                <span className="shrink-0 text-xs text-muted-foreground tabular-nums w-[92px] text-right">
+                  {it.last_check_at ? dayjs(it.last_check_at).format('DD.MM HH:mm') : '—'}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </section>
