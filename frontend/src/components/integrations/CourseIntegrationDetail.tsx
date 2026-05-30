@@ -26,6 +26,7 @@ import {
 import { useNotifications } from '@/hooks/useNotifications';
 import type { Problem } from '@/api/types';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -89,6 +90,7 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
   const update = useUpdateIntegration(integration.id);
   const syncNow = useSyncNow(integration.id);
   const remove = useDeleteIntegration();
+  const [confirmRemove, setConfirmRemove] = useState(false);
 
   const selected = useMemo(
     () => new Set(autosync.homework_ids),
@@ -120,12 +122,10 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
   };
 
   const onRemove = async () => {
-    if (!confirm(`Отключить интеграцию «${KIND_TITLES[integration.kind] ?? integration.kind}»?`)) {
-      return;
-    }
     try {
       await remove.mutateAsync(integration.id);
       notify.success('Интеграция отключена');
+      setConfirmRemove(false);
       onChanged();
     } catch (e) {
       notify.error((e as Problem)?.detail ?? 'Не удалось отключить');
@@ -268,7 +268,7 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
       <div className="border-t border-border/50 pt-5">
         <button
           type="button"
-          onClick={onRemove}
+          onClick={() => setConfirmRemove(true)}
           disabled={remove.isPending}
           className="text-sm font-medium text-destructive hover:underline disabled:opacity-50"
           data-testid="course-integration-remove"
@@ -276,6 +276,17 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
           Отключить интеграцию
         </button>
       </div>
+
+      <ConfirmDialog
+        opened={confirmRemove}
+        title={`Отключить интеграцию «${title}»?`}
+        message="Импортированные посылки останутся, но синхронизация прекратится."
+        confirmLabel="Отключить"
+        destructive
+        loading={remove.isPending}
+        onConfirm={onRemove}
+        onClose={() => setConfirmRemove(false)}
+      />
     </div>
   );
 }

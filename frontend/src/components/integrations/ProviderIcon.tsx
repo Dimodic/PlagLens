@@ -10,7 +10,8 @@
  * For non-brand providers (eJudge, Manual ZIP) we keep a small lucide
  * fallback so the caller can use a single component everywhere.
  */
-import { Archive, Code2 } from 'lucide-react';
+import { Archive, Code2, GraduationCap } from 'lucide-react';
+import { SiGooglesheets } from 'react-icons/si';
 import type { IntegrationKind } from '@/api/endpoints/integrations';
 
 interface Props {
@@ -40,24 +41,16 @@ export function ProviderIcon({ kind, className = 'h-4 w-4' }: Props) {
   }
 
   if (kind === 'stepik') {
-    // simple-icons/stepik — the "wing" mark Stepik actually uses in
-    // their docs / favicon. The previous path I shipped was a stray
-    // chunk that rendered as three disconnected bars; this is the
-    // canonical full glyph from simple-icons.org.
-    return (
-      <svg {...common}>
-        <path d="M3.92 17.55h5.013l1.81-2.875-2.49-1.59c-1.95-1.323-2.49-2.464-2.49-4.397 0-2.45 2.066-4.265 4.785-4.265h.948c.46 0 1.137.41 1.137.998v9.94c0 1.36-1.117 2.479-2.477 2.479h1.79c1.36 0 2.477-1.118 2.477-2.478V4.7c0-.587.677-.997 1.138-.997h2.99c2.72 0 4.79 1.815 4.79 4.265 0 1.933-.54 3.074-2.49 4.398l-2.49 1.589 1.812 2.875h5.014L12 21.7l-8.08-4.15z" />
-      </svg>
-    );
+    // No SiStepik in react-icons 5.6.0 (verified) and the hand-rolled
+    // paths kept rendering garbled — use lucide GraduationCap, the same
+    // semantically-apt fallback BrandIcon uses for Stepik.
+    return <GraduationCap className={className} aria-hidden />;
   }
 
   if (kind === 'google_sheets') {
-    // simple-icons/googlesheets — folded-corner spreadsheet with grid.
-    return (
-      <svg {...common}>
-        <path d="M11.318 12.545H7.91v-1.909h3.41v1.91zM14.728 0H5.456A1.456 1.456 0 0 0 4 1.456v21.088A1.456 1.456 0 0 0 5.456 24h13.088A1.456 1.456 0 0 0 20 22.544V5.272L14.727 0zm3.456 20.727H5.818V3.273h8.318V6h4.05v14.727zm-1.91-9H7.91v-1.909h8.364v1.91zM12.682 14.455H7.91v1.909h4.773v-1.91zm0 3.272H7.91v1.91h4.773v-1.91zm1.273-3.272h2.318v1.909h-2.318v-1.91zm0 3.272h2.318v1.91h-2.318v-1.91z" />
-      </svg>
-    );
+    // Official simple-icons glyph via react-icons (correct aspect — the
+    // hand-rolled path was distorted).
+    return <SiGooglesheets className={className} aria-hidden />;
   }
 
   if (kind === 'ejudge') {

@@ -43,6 +43,7 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import {
   useCreateIntegration,
+  useDeleteIntegration,
   useIntegrations,
 } from '@/hooks/api/useIntegrations';
 import {
@@ -68,8 +69,8 @@ interface CourseIntegrationsPanelProps {
   items: IntegrationConfig[];
   isPending: boolean;
   error: Problem | null;
-  connecting: boolean;
-  onConnect: (kind: IntegrationKind) => void;
+  /** eJudge / Manual connect by token — opens the page-level modal. */
+  onTokenConnect: (kind: IntegrationKind) => void;
   onChanged: () => void;
 }
 
@@ -92,8 +93,7 @@ function CourseIntegrationsPanel({
   items,
   isPending,
   error,
-  connecting,
-  onConnect,
+  onTokenConnect,
   onChanged,
 }: CourseIntegrationsPanelProps) {
   // Nothing selected by default — keeps the page calm and shows the
@@ -169,8 +169,8 @@ function CourseIntegrationsPanel({
         ) : (
           <ConnectPrompt
             kind={selectedKind}
-            connecting={connecting}
-            onConnect={onConnect}
+            onTokenConnect={onTokenConnect}
+            onChanged={onChanged}
           />
         )}
       </div>
@@ -178,18 +178,62 @@ function CourseIntegrationsPanel({
   );
 }
 
-/** Right-pane prompt for a not-yet-connected source. */
+/** Right-pane prompt for a not-yet-connected source.
+ *
+ *  OAuth kinds (yc/stepik/sheets) connect inline: we create the config,
+ *  and if the provider's OAuth isn't set up by the admin the server
+ *  returns no authorize URL — we then roll back the just-created config
+ *  (so no «ожидает авторизации» ghost row is left behind) and show the
+ *  error right here on the page, not as a toast. Token kinds defer to the
+ *  page's modal. */
 function ConnectPrompt({
   kind,
-  connecting,
-  onConnect,
+  onTokenConnect,
+  onChanged,
 }: {
   kind: IntegrationKind;
-  connecting: boolean;
-  onConnect: (kind: IntegrationKind) => void;
+  onTokenConnect: (kind: IntegrationKind) => void;
+  onChanged: () => void;
 }) {
+  const createMut = useCreateIntegration();
+  const deleteMut = useDeleteIntegration();
+  const [problem, setProblem] = useState<string | null>(null);
+
   const title = KIND_TITLES[kind] ?? kind;
-  const viaOauth = kind === 'yandex_contest' || kind === 'stepik' || kind === 'google_sheets';
+  const viaOauth =
+    kind === 'yandex_contest' || kind === 'stepik' || kind === 'google_sheets';
+  const busy = createMut.isPending || deleteMut.isPending;
+
+  const connect = () => {
+    if (!viaOauth) {
+      onTokenConnect(kind);
+      return;
+    }
+    setProblem(null);
+    createMut.mutate(
+      { kind, display_name: title, settings: {} },
+      {
+        onSuccess: (res) => {
+          if (res.oauth_authorize_url) {
+            window.location.assign(res.oauth_authorize_url);
+            return;
+          }
+          // Not configured by the admin → undo the dangling config and
+          // surface the reason inline.
+          if (res.config?.id) deleteMut.mutate(res.config.id);
+          setProblem(
+            'OAuth для этого источника ещё не настроен. Попросите администратора заполнить ключи в «Интеграции → Авторизация».',
+          );
+          onChanged();
+        },
+        onError: (p) =>
+          setProblem(
+            (p as unknown as Problem).title || 'Не удалось подключить',
+          ),
+      },
+    );
+  };
+
   return (
     <div className="space-y-5">
       <header className="flex items-center gap-2">
@@ -202,12 +246,17 @@ function ConnectPrompt({
           ? 'Подключение откроет страницу авторизации провайдера. После входа источник появится здесь, и можно будет настроить синхронизацию.'
           : 'Подключите источник по токену или загрузите архив с решениями.'}
       </p>
+      {problem && (
+        <p role="alert" className="max-w-md text-sm text-destructive">
+          {problem}
+        </p>
+      )}
       <Button
-        onClick={() => onConnect(kind)}
-        disabled={connecting}
+        onClick={connect}
+        disabled={busy}
         data-testid={`integration-connect-${kind}`}
       >
-        {connecting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
         Подключить
       </Button>
     </div>
@@ -219,64 +268,16 @@ function ConnectPrompt({
 
 export function IntegrationsListPage() {
   useDocumentTitle('Интеграции');
-  const notify = useNotifications();
   const { user } = useAuth();
   const isAdmin = user?.global_role === 'admin';
   const { data, isPending, error, refetch } = useIntegrations({ limit: 100 });
   const items = data?.data ?? [];
 
-  const createMut = useCreateIntegration();
-
   // Which kind the inline token dialog is currently editing. ``null`` →
-  // dialog closed. Set from the dropdown click on eJudge / Manual.
+  // dialog closed. Opened from the «Подключить» button for eJudge / Manual.
   const [tokenDialogKind, setTokenDialogKind] = useState<IntegrationKind | null>(
     null,
   );
-
-
-  // OAuth-redirect helper used by Y.Contest / Stepik / Google Sheets.
-  // Server returns oauth_authorize_url when the provider is configured
-  // (client_id+secret saved on /admin/integrations → Авторизация). If
-  // it's null we surface a soft toast and bail — no half-baked
-  // integration row is left behind.
-  const startOAuthIntegration = (
-    kind: IntegrationKind,
-    displayName: string,
-  ) => {
-    createMut.mutate(
-      { kind, display_name: displayName, settings: {} },
-      {
-        onSuccess: (res) => {
-          if (res.oauth_authorize_url) {
-            window.location.assign(res.oauth_authorize_url);
-            return;
-          }
-          notify.info(
-            'OAuth для этого провайдера не настроен. Попросите администратора заполнить ключи в «Интеграции → Авторизация».',
-          );
-          refetch();
-        },
-        onError: (p) => {
-          notify.error(
-            (p as unknown as Problem).title ||
-              'Не удалось создать подключение',
-          );
-        },
-      },
-    );
-  };
-
-  // Connecting a source — no header button anymore. The teacher picks a
-  // kind from the left menu; if it's not yet connected the detail pane
-  // shows a «Подключить» button that calls this. OAuth kinds redirect to
-  // the provider; eJudge / Manual open the inline token modal.
-  const onConnect = (kind: IntegrationKind) => {
-    if (kind === 'ejudge' || kind === 'manual') {
-      setTokenDialogKind(kind);
-      return;
-    }
-    startOAuthIntegration(kind, KIND_TITLES[kind] ?? kind);
-  };
 
   return (
     <Page width="regular">
@@ -301,8 +302,7 @@ export function IntegrationsListPage() {
           items={items}
           isPending={isPending && !data}
           error={(error as unknown as Problem) ?? null}
-          connecting={createMut.isPending}
-          onConnect={onConnect}
+          onTokenConnect={(kind) => setTokenDialogKind(kind)}
           onChanged={() => refetch()}
         />
       )}
