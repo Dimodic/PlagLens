@@ -35,18 +35,17 @@
       of waiting for the JS entry to import global.css. Background is keyed
       off the `dark` class set by the script above — light by default,
       dark when the class is present — so reloads never flash white→dark.
+
+      The splash shows the brand mark (P-lens glyph), gently pulsing —
+      the SAME mark, size and position the React loading state uses
+      (ProtectedRoute), so the HTML→React handoff is seamless: one steady
+      logo, not a spinner-then-wordmark two-step.
     -->
     <style>
       html, body { margin: 0; padding: 0; height: 100%; }
       html { background: #ffffff; }
       html.dark { background: #0a0a0a; }
-      body {
-        background: transparent;
-        color: #71717a;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
-          'Helvetica Neue', Arial, sans-serif;
-      }
-      html.dark body { color: #a1a1aa; }
+      body { background: transparent; }
       #root { min-height: 100%; }
       .pl-splash {
         position: fixed;
@@ -54,14 +53,26 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 14px;
-        letter-spacing: 0.01em;
+      }
+      .pl-splash svg {
+        height: 44px;
+        width: auto;
+        color: #4f46e5;
+        animation: pl-splash-pulse 1.2s ease-in-out infinite;
+      }
+      @keyframes pl-splash-pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
       }
     </style>
   </head>
   <body>
     <div id="root">
-      <div class="pl-splash">PlagLens</div>
+      <div class="pl-splash">
+        <svg viewBox="28 16 48 68" fill="currentColor" role="img" aria-label="PlagLens">
+          <path fill-rule="evenodd" d="M28 16 H50 a26 26 0 0 1 0 52 H42 V84 H28 Z M58 42 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0"></path>
+        </svg>
+      </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

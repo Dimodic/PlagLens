@@ -1,10 +1,15 @@
 /**
  * Wraps protected routes. Redirects to /login when anonymous.
- * While auth is "loading" (bootstrap refresh) we render a centered loader.
+ *
+ * While auth is "loading" (bootstrap refresh) we render the SAME brand
+ * mark — same glyph, size and centre — that the pre-paint HTML splash
+ * (index.html) shows. That makes the reload sequence one continuous,
+ * gently-pulsing logo instead of «spinner → wordmark → app». Background
+ * is `bg-background` so it matches the already-themed page.
  */
-import { Loader2 } from 'lucide-react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './useAuth';
+import { BrandMark } from '@/components/shell/BrandMark';
 
 export function ProtectedRoute() {
   const { status } = useAuth();
@@ -12,8 +17,8 @@ export function ProtectedRoute() {
 
   if (status === 'loading') {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex h-screen items-center justify-center bg-background">
+        <BrandMark cropped className="h-11 w-auto animate-pulse" />
       </div>
     );
   }
