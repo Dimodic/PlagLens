@@ -177,8 +177,16 @@ export const coursesApi = {
   // for the existing callers (JoinByCodeDialog / JoinByCodePage).
   joinByCode: (code: string) =>
     api
-      .post<{ course_id: string | null }>('/invitations:redeem', { code })
-      .then((r) => ({ course_id: r.data.course_id ?? '' })),
+      .post<{ course_id: string | null; role_applied?: string | null }>(
+        '/invitations:redeem',
+        { code },
+      )
+      .then((r) => ({
+        course_id: r.data.course_id ?? '',
+        // Surfaced so the caller can refresh the session + rebuild the shell
+        // when a code bumps the global role (e.g. a teacher invite).
+        role_applied: r.data.role_applied ?? null,
+      })),
 
   // ---- owners ----
   // NB: this endpoint returns a *bare array* (``list[OwnerRead]``), not a

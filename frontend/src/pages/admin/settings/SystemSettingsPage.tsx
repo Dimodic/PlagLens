@@ -110,7 +110,7 @@ export function SystemSettingsPage() {
           v: dayjs(data.deployed_at).format('DD.MM.YYYY HH:mm'),
         },
         {
-          k: 'Uptime',
+          k: t('system_settings.uptime'),
           v: <span className="tabular-nums">{formatUptime(data.uptime_seconds)}</span>,
         },
       ].filter(Boolean) as { k: string; v: React.ReactNode }[]

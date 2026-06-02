@@ -5,6 +5,7 @@
  */
 import { FormEvent, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/auth/useAuth';
 import { Loader2 } from 'lucide-react';
 import { useJoinByCode } from '@/hooks/api/useCourses';
@@ -35,22 +36,11 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
   const navigate = useNavigate();
   const notify = useNotifications();
   const join = useJoinByCode();
-  const { user } = useAuth();
+  const { refresh } = useAuth();
+  const queryClient = useQueryClient();
   const [problem, setProblem] = useState<Problem | null>(null);
   const [code, setCode] = useState('');
   const [codeError, setCodeError] = useState<string | null>(null);
-
-  // Where the user lands after a successful redeem depends on what kind
-  // of code they used:
-  //   • A code that joins a specific course → land on that course page.
-  //   • A binding-only code (Yandex.Contest participant claim, etc.) →
-  //     the API may not return a course slug; previously we fell back to
-  //     /courses (teacher-style list), which is useless for a student
-  //     who's actually after their newly-claimed submissions. For
-  //     students we land them on /me — the dashboard with the «Мои
-  //     посылки» list now showing those backfilled submissions. Staff
-  //     keep the old /courses fallback because that's their natural home.
-  const fallbackHome = user?.global_role === 'student' ? '/me' : '/courses';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -65,24 +55,28 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
       notify.success(t('join_by_code.joined_success'));
       onOpenChange(false);
       setCode('');
-      const maybeSlug =
-        (res as { course_slug?: string }).course_slug ??
-        (res as { course?: { slug?: string } }).course?.slug;
-      if (maybeSlug) {
-        navigate(`/courses/${maybeSlug}`);
+      // A code may bump the global role / move tenant (e.g. a teacher
+      // invite), so re-mint the access token from the fresh DB principal
+      // and drop role-gated caches before deciding where to land.
+      await refresh();
+      await queryClient.invalidateQueries();
+      if (res.role_applied) {
+        // Role changed: rebuild the whole shell against the new principal
+        // (sidebar + default landing). HomeRedirect sends teacher → /courses.
+        window.location.assign('/');
         return;
       }
-      const courseId = res.course_id;
-      if (courseId) {
+      if (res.course_id) {
         try {
-          const course = await coursesApi.get(String(courseId));
+          const course = await coursesApi.get(String(res.course_id));
           navigate(`/courses/${course.slug}`);
           return;
         } catch {
           /* fall through to home */
         }
       }
-      navigate(fallbackHome);
+      // No specific course — let HomeRedirect route by the (refreshed) role.
+      navigate('/');
     } catch (err) {
       setProblem(parseProblem(err));
     }

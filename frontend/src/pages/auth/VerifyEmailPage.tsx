@@ -1,19 +1,17 @@
 /**
- * /auth/verify?token=… — confirms email by token.
- * Calls POST /auth/email/verify/confirm with the token.
+ * /auth/verify?t=… — confirms email by token.
  *
- * Three states: verifying, ok, error. token-missing renders a separate panel.
+ * Flat states (no boxes): verifying / ok / error / token-missing. The heading
+ * carries the result, a plain sub-line gives context, one button below —
+ * matching the login screen's chrome-free style.
  */
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { authApi } from '@/api/endpoints/auth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useTranslation } from '@/i18n';
-import type { Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BrandMark } from '@/components/shell/BrandMark';
 
 type State = 'idle' | 'verifying' | 'ok' | 'error';
@@ -23,10 +21,10 @@ export function VerifyEmailPage() {
   useDocumentTitle(t('auth.verify.title'));
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const token = params.get('token') ?? '';
+  // Email links use `?t=` (build_frontend_url); accept `?token=` too as a fallback.
+  const token = params.get('t') ?? params.get('token') ?? '';
 
   const [state, setState] = useState<State>('idle');
-  const [problem, setProblem] = useState<Problem | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -37,10 +35,8 @@ export function VerifyEmailPage() {
       .then(() => {
         if (!cancelled) setState('ok');
       })
-      .catch((p) => {
-        if (cancelled) return;
-        setProblem(p as Problem);
-        setState('error');
+      .catch(() => {
+        if (!cancelled) setState('error');
       });
     return () => {
       cancelled = true;
@@ -60,49 +56,48 @@ export function VerifyEmailPage() {
     );
   }
 
+  const heading =
+    state === 'ok'
+      ? t('auth.verify.ok_title')
+      : state === 'error'
+        ? t('auth.verify.error_title')
+        : t('auth.verify.heading');
+  const sub =
+    state === 'verifying'
+      ? t('auth.verify.checking')
+      : state === 'ok'
+        ? t('auth.verify.ok_body')
+        : state === 'error'
+          ? t('auth.verify.error_body')
+          : '';
+
   return (
-    <Shell
-      heading={t('auth.verify.heading')}
-      sub={state === 'verifying' ? t('auth.verify.checking') : ''}
-    >
-      <div className="space-y-4">
-        {state === 'verifying' && (
-          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            {t('auth.verify.checking')}
-          </div>
-        )}
-        {state === 'ok' && (
-          <div data-testid="verify-state-ok" className="space-y-4">
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>{t('auth.verify.success')}</AlertDescription>
-            </Alert>
-            <Button
-              type="button"
-              className="w-full"
-              onClick={() => navigate('/login')}
-            >
-              {t('auth.verify.cta')}
-            </Button>
-          </div>
-        )}
-        {state === 'error' && (
-          <div data-testid="verify-state-error" className="space-y-4">
-            {problem && (
-              <Alert variant="destructive" data-testid="problem-alert">
-                <AlertTitle>{problem.title}</AlertTitle>
-                {problem.detail && (
-                  <AlertDescription>{problem.detail}</AlertDescription>
-                )}
-              </Alert>
-            )}
-            <Button variant="outline" className="w-full" asChild>
-              <Link to="/login">{t('auth.verify.token_missing.cta')}</Link>
-            </Button>
-          </div>
-        )}
-      </div>
+    <Shell heading={heading} sub={sub}>
+      {state === 'verifying' && (
+        <div className="flex justify-center" data-testid="verify-state-verifying">
+          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      {state === 'ok' && (
+        <Button
+          type="button"
+          className="w-full"
+          onClick={() => navigate('/login')}
+          data-testid="verify-state-ok"
+        >
+          {t('auth.verify.cta')}
+        </Button>
+      )}
+      {state === 'error' && (
+        <Button
+          variant="outline"
+          className="w-full"
+          asChild
+          data-testid="verify-state-error"
+        >
+          <Link to="/login">{t('auth.verify.token_missing.cta')}</Link>
+        </Button>
+      )}
     </Shell>
   );
 }
@@ -118,14 +113,11 @@ function Shell({ heading, sub, children }: ShellProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
-          <BrandMark tile className="h-10 w-10 rounded-md" title="PlagLens" />
+          <BrandMark cropped className="h-14 w-14" title="PlagLens" />
           <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
           {sub && <p className="text-sm text-muted-foreground">{sub}</p>}
         </div>
-
-        <Card>
-          <CardContent className="p-6">{children}</CardContent>
-        </Card>
+        {children}
       </div>
     </div>
   );

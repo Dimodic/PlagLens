@@ -1,5 +1,5 @@
 /**
- * /auth/reset?token=… — single centered card. Sets a new password using
+ * /auth/reset?t=… — flat centered panel. Sets a new password using
  * the reset token from the email link.
  */
 import { FormEvent, useState } from 'react';
@@ -13,7 +13,6 @@ import type { Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
 import { BrandMark } from '@/components/shell/BrandMark';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -26,7 +25,8 @@ export function ResetPasswordPage() {
   const { t } = useTranslation();
   useDocumentTitle(t('auth.reset.title'));
   const [params] = useSearchParams();
-  const token = params.get('token') ?? '';
+  // Email links use `?t=` (build_frontend_url); accept `?token=` too as a fallback.
+  const token = params.get('t') ?? params.get('token') ?? '';
   const navigate = useNavigate();
 
   const [newPassword, setNewPassword] = useState('');
@@ -154,14 +154,12 @@ function SingleCardShell({ heading, sub, children }: ShellProps) {
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2 text-center">
-          <BrandMark tile className="h-10 w-10 rounded-md" title="PlagLens" />
+          <BrandMark cropped className="h-14 w-14" title="PlagLens" />
           <h1 className="text-xl font-semibold tracking-tight">{heading}</h1>
           <p className="text-sm text-muted-foreground">{sub}</p>
         </div>
 
-        <Card>
-          <CardContent className="p-6 space-y-4">{children}</CardContent>
-        </Card>
+        {children}
 
         <p className="text-center text-xs text-muted-foreground">
           <Link to="/login" className="text-primary hover:underline">
