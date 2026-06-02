@@ -15,7 +15,7 @@ class Settings(BaseSettings):
 
     # ---- General ----
     service_name: str = "gateway"
-    version: str = "0.1.0"
+    version: str = "1.0.0"
     commit: str = "dev"
     built_at: str = "1970-01-01T00:00:00Z"
     environment: str = "dev"
@@ -114,6 +114,10 @@ PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/auth/register",
         "/api/v1/auth/refresh",
         "/api/v1/auth/password/forgot",
+        "/api/v1/auth/password/reset",
+        # Email-link confirmations — clicked while logged-out; the email token
+        # travels in the body and is validated by identity, no JWT needed.
+        "/api/v1/auth/email/verify/confirm",
         # Service-to-service token issuance — auth is by `X-Service-Secret`,
         # not by Bearer JWT, so the gateway must let the request reach
         # identity-service unwrapped.

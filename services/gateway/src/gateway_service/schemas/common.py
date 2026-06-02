@@ -28,6 +28,9 @@ class VersionInfo(BaseModel):
     commit: str
     built_at: str
     environment: str
+    # Seconds since the gateway process started — surfaced on the admin
+    # «Система» page. 0 only in the instant before the first request.
+    uptime_seconds: int = 0
 
 
 class BackendHealth(BaseModel):

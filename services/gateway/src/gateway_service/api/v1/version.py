@@ -7,12 +7,18 @@ single coroutine — only the innermost path is registered).
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter
 
 from gateway_service.config import settings
 from gateway_service.schemas.common import VersionInfo
 
 router = APIRouter()
+
+# Captured at import (≈ process start); `uptime_seconds` is elapsed monotonic
+# time since, immune to wall-clock adjustments.
+_STARTED_MONOTONIC = time.monotonic()
 
 
 async def _version_payload() -> VersionInfo:
@@ -22,6 +28,7 @@ async def _version_payload() -> VersionInfo:
         commit=settings.commit,
         built_at=settings.built_at,
         environment=settings.environment,
+        uptime_seconds=int(time.monotonic() - _STARTED_MONOTONIC),
     )
 
 
