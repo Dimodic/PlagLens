@@ -37,6 +37,8 @@ export interface IntegrationListFilters extends ListParams {
   status?: IntegrationStatus;
   course_id?: string;
   tenant_id?: string;
+  /** Restrict to the caller's own connectors (per-teacher OAuth accounts). */
+  mine?: boolean;
 }
 
 export interface ConnectionStatus {
@@ -185,6 +187,7 @@ export const integrationsApi = {
     if (params.status) base.status = params.status;
     if (params.course_id) base.course_id = params.course_id;
     if (params.tenant_id) base.tenant_id = params.tenant_id;
+    if (params.mine) base.mine = 'true';
     return api
       .get<Paginated<IntegrationConfig>>('/integrations', { params: base })
       .then((r) => r.data);
@@ -323,6 +326,7 @@ export const integrationsApi = {
         imported: number;
         failed: number;
         errors: string[];
+        name?: string | null;
       }>(
         `/integrations/yandex-contest/${configId}/contests/${contestId}/problems`,
       )
@@ -336,11 +340,14 @@ export const integrationsApi = {
     configId: string,
     contestId: number | string,
     course_id?: string,
+    problemAliases?: string[],
   ) =>
     api
       .post<{ operation_id: string; status_url: string }>(
         `/integrations/yandex-contest/${configId}/contests/${contestId}/import-as-homework`,
-        undefined,
+        problemAliases && problemAliases.length
+          ? { problem_aliases: problemAliases }
+          : undefined,
         course_id ? { params: { course_id } } : undefined,
       )
       .then((r) => r.data),
@@ -428,6 +435,129 @@ export const integrationsApi = {
       }>(
         `/integrations/yandex-contest/${configId}/contests/${contestId}/import-submissions`,
       )
+      .then((r) => r.data),
+
+  // -------- Stepik specifics --------
+  /** Lessons (titled) with their steps (id + position + type) for the manual
+   *  step-selection tree in the import dialog. */
+  stepikCourseTree: (configId: string, stepikCourseId: number | string) =>
+    api
+      .get<{
+        data: Array<{
+          lesson_id: number;
+          title: string;
+          steps: Array<{ id: number; position: number | null; type: string | null }>;
+        }>;
+        name?: string | null;
+      }>(`/integrations/stepik/${configId}/courses/${stepikCourseId}/tree`)
+      .then((r) => r.data),
+
+  /** Kick off the async Stepik import-as-homework. Poll
+   *  ``stepikGetImportOperation(operation_id)`` for progress. */
+  stepikImportAsHomework: (
+    configId: string,
+    body: {
+      course_id: string;
+      stepik_course_id: number | string;
+      step_ids: number[];
+      title?: string;
+    },
+  ) =>
+    api
+      .post<{
+        operation_id: string;
+        status_url: string;
+        already_imported?: boolean;
+        homework_id?: string;
+      }>(`/integrations/stepik/${configId}/import-as-homework`, body)
+      .then((r) => r.data),
+
+  /** Poll endpoint for the Stepik import operation (same shape as YC). */
+  stepikGetImportOperation: (opId: string) =>
+    api
+      .get<{
+        status: 'running' | 'completed' | 'failed' | 'expired';
+        stage:
+          | 'starting'
+          | 'creating_homework'
+          | 'creating_assignments'
+          | 'fetching_submissions'
+          | 'importing_submissions'
+          | 'done'
+          | null;
+        stepik_course_id?: number | string;
+        course_id?: string;
+        homework_id?: string | null;
+        homework_slug?: string | null;
+        homework_title?: string | null;
+        problems_total?: number;
+        problems_done?: number;
+        submissions_fetched?: number;
+        submissions_imported?: number;
+        errors?: string[];
+        resync?: boolean;
+      }>(`/integrations/stepik/import-operations/${opId}`)
+      .then((r) => r.data),
+
+  // -------- eJudge specifics --------
+  ejudgeListProblems: (configId: string, contestId: number | string) =>
+    api
+      .get<{
+        data: Array<{
+          external_id: string;
+          alias: string | null;
+          title: string;
+          position: number | null;
+          statement_html: string | null;
+        }>;
+        imported: number;
+        failed: number;
+        errors: string[];
+      }>(`/integrations/ejudge/${configId}/contests/${contestId}/problems`)
+      .then((r) => r.data),
+
+  ejudgeImportAsHomework: (
+    configId: string,
+    body: {
+      course_id: string;
+      contest_id: number | string;
+      problem_aliases?: string[];
+      title?: string;
+    },
+  ) =>
+    api
+      .post<{
+        operation_id: string | null;
+        status_url?: string;
+        already_imported?: boolean;
+        homework_id?: string;
+      }>(`/integrations/ejudge/${configId}/import-as-homework`, body)
+      .then((r) => r.data),
+
+  ejudgeGetImportOperation: (opId: string) =>
+    api
+      .get<{
+        status: 'running' | 'completed' | 'failed' | 'expired';
+        stage:
+          | 'starting'
+          | 'fetching_contest'
+          | 'creating_homework'
+          | 'creating_assignments'
+          | 'fetching_submissions'
+          | 'importing_submissions'
+          | 'done'
+          | null;
+        contest_id?: number | string;
+        course_id?: string;
+        homework_id?: string | null;
+        homework_slug?: string | null;
+        homework_title?: string | null;
+        problems_total?: number;
+        problems_done?: number;
+        submissions_fetched?: number;
+        submissions_imported?: number;
+        errors?: string[];
+      }>(`/integrations/ejudge/import-operations/${opId}`)
       .then((r) => r.data),
 
   // -------- Sync --------

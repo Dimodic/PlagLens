@@ -1,18 +1,36 @@
 /**
- * /admin/tenants/:id — institution detail. Tabs: Настройки, Пользователи,
- * Статистика, Аудит. Flat layout (no card chrome) per the minimalism principle.
+ * /admin/tenants/:id — institution detail. Tabs: Пользователи, Приглашения,
+ * Статистика, Аудит. Wide, flat layout (no card chrome).
+ *
+ * No «Настройки» tab: the tenant id sits under the title (copy-able) and the
+ * only lifecycle control — suspend / activate — lives in the header. Stats
+ * come from the Reporting tenant overview (live cross-schema counts) plus the
+ * activity charts; audit reuses the same table as /admin/audit, scoped to this
+ * tenant via the X-Cross-Tenant header.
  */
-import { useEffect, useState, KeyboardEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, X } from 'lucide-react';
+import {
+  Activity,
+  ArrowLeft,
+  BookOpen,
+  Database,
+  FileText,
+  Loader2,
+  ShieldCheck,
+  Users,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusPill } from '@/components/common/StatusPill';
+import { StatsPanel } from '@/components/common/StatsPanel';
+import { CopyButton } from '@/components/common/CopyButton';
+import { EmptyState } from '@/components/common/EmptyState';
 import { Page } from '@/components/layout/Page';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
+import { AuditEventsTable } from '@/components/admin/AuditEventsTable';
+import { AdminActivityCharts } from '@/components/dashboard/AdminActivityCharts';
 import { TenantInvitationsPanel } from '@/components/admin/TenantInvitationsPanel';
+import { TenantUsersPanel } from '@/components/admin/TenantUsersPanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTranslation } from '@/i18n';
@@ -20,23 +38,28 @@ import {
   useActivateTenant,
   useSuspendTenant,
   useTenant,
-  useTenantUsage,
-  useUpdateTenantSettings,
 } from '@/hooks/api/useTenants';
+import { useActivity, useTenantDashboard } from '@/hooks/api/useDashboards';
+import { useTenantAuditEvents } from '@/hooks/api/useAudit';
 import type { Problem } from '@/api/types';
 
-function Metric({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </div>
-      <div className="mt-1.5 text-2xl font-medium tracking-tight tabular-nums">
-        {value}
-      </div>
-    </div>
-  );
+/** Bytes → human units; picks the unit so it never reads « 0.00 ГБ ». */
+function fmtBytes(b: number | undefined | null, unitsCsv: string): string {
+  if (b === undefined || b === null) return '—';
+  if (b <= 0) return '0';
+  const units = unitsCsv.split(',');
+  let n = b;
+  let i = 0;
+  while (n >= 1024 && i < units.length - 1) {
+    n /= 1024;
+    i += 1;
+  }
+  const digits = i > 0 && n < 100 ? 1 : 0;
+  return `${n.toFixed(digits).replace('.', ',')} ${units[i]}`;
 }
+
+const fmtNum = (v: number | undefined | null): string =>
+  v === undefined || v === null ? '—' : new Intl.NumberFormat('ru-RU').format(v);
 
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -44,21 +67,13 @@ export function TenantDetailPage() {
   useDocumentTitle(t('tenant_detail.title'));
   const notify = useNotifications();
   const tenantQ = useTenant(id);
-  const usageQ = useTenantUsage(id);
-  const update = useUpdateTenantSettings(id ?? '');
   const suspend = useSuspendTenant();
   const activate = useActivateTenant();
 
-  const [corsOrigins, setCorsOrigins] = useState<string[]>([]);
-  const [corsInput, setCorsInput] = useState('');
-  const [defaultProvider, setDefaultProvider] = useState('');
-
-  useEffect(() => {
-    if (tenantQ.data) {
-      setCorsOrigins(tenantQ.data.settings?.cors_origins ?? tenantQ.data.cors_origins ?? []);
-      setDefaultProvider((tenantQ.data.settings?.default_ai_provider as string) ?? '');
-    }
-  }, [tenantQ.data]);
+  // Inline data: live stats + activity charts + this tenant's audit log.
+  const statsQ = useTenantDashboard(id);
+  const activityQ = useActivity(id);
+  const auditQ = useTenantAuditEvents(id, { limit: 25 });
 
   const backLink = (
     <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 text-muted-foreground">
@@ -78,7 +93,7 @@ export function TenantDetailPage() {
   }
   if (tenantQ.error) {
     return (
-      <Page width="regular">
+      <Page width="wide">
         {backLink}
         <ProblemAlert problem={tenantQ.error as unknown as Problem} />
       </Page>
@@ -87,32 +102,6 @@ export function TenantDetailPage() {
   const tenant = tenantQ.data;
   if (!tenant) return null;
 
-  const addCorsOrigin = () => {
-    const v = corsInput.trim();
-    if (v && !corsOrigins.includes(v)) setCorsOrigins([...corsOrigins, v]);
-    setCorsInput('');
-  };
-  const removeCorsOrigin = (i: number) =>
-    setCorsOrigins(corsOrigins.filter((_, idx) => idx !== i));
-  const handleCorsKey = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      addCorsOrigin();
-    }
-  };
-
-  const handleSaveSettings = async () => {
-    try {
-      await update.mutateAsync({
-        cors_origins: corsOrigins,
-        default_ai_provider: defaultProvider || null,
-      });
-      notify.success(t('tenant_detail.saved'));
-    } catch (e) {
-      const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? t('tenant_detail.failed'));
-    }
-  };
   const handleSuspend = async () => {
     if (!id) return;
     try {
@@ -134,10 +123,13 @@ export function TenantDetailPage() {
     }
   };
 
+  const stats = statsQ.data;
+  const auditEvents = auditQ.data?.data ?? [];
+
   return (
-    <Page width="regular">
+    <Page width="wide">
       {backLink}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1
             data-testid="tenant-detail-title"
@@ -145,6 +137,10 @@ export function TenantDetailPage() {
           >
             {tenant.name}
           </h1>
+          <div className="mt-1.5 flex items-center gap-1.5">
+            <code className="font-mono text-xs text-muted-foreground">{tenant.id}</code>
+            <CopyButton value={tenant.id} className="h-6 w-6" />
+          </div>
           <div className="mt-2" data-testid="tenant-status-badge">
             <StatusPill tone={tenant.status === 'active' ? 'success' : 'neutral'}>
               {tenant.status === 'active' ? t('tenant_detail.status_active') : tenant.status}
@@ -176,13 +172,13 @@ export function TenantDetailPage() {
         )}
       </div>
 
-      <Tabs defaultValue="settings">
+      <Tabs defaultValue="users">
         <TabsList>
-          <TabsTrigger value="settings" data-testid="tenant-tab-settings">
-            {t('tenant_detail.tab_settings')}
-          </TabsTrigger>
           <TabsTrigger value="users" data-testid="tenant-tab-users">
             {t('tenant_detail.tab_users')}
+          </TabsTrigger>
+          <TabsTrigger value="invitations" data-testid="tenant-tab-invitations">
+            {t('tenant_detail.tab_invitations')}
           </TabsTrigger>
           <TabsTrigger value="usage" data-testid="tenant-tab-usage">
             {t('tenant_detail.tab_usage')}
@@ -192,108 +188,78 @@ export function TenantDetailPage() {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="settings" className="space-y-5 pt-6">
-          <div className="space-y-1.5">
-            <Label htmlFor="tenant-id">ID</Label>
-            <Input id="tenant-id" value={tenant.id} disabled />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tenant-cors">{t('tenant_detail.cors_label')}</Label>
-            <Input
-              id="tenant-cors"
-              value={corsInput}
-              onChange={(e) => setCorsInput(e.currentTarget.value)}
-              onKeyDown={handleCorsKey}
-              onBlur={addCorsOrigin}
-              placeholder={t('tenant_detail.cors_placeholder')}
-              data-testid="tenant-cors-input"
-            />
-            {corsOrigins.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                {corsOrigins.map((origin, i) => (
-                  <StatusPill key={i} tone="neutral">
-                    {origin}
-                    <button
-                      type="button"
-                      onClick={() => removeCorsOrigin(i)}
-                      className="ml-1 hover:text-destructive"
-                      aria-label={t('tenant_detail.remove_origin', { origin })}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </StatusPill>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="tenant-provider">{t('tenant_detail.default_provider_label')}</Label>
-            <Input
-              id="tenant-provider"
-              value={defaultProvider}
-              onChange={(e) => setDefaultProvider(e.currentTarget.value)}
-              placeholder="openai"
-              data-testid="tenant-default-provider-input"
-            />
-          </div>
-          <div className="flex items-center justify-end">
-            <Button
-              onClick={handleSaveSettings}
-              disabled={update.isPending}
-              data-testid="tenant-save-button"
-            >
-              {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {t('common.save')}
-            </Button>
-          </div>
+        <TabsContent value="users" className="pt-6" data-testid="tenant-users-panel">
+          <TenantUsersPanel tenantId={tenant.id} />
         </TabsContent>
 
-        <TabsContent value="users" className="space-y-6 pt-6">
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              {t('tenant_detail.users_intro')}
-            </p>
-            <Button asChild variant="outline">
-              <Link to={`/admin/users?tenant_id=${tenant.id}`}>
-                {t('tenant_detail.open_users')}
-              </Link>
-            </Button>
-          </div>
-          <div className="border-t pt-6">
-            <TenantInvitationsPanel tenantId={tenant.id} />
-          </div>
+        <TabsContent value="invitations" className="pt-6" data-testid="tenant-invitations-panel">
+          <TenantInvitationsPanel tenantId={tenant.id} />
         </TabsContent>
 
-        <TabsContent value="usage" className="pt-6">
-          {usageQ.isLoading ? (
+        <TabsContent value="usage" className="space-y-6 pt-2" data-testid="tenant-usage-panel">
+          {statsQ.isLoading && !stats ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
             </div>
-          ) : usageQ.data ? (
-            <div className="grid grid-cols-2 gap-8 border-t py-6 md:grid-cols-4">
-              <Metric label={t('tenant_detail.metric_users')} value={usageQ.data.users ?? 0} />
-              <Metric label={t('tenant_detail.metric_active_sessions')} value={usageQ.data.active_sessions ?? 0} />
-              <Metric label={t('tenant_detail.metric_courses')} value={usageQ.data.courses ?? 0} />
-              <Metric label={t('tenant_detail.metric_submissions_30d')} value={usageQ.data.submissions_30d ?? 0} />
-              <Metric
-                label={t('tenant_detail.metric_llm_tokens_30d')}
-                value={(usageQ.data.llm_tokens_30d ?? 0).toLocaleString('ru-RU')}
-              />
-            </div>
+          ) : stats ? (
+            <StatsPanel
+              items={[
+                {
+                  icon: <Users className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_users'),
+                  value: fmtNum(stats.users_total),
+                },
+                {
+                  icon: <Activity className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_active_sessions'),
+                  value: fmtNum(stats.active_sessions),
+                },
+                {
+                  icon: <BookOpen className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_courses'),
+                  value: fmtNum(stats.active_courses),
+                },
+                {
+                  icon: <FileText className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_submissions'),
+                  value: fmtNum(stats.submissions_total),
+                },
+                {
+                  icon: <ShieldCheck className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_checks'),
+                  value: fmtNum(stats.plagiarism_runs_total),
+                },
+                {
+                  icon: <Database className="h-4 w-4" />,
+                  label: t('tenant_detail.metric_storage'),
+                  value: fmtBytes(stats.storage_used_bytes, t('common.byte_units')),
+                },
+              ]}
+            />
           ) : (
             <p className="text-sm text-muted-foreground">{t('tenant_detail.no_data')}</p>
           )}
+
+          <AdminActivityCharts data={activityQ.data} loading={activityQ.isLoading} />
         </TabsContent>
 
-        <TabsContent value="audit" className="space-y-3 pt-6">
-          <p className="text-sm text-muted-foreground">
-            {t('tenant_detail.audit_intro')}
-          </p>
-          <Button asChild variant="outline">
-            <Link to={`/admin/audit?tenant_id=${tenant.id}`}>
-              {t('tenant_detail.open_audit')}
-            </Link>
-          </Button>
+        <TabsContent value="audit" className="space-y-3 pt-6" data-testid="tenant-audit-panel">
+          <div className="flex items-center justify-end">
+            <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+              <Link to={`/admin/audit?tenant_id=${tenant.id}`}>
+                {t('tenant_detail.open_audit')}
+              </Link>
+            </Button>
+          </div>
+          {auditQ.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          ) : auditEvents.length === 0 ? (
+            <EmptyState title={t('tenant_detail.audit_empty')} />
+          ) : (
+            <AuditEventsTable events={auditEvents} />
+          )}
         </TabsContent>
       </Tabs>
     </Page>

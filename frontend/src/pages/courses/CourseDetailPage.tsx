@@ -25,7 +25,6 @@ import {
   Plus,
   Settings,
 } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   useArchiveCourse,
   useCourse,
@@ -45,12 +44,10 @@ const StatsPanel = lazy(() =>
   import('@/components/courses/StatsPanel').then((m) => ({ default: m.StatsPanel })),
 );
 import { SuspiciousPanel } from '@/components/courses/SuspiciousPanel';
-import { assignmentKeys, useAssignmentsByCourse } from '@/hooks/api/useAssignments';
-import {
-  homeworkKeys,
-  useHomeworksForCourse,
-} from '@/hooks/api/useHomeworks';
+import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
+import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
+import { ImportHomeworkDialog } from '@/components/courses/ImportHomeworkDialog';
 import {
   statusForAssignment,
   taskLinkTarget,
@@ -68,7 +65,6 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Page } from '@/components/layout/Page';
 import { PageSkeleton, SkeletonList } from '@/components/common/Skeleton';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { StatusPill } from '@/components/common/StatusPill';
 import {
@@ -77,16 +73,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
 import { ExpandableSearch } from '@/components/common/ExpandableSearch';
-import { Label } from '@/components/ui/label';
-import { integrationsApi } from '@/api/endpoints/integrations';
 import { formatDate, formatDateTime } from '@/utils/formatters';
 import { HomeworkCreateDialog } from '@/components/courses/HomeworkCreateDialog';
 
@@ -319,99 +306,16 @@ export default function CourseDetailPage() {
     return m;
   }, [isStaff, mySubsQ.data]);
 
-  // YC import-as-homework dialog: one-shot create new homework from a YC
-  // contest + import every problem as an assignment inside it. Triggered
-  // from the "+ Новое ДЗ" dropdown.
-  const [ycImportOpen, setYcImportOpen] = useState(false);
+  // Import-as-homework: one «Импортировать» menu item opens a single dialog
+  // (ImportHomeworkDialog) that handles every external source —
+  // Yandex.Contest / Stepik / eJudge — behind a source switcher. Manual
+  // creation stays a separate menu item.
+  const [importOpen, setImportOpen] = useState(false);
   const [createHwOpen, setCreateHwOpen] = useState(false);
-  const [ycContestId, setYcContestId] = useState('');
-  // YC integration is tenant-wide: one connection in /integrations is
-  // shared across every course in the tenant. We list all YC configs
-  // here (no course_id filter) and pass the current course separately
-  // in the import call.
-  const ycConfigsQ = useQuery({
-    queryKey: ['integrations', 'list', 'yandex_contest'],
-    queryFn: () =>
-      integrationsApi.list({
-        kind: 'yandex_contest',
-        limit: 10,
-      }),
-    enabled: ycImportOpen,
-  });
-  const ycConfigs = ycConfigsQ.data?.data ?? [];
-  const ycConfigId = ycConfigs[0]?.id;
-  const qc = useQueryClient();
   // Homework deletion lives inside HomeworkDrawer (its own ConfirmDialog
   // + mutation). The row used to host an inline delete icon, but two
   // icons stacked on the row looked cluttered — settings/drawer is the
   // only per-row action now, and it has Delete + Archive in its footer.
-
-  // Drop the leftover stage state from the previous pseudo-progress impl.
-  // The polled op state replaces it entirely.
-  const [activeOpId, setActiveOpId] = useState<string | null>(null);
-  const opQ = useQuery({
-    queryKey: ['integrations', 'yc-import-op', activeOpId],
-    queryFn: () => integrationsApi.ycGetImportOperation(activeOpId as string),
-    enabled: !!activeOpId,
-    refetchInterval: (q) => {
-      const s = q.state.data?.status;
-      return s === 'running' ? 2000 : false;
-    },
-  });
-  const ycImportMut = useMutation({
-    mutationFn: () => {
-      if (!ycConfigId) throw new Error('no_yc_config');
-      if (!course?.id) throw new Error('no_course');
-      return integrationsApi.ycImportAsHomework(
-        ycConfigId,
-        ycContestId.trim(),
-        course.id,
-      );
-    },
-    onSuccess: (res) => {
-      setActiveOpId(res.operation_id);
-    },
-    onError: (e) => setProblem(parseProblem(e)),
-  });
-
-  // Watch the polled op state: navigate on completion, surface error.
-  useEffect(() => {
-    const op = opQ.data;
-    if (!op || !activeOpId) return;
-    if (op.status === 'completed' && op.homework_slug) {
-      const title = op.homework_title ?? t('course_detail.hw_fallback');
-      const created = op.problems_done ?? 0;
-      const subs = op.submissions_imported ?? 0;
-      notify.success(
-        op.resync
-          ? t('course_detail.import_resynced', { title, subs })
-          : t('course_detail.import_done', { title, created, subs }),
-      );
-      setActiveOpId(null);
-      setYcImportOpen(false);
-      setYcContestId('');
-      void qc.invalidateQueries({
-        queryKey: homeworkKeys.forCourse(course?.id ?? ''),
-      });
-      // Also invalidate the per-course assignments cache: without this
-      // the freshly-imported ДЗ row appears but its task list reads
-      // «0 заданий» until a hard refresh — the homework row got
-      // refetched, but the sibling /courses/:id/assignments query
-      // (which feeds asgByHwId in the tree) didn't.
-      void qc.invalidateQueries({
-        queryKey: assignmentKeys.byCourse(course?.id ?? ''),
-      });
-      // HW detail page is gone — stay on the course page; the freshly
-      // imported ДЗ shows up in the inline list once the queries above
-      // invalidate.
-      navigate(`/courses/${course?.slug ?? slug}`);
-    } else if (op.status === 'failed') {
-      const msg = (op.errors ?? []).join('; ') || t('course_detail.import_failed');
-      notify.error(msg);
-      setActiveOpId(null);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [opQ.data]);
 
   const assignments = assignmentsQ.data?.data ?? [];
 
@@ -760,11 +664,11 @@ export default function CourseDetailPage() {
                       {t('course_detail.create_manual')}
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      onClick={() => setYcImportOpen(true)}
-                      data-testid="course-detail-create-homework-yc"
+                      onClick={() => setImportOpen(true)}
+                      data-testid="course-detail-create-homework-import"
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      {t('course_detail.create_from_yc')}
+                      {t('course_detail.create_import')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -1081,264 +985,17 @@ export default function CourseDetailPage() {
         />
       )}
 
-      <Dialog
-        open={ycImportOpen}
-        onOpenChange={(o) => {
-          if (!o) setYcImportOpen(false);
-        }}
-      >
-        <DialogContent data-testid="course-detail-yc-import-modal">
-          <DialogHeader>
-            <DialogTitle>{t('course_detail.yc_import_title')}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              {t('course_detail.yc_import_description')}
-            </p>
-            <div className="space-y-1.5">
-              <Label htmlFor="course-yc-import-contest-id">
-                {t('course_detail.yc_contest_id')}
-              </Label>
-              <Input
-                id="course-yc-import-contest-id"
-                value={ycContestId}
-                onChange={(e) => setYcContestId(e.target.value)}
-                placeholder="73433"
-                inputMode="numeric"
-                autoFocus
-                data-testid="course-yc-import-contest-id"
-              />
-              {ycConfigsQ.isLoading && (
-                <p className="text-xs text-muted-foreground">
-                  {t('course_detail.yc_searching_connection')}
-                </p>
-              )}
-              {!ycConfigsQ.isLoading && ycConfigs.length === 0 && (
-                <p className="text-xs text-destructive">
-                  {t('course_detail.yc_not_connected')}{' '}
-                  <Link to="/integrations" className="underline">
-                    /integrations
-                  </Link>
-                  .
-                </p>
-              )}
-              {ycConfigs.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {t('course_detail.yc_connection', {
-                    name: ycConfigs[0].display_name ?? ycConfigs[0].id,
-                  })}
-                  {ycConfigs.length > 1 &&
-                    t('course_detail.yc_connection_more', {
-                      count: ycConfigs.length - 1,
-                    })}
-                </p>
-              )}
-            </div>
-            {(ycImportMut.isPending || activeOpId) && (
-              <ImportProgress op={opQ.data} pending={ycImportMut.isPending} />
-            )}
-            <div className="flex items-center justify-end gap-2 pt-2">
-              <Button
-                variant="ghost"
-                onClick={() => setYcImportOpen(false)}
-                disabled={ycImportMut.isPending || !!activeOpId}
-                data-testid="course-yc-import-cancel"
-              >
-                {t('course_detail.cancel')}
-              </Button>
-              <Button
-                onClick={() => ycImportMut.mutate()}
-                disabled={
-                  ycImportMut.isPending ||
-                  !!activeOpId ||
-                  !ycContestId.trim() ||
-                  !ycConfigId
-                }
-                data-testid="course-yc-import-submit"
-              >
-                {ycImportMut.isPending || activeOpId ? (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                ) : (
-                  <Download className="mr-2 h-4 w-4" />
-                )}
-                {t('course_detail.yc_import_submit')}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {course && (
+        <ImportHomeworkDialog
+          open={importOpen}
+          onOpenChange={setImportOpen}
+          course={{ id: course.id, slug: course.slug }}
+          onDone={() => navigate(`/courses/${course.slug ?? slug}`)}
+        />
+      )}
     </Page>
   );
 }
 
 // Step ordering — used to render "Шаг N/6" so the user can see how far
 // through the import we are and whether anything is moving.
-const STAGE_ORDER: string[] = [
-  'starting',
-  'fetching_contest',
-  'creating_homework',
-  'creating_assignments',
-  'fetching_submissions',
-  'importing_submissions',
-  'done',
-];
-// Stage → i18n key suffix. Resolved through t() inside ImportProgress so
-// the labels follow the active locale.
-const STAGE_LABEL_KEYS: Record<string, string> = {
-  starting: 'course_detail.stage_starting',
-  fetching_contest: 'course_detail.stage_fetching_contest',
-  creating_homework: 'course_detail.stage_creating_homework',
-  creating_assignments: 'course_detail.stage_creating_assignments',
-  fetching_submissions: 'course_detail.stage_fetching_submissions',
-  importing_submissions: 'course_detail.stage_importing_submissions',
-  done: 'course_detail.stage_done',
-  already_imported: 'course_detail.stage_already_imported',
-};
-
-type YcImportOp = {
-  status?: 'running' | 'completed' | 'failed' | 'expired';
-  stage?: string | null;
-  homework_title?: string | null;
-  problems_total?: number;
-  problems_done?: number;
-  submissions_fetched?: number;
-  submissions_imported?: number;
-  updated_at?: number | null;
-  errors?: string[] | null;
-  resync?: boolean;
-};
-
-function ImportProgress({
-  op,
-  pending,
-}: {
-  op?: YcImportOp;
-  pending: boolean;
-}) {
-  const { t } = useTranslation();
-  const stage = op?.stage ?? 'starting';
-  const labelKey = STAGE_LABEL_KEYS[stage];
-  const label = labelKey
-    ? t(labelKey)
-    : t('course_detail.stage_generic', { stage });
-  const problemsTotal = op?.problems_total ?? 0;
-  const problemsDone = op?.problems_done ?? 0;
-  const subsFetched = op?.submissions_fetched ?? 0;
-  const subsImported = op?.submissions_imported ?? 0;
-  const problemsPct = problemsTotal > 0
-    ? Math.round((problemsDone / problemsTotal) * 100)
-    : 0;
-  const isFetching = stage === 'fetching_submissions';
-  const subsPct = subsFetched > 0
-    ? Math.round((subsImported / subsFetched) * 100)
-    : 0;
-
-  // Step counter — "Шаг 3 / 6". Step `starting` is index 0 (counted as
-  // "Шаг 1"); `done` is the final step. Indeterminate while the op
-  // hasn't reported a stage yet.
-  const stepIdx = STAGE_ORDER.indexOf(stage);
-  const showSteps = stepIdx >= 0 && op?.status !== 'completed';
-  const totalSteps = STAGE_ORDER.length - 1; // -1 because `done` isn't a step
-
-  const isFailed = op?.status === 'failed';
-  const isCompleted = op?.status === 'completed';
-  // Tick a clock so the "обновлено N с назад" row ticks even between
-  // backend polls. ``updated_at`` is unix-seconds float written by Redis.
-  const now = useRealtimeClock(2_000, !!op && !isCompleted && !isFailed);
-  const lastUpdateSec =
-    typeof op?.updated_at === 'number' ? now / 1000 - op.updated_at : null;
-
-  return (
-    <div
-      data-testid="course-yc-import-progress"
-      className="space-y-3 rounded-md border border-border/60 bg-muted/40 px-3 py-2.5 text-sm"
-    >
-      <div className="flex items-center gap-2">
-        {isFailed ? (
-          <span className="h-2 w-2 rounded-full bg-destructive" />
-        ) : isCompleted ? (
-          <span className="h-2 w-2 rounded-full bg-emerald-500" />
-        ) : (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
-        )}
-        <span className={isFailed ? 'text-destructive' : undefined}>
-          {pending && !op
-            ? t('course_detail.stage_starting')
-            : isFailed
-              ? t('course_detail.import_failed')
-              : label}
-        </span>
-        {showSteps && (
-          <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            {t('course_detail.step_counter', {
-              current: Math.min(stepIdx + 1, totalSteps),
-              total: totalSteps,
-            })}
-          </span>
-        )}
-      </div>
-      {op?.homework_title && (
-        <div className="pl-5 text-xs text-muted-foreground">
-          «{op.homework_title}»
-        </div>
-      )}
-      {problemsTotal > 0 && (
-        <div className="space-y-1 pl-5">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t('course_detail.progress_assignments')}</span>
-            <span className="tabular-nums">
-              {problemsDone} / {problemsTotal}
-            </span>
-          </div>
-          <Progress value={problemsPct} className="h-1.5" />
-        </div>
-      )}
-      {subsFetched > 0 && (
-        <div className="space-y-1 pl-5">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>{t('course_detail.progress_submissions')}</span>
-            <span className="tabular-nums">
-              {isFetching
-                ? subsFetched
-                : `${subsImported} / ${subsFetched}`}
-            </span>
-          </div>
-          {isFetching ? (
-            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-primary/20">
-              <div className="absolute inset-0 yc-import-stripes" />
-            </div>
-          ) : (
-            <Progress value={subsPct} className="h-1.5" />
-          )}
-        </div>
-      )}
-      {/* Heartbeat — quiet "обновлено N с" timestamp so the user can see
-          the polling is alive without the (alarming) "возможно зависло"
-          copy. We keep the staleness flag in code; if we ever need to
-          surface it we can do it as a colour shift, not a warning string. */}
-      {op?.updated_at !== undefined && op?.updated_at !== null && !isCompleted && (
-        <div className="pl-5 text-xs text-muted-foreground/60 tabular-nums">
-          {t('course_detail.updated_ago', {
-            seconds: Math.max(0, Math.round(lastUpdateSec ?? 0)),
-          })}
-        </div>
-      )}
-      {isFailed && (op?.errors?.length ?? 0) > 0 && (
-        <div className="pl-5 text-xs text-destructive">
-          {(op?.errors ?? []).slice(0, 3).join(' · ')}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/** Returns a state value that updates every `intervalMs` while `active`. */
-function useRealtimeClock(intervalMs: number, active: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!active) return;
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs);
-    return () => window.clearInterval(id);
-  }, [intervalMs, active]);
-  return now;
-}

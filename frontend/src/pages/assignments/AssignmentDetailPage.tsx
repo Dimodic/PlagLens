@@ -318,7 +318,7 @@ export default function AssignmentDetailPage() {
   // viewport doesn't reflow when data lands. After the first request the
   // page revisits resolve from cache.
   if (isLoading && !assignment) {
-    return <PageSkeleton width="wide" />;
+    return <PageSkeleton width="regular" />;
   }
   if (error || !assignment) {
     return <ProblemAlert problem={parseProblem(error)} />;
@@ -440,7 +440,7 @@ export default function AssignmentDetailPage() {
   };
 
   return (
-    <Page width="wide" data-testid="assignment-detail">
+    <Page width="regular" data-testid="assignment-detail">
       <div data-assignment-id={assignment.id} className="space-y-6">
         {/* Header — same minimal pass as Course / Homework details. The
             slug eyebrow, "Активен" pill, language pill, max-score and

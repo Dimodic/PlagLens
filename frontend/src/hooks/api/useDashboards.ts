@@ -31,6 +31,8 @@ export const dashboardKeys = {
   tenant: (id: string) => ['dashboards', 'tenant', id] as const,
   instance: () => ['dashboards', 'instance'] as const,
   global: () => ['dashboards', 'global'] as const,
+  activity: (scope: string) => ['dashboards', 'activity', scope] as const,
+  live: () => ['dashboards', 'live'] as const,
 };
 
 export function useMyDashboard() {
@@ -165,5 +167,25 @@ export function useGlobalDashboard() {
   return useQuery({
     queryKey: dashboardKeys.global(),
     queryFn: () => reportingApi.globalDashboard(),
+  });
+}
+
+/** Chart data (monthly submissions + top courses) for the admin «Обзор».
+ *  `tenantId` undefined ⇒ whole instance. */
+export function useActivity(tenantId: string | undefined, months = 24) {
+  return useQuery({
+    queryKey: dashboardKeys.activity(`${tenantId ?? 'instance'}:${months}`),
+    queryFn: () => reportingApi.activity(tenantId, months),
+  });
+}
+
+/** Live Prometheus metrics for the admin «Обзор», polled every few seconds so
+ *  the charts actually move. Pauses when the tab is hidden. */
+export function useLiveMetrics(minutes = 15) {
+  return useQuery({
+    queryKey: dashboardKeys.live(),
+    queryFn: () => reportingApi.liveMetrics(minutes),
+    refetchInterval: 7000,
+    refetchIntervalInBackground: false,
   });
 }

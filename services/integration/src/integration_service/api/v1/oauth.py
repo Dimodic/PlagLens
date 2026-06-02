@@ -7,7 +7,10 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from integration_service.api.v1.configs import ensure_owner_or_admin
+from integration_service.api.v1.configs import (
+    SINGLETON_OAUTH_KINDS,
+    ensure_owner_or_admin,
+)
 from integration_service.common.auth import Principal
 from integration_service.common.problems import ProblemException, not_found
 from integration_service.deps import principal_dep, session_dep
@@ -66,6 +69,17 @@ async def oauth_finalize(
     await store_tokens(cfg.id, tokens)
     cfg.status = "active"
     cfg.credentials_secret_ref = f"redis://oauth:token:{cfg.id}"
+    # Singleton connectors: this one just became the working connector, so
+    # retire every other live config of the same kind (stale pending_auth +
+    # any superseded active) — leaving exactly one.
+    if cfg.kind in SINGLETON_OAUTH_KINDS:
+        await repo.retire_siblings(
+            tenant_id=cfg.tenant_id,
+            kind=cfg.kind,
+            created_by=cfg.created_by,
+            course_id=cfg.course_id,
+            keep_id=cfg.id,
+        )
     await session.commit()
     _ = request
     return JSONResponse(
@@ -131,6 +145,14 @@ async def oauth_callback(
     await store_tokens(cfg.id, tokens)
     cfg.status = "active"
     cfg.credentials_secret_ref = f"redis://oauth:token:{cfg.id}"
+    if cfg.kind in SINGLETON_OAUTH_KINDS:
+        await repo.retire_siblings(
+            tenant_id=cfg.tenant_id,
+            kind=cfg.kind,
+            created_by=cfg.created_by,
+            course_id=cfg.course_id,
+            keep_id=cfg.id,
+        )
     await session.commit()
     _ = request
     return JSONResponse({"status": "ok", "config_id": cfg.id, "active": True})

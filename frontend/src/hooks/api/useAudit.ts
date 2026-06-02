@@ -19,6 +19,8 @@ export const auditKeys = {
     ['audit', 'by-actor', user_id, params] as const,
   byResource: (rt: string, rid: string, params: ListParams) =>
     ['audit', 'by-resource', rt, rid, params] as const,
+  byTenant: (tenantId: string, filters: AuditFilters) =>
+    ['audit', 'by-tenant', tenantId, filters] as const,
   accessDenied: (params: ListParams) => ['audit', 'access-denied', params] as const,
   retentionPolicy: ['audit', 'retention-policy'] as const,
   retentionStatus: ['audit', 'retention-status'] as const,
@@ -68,6 +70,19 @@ export function useAuditByResource(
     queryFn: () =>
       auditApi.byResource(resource_type as string, resource_id as string, params),
     enabled: !!resource_type && !!resource_id,
+  });
+}
+
+/** Audit events for a specific tenant — admin reads another institution's
+ *  log via the ``X-Cross-Tenant`` header. Used inline on the tenant detail. */
+export function useTenantAuditEvents(
+  tenantId: string | undefined,
+  filters: AuditFilters = {},
+) {
+  return useQuery({
+    queryKey: auditKeys.byTenant(tenantId ?? '', filters),
+    queryFn: () => auditApi.list(filters, { crossTenant: tenantId }),
+    enabled: !!tenantId,
   });
 }
 

@@ -22,7 +22,7 @@ export function TenantsListPage() {
   const { data, isLoading, error } = useTenants({ limit: 100 });
 
   return (
-    <Page width="wide">
+    <Page width="regular">
       <PageHeader
         title={<span data-testid="tenants-title">{t('tenants_list.title')}</span>}
         action={

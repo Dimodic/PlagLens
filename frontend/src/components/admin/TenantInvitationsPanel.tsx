@@ -1,16 +1,24 @@
 /**
- * Invitations block inside /admin/tenants/:id → "Пользователи" tab.
+ * Invitations block inside /admin/tenants/:id → "Приглашения" tab.
  *
  * Lists active invitations with their short code; lets the admin issue a new
- * one (role + optional email + optional course_id) and revoke an existing
- * one. Copy-to-clipboard on the code cell.
+ * one (role + optional email + optional course_id, in a modal) and revoke an
+ * existing one. Copy-to-clipboard on the code cell.
  */
 import { useState } from 'react';
-import { Copy, Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
 import { Button } from '@/components/ui/button';
+import { CopyButton } from '@/components/common/CopyButton';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import {
   Select,
   SelectContent,
@@ -114,29 +122,24 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium">{t('tenant_invitations.title')}</h3>
-          <p className="text-xs text-muted-foreground">
-            {t('tenant_invitations.description')}
-          </p>
-        </div>
-        {!showForm && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowForm(true)}
-            data-testid="invitation-new-button"
-          >
-            <Plus className="mr-1.5 h-3.5 w-3.5" />
-            {t('tenant_invitations.new')}
-          </Button>
-        )}
+      <div className="flex items-center justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => setShowForm(true)}
+          data-testid="invitation-new-button"
+        >
+          <Plus className="mr-1.5 h-3.5 w-3.5" />
+          {t('tenant_invitations.new')}
+        </Button>
       </div>
 
-      {showForm && (
-        <div className="space-y-3 rounded-md border bg-muted/30 p-4">
-          <div className="grid gap-3 sm:grid-cols-3">
+      <Dialog open={showForm} onOpenChange={setShowForm}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{t('tenant_invitations.create_title')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="inv-role">{t('tenant_invitations.role_label')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
@@ -172,9 +175,8 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               />
             </div>
           </div>
-          <div className="flex items-center justify-end gap-2">
+          <DialogFooter>
             <Button
-              size="sm"
               variant="ghost"
               onClick={() => setShowForm(false)}
               disabled={create.isPending}
@@ -182,7 +184,6 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               {t('common.cancel')}
             </Button>
             <Button
-              size="sm"
               onClick={onSubmit}
               disabled={create.isPending}
               data-testid="invitation-create-submit"
@@ -190,9 +191,9 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               {create.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
               {t('common.create')}
             </Button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {listQ.isLoading ? (
         <div className="flex items-center justify-center py-6">
@@ -201,11 +202,11 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
       ) : active.length === 0 && past.length === 0 ? (
         <p className="text-sm text-muted-foreground">{t('tenant_invitations.empty')}</p>
       ) : (
-        <div className="space-y-1">
+        <div className="-mx-2">
           {active.map((inv) => (
             <div
               key={inv.id}
-              className="grid grid-cols-[auto_1fr_auto_auto] items-center gap-3 rounded-md border bg-background px-3 py-2"
+              className="flex items-center gap-3 rounded-md px-2 py-2 transition-colors hover:bg-muted/40"
               data-testid={`invitation-row-${inv.id}`}
             >
               <code
@@ -215,7 +216,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               >
                 {inv.code ?? '—'}
               </code>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">
                   {roleLabel(inv.role) ?? inv.role}
                   {inv.course_id && (
@@ -230,15 +231,13 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               </div>
               <StatusPill tone={pillTone(inv)}>{pillLabel(inv)}</StatusPill>
               <div className="flex items-center gap-1">
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => inv.code && onCopy(inv.code)}
-                  disabled={!inv.code}
-                  aria-label={t('tenant_invitations.copy_code')}
-                >
-                  <Copy className="h-3.5 w-3.5" />
-                </Button>
+                {inv.code && (
+                  <CopyButton
+                    value={inv.code}
+                    label={t('tenant_invitations.copy_code')}
+                    toastMessage={t('tenant_invitations.code_copied', { code: inv.code })}
+                  />
+                )}
                 <Button
                   size="icon"
                   variant="ghost"
@@ -253,18 +252,18 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
             </div>
           ))}
           {past.length > 0 && (
-            <details className="pt-2">
-              <summary className="cursor-pointer text-xs text-muted-foreground">
+            <details className="pt-3">
+              <summary className="cursor-pointer px-2 text-xs text-muted-foreground">
                 {t('tenant_invitations.history', { count: past.length })}
               </summary>
-              <div className="mt-2 space-y-1">
+              <div className="mt-1">
                 {past.map((inv) => (
                   <div
                     key={inv.id}
-                    className="grid grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground"
+                    className="flex items-center gap-3 rounded-md px-2 py-2 text-xs text-muted-foreground"
                   >
-                    <code className="font-mono">{inv.code ?? '—'}</code>
-                    <span className="truncate">
+                    <code className="rounded bg-muted/60 px-2 py-1 font-mono">{inv.code ?? '—'}</code>
+                    <span className="min-w-0 flex-1 truncate">
                       {roleLabel(inv.role) ?? inv.role} · {inv.email || t('tenant_invitations.no_email')}
                     </span>
                     <StatusPill tone={pillTone(inv)}>{pillLabel(inv)}</StatusPill>

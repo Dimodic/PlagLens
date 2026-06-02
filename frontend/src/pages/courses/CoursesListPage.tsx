@@ -263,15 +263,19 @@ function CourseSection({ course }: { course: CourseBrief }) {
         </div>
       </Link>
 
-      <div className="mt-5 pl-10">
+      {/* ДЗ list: full width so each row's hover highlight runs to the same
+          right edge as the section divider lines (a capped highlight under a
+          full-width divider looked broken). No dividers between rows — the
+          hover highlight + spacing separate them. */}
+      <div className="mt-5 pl-8">
         {hwQ.isLoading ? (
-          <div className="py-2 text-sm text-muted-foreground">
+          <div className="px-2 py-2 text-sm text-muted-foreground">
             {t('courses_list.homeworks_loading')}
           </div>
         ) : homeworks.length === 0 ? (
-          <div className="py-2 text-sm text-muted-foreground">{t('courses_list.homeworks_empty')}</div>
+          <div className="px-2 py-2 text-sm text-muted-foreground">{t('courses_list.homeworks_empty')}</div>
         ) : (
-          <div className="divide-y divide-border/30">
+          <div className="space-y-0.5">
             {homeworks.map((hw) => (
               <HomeworkSubrow key={hw.id} hw={hw} />
             ))}
@@ -334,12 +338,12 @@ function HomeworkSubrow({ hw }: { hw: Homework }) {
           <Link
             to={target}
             data-testid={`asg-row-${assignments[0].id}`}
-            className="w-full flex items-center gap-3 py-3.5 text-left hover:text-foreground"
+            className="w-full flex items-center gap-3 rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/50"
           >
             {inner}
           </Link>
         ) : (
-          <div className="w-full flex items-center gap-3 py-3.5 text-left text-muted-foreground">
+          <div className="w-full flex items-center gap-3 rounded-md px-2 py-3.5 text-left text-muted-foreground">
             {inner}
           </div>
         )}
@@ -358,7 +362,7 @@ function HomeworkSubrow({ hw }: { hw: Homework }) {
             ? t('courses_list.assignments_collapse')
             : t('courses_list.assignments_expand')
         }
-        className="w-full flex items-center gap-3 py-3.5 text-left hover:text-foreground"
+        className="w-full flex items-center gap-3 rounded-md px-2 py-3.5 text-left transition-colors hover:bg-muted/50"
       >
         <span className="text-muted-foreground" aria-hidden>
           {open ? (

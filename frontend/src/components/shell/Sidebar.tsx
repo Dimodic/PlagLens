@@ -1,14 +1,15 @@
 /**
- * Sidebar — Kaggle-style rail that *expands in place* on hover.
+ * Sidebar — Kaggle-style icon rail with hover-peek + a pin toggle.
  *
  * Desktop (>= 768px):
- *   • A single sidebar element that's 72px wide (icon rail) and smoothly
- *     widens to 256px on hover, revealing labels. It's NOT a separate
- *     drawer sliding over the rail — the same element grows.
- *   • It's an overlay (position: fixed) with a 72px in-flow spacer holding
- *     the layout, so page content never shifts when it expands.
- *   • A hover-intent delay before opening lets you click a rail icon before
- *     it widens. Each nav row is full rail width (no floating square).
+ *   • 72px icon rail that widens to 256px when expanded, revealing labels.
+ *   • Hover-peek: hovering the rail (after a short intent delay) opens it as
+ *     an OVERLAY — page content does NOT move; moving away collapses it.
+ *   • Pin: the hamburger at the top toggles a persistent open state
+ *     (remembered in localStorage). While pinned the rail stays open AND the
+ *     layout reserves the full 256px, so page content reflows to its right
+ *     instead of sitting under an overlay.
+ *   • expanded = pinned || hovered.
  *
  * Mobile (< 768px):
  *   • Sidebar hidden; the topbar hamburger opens a full overlay drawer.
@@ -30,6 +31,7 @@ import {
   FileClock,
   Bell,
   Building2,
+  Menu,
 } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
 import { useAuth } from '@/auth/useAuth';
@@ -140,25 +142,41 @@ interface SidebarProps {
   className?: string;
 }
 
-// Hover-intent delay before the rail widens — long enough that a "reach for
-// a rail icon and click it" gesture finishes before the rail grows. Close
-// is instant.
+// Hover-intent delay before the rail peeks open — long enough that a "reach
+// for a rail icon and click it" gesture finishes before it widens.
 const OPEN_DELAY_MS = 650;
 // Collapsed rail width; icons centre in this slot in both states (no jump).
 const RAIL_W = 72;
+// Expanded drawer width.
+const DRAWER_W = 256;
+// localStorage key for the pinned-open preference (persists across reloads).
+const PIN_KEY = 'plaglens:sidebar-pinned';
 
 export function Sidebar({ mobileOpen = false, onMobileClose, className }: SidebarProps) {
   const { user } = useAuth();
   const { t } = useTranslation();
   const location = useLocation();
+  // Pinned-open (hamburger) persists across reloads; hover-peek is transient.
+  // The rail is wide when EITHER is true.
+  const [pinned, setPinned] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(PIN_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [hovered, setHovered] = useState(false);
   const openTimerRef = useRef<number | null>(null);
+  const expanded = pinned || hovered;
 
   useEffect(() => {
     if (mobileOpen) onMobileClose?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
+  // Drop a transient hover-peek when navigating (a pinned rail stays open).
+  // Without this the rail would linger open over the new page until the
+  // mouse happened to move away.
   useEffect(() => {
     if (openTimerRef.current) {
       window.clearTimeout(openTimerRef.current);
@@ -196,6 +214,25 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
     }
     setHovered(false);
   }, []);
+  const togglePinned = useCallback(() => {
+    setPinned((p) => {
+      const next = !p;
+      try {
+        localStorage.setItem(PIN_KEY, next ? '1' : '0');
+      } catch {
+        /* storage disabled (private mode) — pin stays in-memory only */
+      }
+      return next;
+    });
+    // A click is an explicit intent: drop any active/pending hover-peek so
+    // collapsing closes the rail IMMEDIATELY, instead of lingering open until
+    // the cursor finally leaves the icon. A fresh hover re-opens the peek.
+    if (openTimerRef.current) {
+      window.clearTimeout(openTimerRef.current);
+      openTimerRef.current = null;
+    }
+    setHovered(false);
+  }, []);
 
   if (!user) return null;
 
@@ -206,29 +243,60 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
 
   return (
     <>
-      {/* Desktop: 72px spacer reserves the layout; the real sidebar below is
-          an overlay that widens in place, so content never shifts. */}
-      <div className="hidden md:block shrink-0" style={{ width: RAIL_W }} aria-hidden />
+      {/* Desktop spacer: 72px normally (the rail overlays content on
+          hover-peek), but grows to 256px while PINNED so page content
+          reflows to its right — the Kaggle behaviour. Animates in step with
+          the sidebar width. */}
+      <div
+        className="hidden md:block shrink-0 transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]"
+        style={{ width: pinned ? DRAWER_W : RAIL_W }}
+        aria-hidden
+      />
       <aside
         data-testid="app-sidebar"
-        data-expanded={hovered ? 'true' : 'false'}
+        data-expanded={expanded ? 'true' : 'false'}
+        data-pinned={pinned ? 'true' : 'false'}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         className={cn(
           'hidden md:flex fixed left-0 top-0 z-40 h-screen flex-col overflow-hidden',
           'border-r border-sidebar-border/30 bg-sidebar text-sidebar-foreground',
           'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
-          hovered ? 'shadow-[8px_0_28px_-14px_rgba(0,0,0,0.35)]' : '',
+          // Shadow only while peeking as an overlay — when pinned the rail is
+          // flush against the reflowed content, so a drop shadow looks wrong.
+          hovered && !pinned ? 'shadow-[8px_0_28px_-14px_rgba(0,0,0,0.35)]' : '',
           className,
         )}
-        style={{ width: hovered ? 256 : RAIL_W }}
+        style={{ width: expanded ? DRAWER_W : RAIL_W }}
       >
+        {/* Top bar: hamburger (pin toggle) + the wordmark beside it. The
+            hamburger highlights ONLY on hover — it's centred in the same 72px
+            slot as the nav icons below so it doesn't shift on expand; the
+            wordmark (also the home link) reveals to its right when expanded. */}
         <div className="flex h-14 shrink-0 items-center">
+          <span
+            className="flex shrink-0 items-center justify-center"
+            style={{ width: RAIL_W }}
+          >
+            <button
+              type="button"
+              onClick={togglePinned}
+              aria-label={t(pinned ? 'sidebar.collapse' : 'sidebar.expand')}
+              aria-expanded={pinned}
+              aria-pressed={pinned}
+              data-testid="sidebar-toggle"
+              className="flex h-10 w-10 items-center justify-center rounded-md text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+            >
+              <Menu className="h-5 w-5" />
+            </button>
+          </span>
           <Wordmark
             variant="full"
-            railAligned
-            textRevealed={hovered}
             data-testid="wordmark-rail"
+            className={cn(
+              'transition-opacity duration-200',
+              expanded ? 'opacity-100' : 'pointer-events-none opacity-0',
+            )}
           />
         </div>
         <nav className="scroll-thin flex-1 overflow-y-auto overflow-x-hidden py-3">
@@ -237,7 +305,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
               <li key={leaf.id}>
                 <NavRow
                   leaf={leaf}
-                  expanded={hovered}
+                  expanded={expanded}
                   activeScreen={activeScreen}
                   pathname={location.pathname}
                 />

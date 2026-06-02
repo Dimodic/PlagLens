@@ -5,10 +5,7 @@
  * (actor_id, action, resource_type, result). Test ids unchanged.
  */
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import dayjs from 'dayjs';
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
-import { shortId } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -18,35 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
+import { AuditEventsTable } from '@/components/admin/AuditEventsTable';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useTranslation } from '@/i18n';
 import { useAuditEvents, useExportAuditCsv } from '@/hooks/api/useAudit';
-import type { AuditEvent, AuditFilters } from '@/api/endpoints/audit';
+import type { AuditFilters } from '@/api/endpoints/audit';
 import type { Problem } from '@/api/types';
-
-function eventToneClass(e: AuditEvent): string {
-  if (e.result === 'failure') return 'text-sev-high';
-  if (e.action.startsWith('llm.') || e.action.startsWith('ai.')) {
-    return 'text-primary';
-  }
-  if (e.action.startsWith('config.') || e.action.startsWith('integration.')) {
-    return 'text-foreground';
-  }
-  return 'text-muted-foreground';
-}
 
 export function AuditEventsPage() {
   const { t } = useTranslation();
@@ -204,82 +183,7 @@ export function AuditEventsPage() {
       ) : data && data.data.length === 0 ? (
         <EmptyState title={t('audit_events.empty')} />
       ) : (
-        <div className="border-y">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[120px]">
-                    {t('audit_events.col_when')}
-                  </TableHead>
-                  <TableHead>{t('audit_events.col_action')}</TableHead>
-                  <TableHead>{t('audit_events.col_actor')}</TableHead>
-                  <TableHead className="w-[100px] text-right">
-                    {t('audit_events.col_result')}
-                  </TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {(data?.data ?? []).map((e) => {
-                  const tone = eventToneClass(e);
-                  return (
-                    <TableRow
-                      key={e.id}
-                      data-testid={`audit-row-${e.id}`}
-                      className="border-b-0 transition-colors hover:bg-muted/40"
-                    >
-                      <TableCell>
-                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
-                          {dayjs(e.occurred_at).fromNow()}
-                        </span>
-                      </TableCell>
-                      <TableCell>
-                        <div className="text-sm font-medium text-foreground">
-                          {e.action}
-                        </div>
-                        <div className="mt-0.5 text-xs text-muted-foreground">
-                          {e.resource.id ? (
-                            <Link
-                              to={`/admin/audit/resources/${e.resource.type}/${e.resource.id}`}
-                              data-testid={`audit-resource-link-${e.id}`}
-                              className="hover:text-foreground hover:underline"
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              {e.resource.type} · {shortId(e.resource.id)}
-                            </Link>
-                          ) : (
-                            e.resource.type
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {e.actor.id ? (
-                            <Link
-                              to={`/admin/audit/actors/${e.actor.id}`}
-                              data-testid={`audit-actor-link-${e.id}`}
-                              className="hover:text-foreground hover:underline"
-                              onClick={(ev) => ev.stopPropagation()}
-                            >
-                              {e.actor.display_name ?? shortId(e.actor.id)}
-                            </Link>
-                          ) : (
-                            e.actor.display_name ?? e.actor.type
-                          )}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <span
-                          className={`text-xs font-medium ${tone}`}
-                        >
-                          {e.result}
-                        </span>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-        </div>
+        <AuditEventsTable events={data?.data ?? []} />
       )}
     </Page>
   );

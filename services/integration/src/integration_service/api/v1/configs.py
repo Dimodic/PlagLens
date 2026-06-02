@@ -34,6 +34,12 @@ from integration_service.services.oauth import (
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
+# Tenant-wide OAuth connectors that must stay unique: one working connector
+# per kind. Abandoned ``pending_auth`` rows are swept on the next connect
+# (here) and superseded rows are retired the moment a fresh OAuth succeeds
+# (see oauth.py). Google Sheets is excluded — it is per-teacher (created_by).
+SINGLETON_OAUTH_KINDS = ("stepik", "yandex_contest")
+
 
 def _to_dto(cfg: IntegrationConfig) -> IntegrationConfigOut:
     return IntegrationConfigOut.model_validate(cfg)
@@ -73,16 +79,22 @@ async def list_configs(
     course_id: Optional[str] = Query(default=None),
     kind: Optional[str] = Query(default=None),
     status_filter: Optional[str] = Query(default=None, alias="status"),
+    mine: bool = Query(default=False),
     limit: int = Query(default=50, ge=1, le=200),
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
 ) -> Page[IntegrationConfigOut]:
+    # ``mine=true`` restricts to the caller's own connectors. OAuth connectors
+    # (Stepik / Yandex.Contest / personal Google) are per-teacher: each teacher
+    # links their own account, so imports must use the caller's connector
+    # rather than picking up a colleague's. Import dialogs pass mine=true.
     repo = IntegrationConfigRepo(session)
     rows = await repo.list_(
         tenant_id=p.tenant_id,
         course_id=course_id,
         kind=kind,
         status=status_filter,
+        created_by=p.user_id if mine else None,
         limit=limit,
     )
     return Page[IntegrationConfigOut](
@@ -170,6 +182,18 @@ async def create_config(
             )
 
     repo = IntegrationConfigRepo(session)
+    # Singleton connectors: sweep abandoned pending_auth siblings before
+    # inserting, so repeated connect attempts never accumulate. Active rows
+    # are left untouched here so a working connector survives an abandoned
+    # re-auth; they get retired on the next successful OAuth (oauth.py).
+    if cfg.kind in SINGLETON_OAUTH_KINDS:
+        await repo.retire_siblings(
+            tenant_id=cfg.tenant_id,
+            kind=cfg.kind,
+            created_by=cfg.created_by,
+            course_id=cfg.course_id,
+            only_status="pending_auth",
+        )
     await repo.add(cfg)
     await session.commit()
 

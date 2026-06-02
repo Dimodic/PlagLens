@@ -637,6 +637,27 @@ class YandexContestAdapter(IntegrationAdapter):
         result.imported = len(result.problems)
         return result
 
+    async def fetch_contest_name(
+        self, config: Any, contest_id: Any
+    ) -> Optional[str]:
+        """Best-effort contest display name for UI hints (e.g. the import
+        dialog's title placeholder). Never raises — returns None on any error.
+        """
+        token = await _token_for(config)
+        if not token:
+            return None
+        try:
+            async with httpx.AsyncClient(
+                timeout=get_settings().httpx_timeout_seconds
+            ) as client:
+                payload = await yc_get(client, token, f"contests/{contest_id}")
+        except Exception:  # noqa: BLE001 — purely cosmetic, never fatal
+            return None
+        if isinstance(payload, dict):
+            name = payload.get("name") or payload.get("title")
+            return str(name) if name else None
+        return None
+
     async def handle_webhook(
         self,
         payload: bytes,

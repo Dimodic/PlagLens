@@ -313,7 +313,50 @@ export interface TenantDashboard {
   /** Total plagiarism runs in the tenant. */
   plagiarism_runs_total: number;
   storage_used_bytes: number;
+  /** Total users in the tenant (live from identity.users). */
+  users_total?: number;
+  /** Currently-active (non-revoked, unexpired) sessions in the tenant. */
+  active_sessions?: number;
   cached?: boolean;
+}
+
+/** Chart data for the admin «Обзор» — a continuous monthly-submissions
+ *  series (zero months filled) plus the top courses by submission count. */
+export interface ActivityPoint {
+  /** Month key, ``YYYY-MM``. */
+  period: string;
+  submissions: number;
+}
+export interface ActivityCourse {
+  course_id: string;
+  name: string;
+  submissions: number;
+}
+export interface ActivityResponse {
+  tenant_id: string;
+  months: number;
+  submissions_series: ActivityPoint[];
+  by_course: ActivityCourse[];
+  cached?: boolean;
+}
+
+/** Live Prometheus chart, pivoted server-side: each row is ``{ t: epochMs,
+ *  <key>: value, … }``; ``keys`` are the value columns to plot. */
+export interface LiveSeries {
+  keys: string[];
+  rows: Array<Record<string, number>>;
+}
+export interface LiveMetrics {
+  minutes: number;
+  step: number;
+  charts: {
+    rps: LiveSeries;
+    latency: LiveSeries;
+    by_service: LiveSeries;
+    by_class: LiveSeries;
+  };
+  services_online: number;
+  services_total: number;
 }
 
 export interface GlobalDashboard {
@@ -698,6 +741,20 @@ export const reportingApi = {
   instanceOverview: () =>
     api
       .get<TenantDashboard>('/admin/dashboard/overview')
+      .then((r) => r.data),
+
+  // ---- F3. Activity charts (admin «Обзор»). tenantId omitted ⇒ all orgs ----
+  activity: (tenantId?: string, months = 24) =>
+    api
+      .get<ActivityResponse>('/admin/dashboard/activity', {
+        params: { ...(tenantId ? { tenant_id: tenantId } : {}), months },
+      })
+      .then((r) => r.data),
+
+  // ---- F4. Live infra metrics from Prometheus (auto-refreshed) ----
+  liveMetrics: (minutes = 15) =>
+    api
+      .get<LiveMetrics>('/admin/dashboard/live-metrics', { params: { minutes } })
       .then((r) => r.data),
 
   // ---- G. Global ----

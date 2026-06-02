@@ -26,6 +26,7 @@ import { cn } from '@/components/ui/utils';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { SimilarityBar } from '@/components/plagiarism/SimilarityBar';
+import { SuspiciousGraph } from '@/components/courses/SuspiciousGraph';
 import { Button } from '@/components/ui/button';
 import {
   useDismissFlag,
@@ -65,6 +66,7 @@ interface SuspiciousPanelProps {
 export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
   const { t } = useTranslation();
   const notify = useNotifications();
+  const navigate = useNavigate();
   const [severity, setSeverity] = useState<FlagSeverity | ''>('');
   const [dismissed, setDismissed] = useState<DismissedFilter>('active');
 
@@ -119,12 +121,19 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
   };
 
   const rows = data?.data ?? [];
+  // Edges for the connection map (and the basis for the old ranked list).
+  const pairStats = useMemo(() => buildPairStats(rows, userById), [rows, userById]);
 
   return (
     <div className="space-y-10" data-testid="suspicious-panel">
-      {/* Top repeat-offender pairs — the one number a teacher actually
-          asks: "кто у кого чаще списывает". */}
-      {rows.length > 0 && <TopPairs rows={rows} userById={userById} />}
+      {/* Connection map — students as nodes, flagged pairs as edges, so
+          copying clusters are visible at a glance. Click a node to focus. */}
+      {pairStats.length > 0 && (
+        <SuspiciousGraph
+          stats={pairStats}
+          onOpenRun={(runId) => navigate(`/plagiarism-runs/${runId}`)}
+        />
+      )}
 
       {/* Full flag list. The separating rule only makes sense when there's a
           leaderboard above it — when the panel is empty the rule would stack
@@ -348,19 +357,9 @@ function Row({
 }
 
 /* ----------------------------------------------------------------- */
-/* Top repeat-offender pairs                                          */
-/*                                                                    */
-/* Aggregates flags by ordered author pair (Студент A ↔ Студент B)    */
-/* and ranks pairs by number of times they've co-appeared in a flag.  */
-/* Two-shared-flags+ is a much stronger signal than one isolated      */
-/* 95 % match — the latter could be coincidence, the former is        */
-/* almost certainly habitual copying. Click jumps to the most-recent  */
-/* underlying plagiarism run for that pair.                           */
-
-interface TopPairsProps {
-  rows: SuspiciousSubmission[];
-  userById: Map<string, string>;
-}
+/* Pair aggregation — collapse flags into ordered author pairs (A ↔ B) */
+/* with peak similarity + co-occurrence count; feeds the connection    */
+/* map (`SuspiciousGraph`).                                            */
 
 interface PairStat {
   aId: string;
@@ -371,77 +370,6 @@ interface PairStat {
   avgSim: number;
   maxSim: number;
   runId: string | null;
-}
-
-function TopPairs({ rows, userById }: TopPairsProps) {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const stats = useMemo(
-    () => buildPairStats(rows, userById),
-    [rows, userById],
-  );
-
-  if (stats.length === 0) return null;
-
-  // Show top 5 by default — keeps the screen tight.
-  const top = stats.slice(0, 5);
-  const totalPairs = stats.length;
-
-  return (
-    <section data-testid="suspicious-top-pairs" className="space-y-4">
-      {/* Matched in weight with the «Все флаги» heading below so the
-          two sections clearly read as peer zones, not as one
-          continuous list. */}
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-semibold text-foreground">
-          {t('suspicious.repeat_pairs')}
-        </h2>
-        <span className="text-xs text-muted-foreground tabular-nums">
-          {t(pluralPairKey(totalPairs), { count: totalPairs })}
-        </span>
-      </div>
-      <ol className="flex flex-col divide-y divide-border/60">
-        {top.map((p, i) => (
-          <li
-            key={`${p.aId}|${p.bId}`}
-            className={cn(
-              'group flex items-center gap-3 py-2.5',
-              p.runId && 'cursor-pointer',
-            )}
-            onClick={() => p.runId && navigate(`/plagiarism-runs/${p.runId}`)}
-            data-testid={`top-pair-${i}`}
-          >
-            <span className="w-5 flex-none text-xs tabular-nums text-muted-foreground/70 text-right">
-              {i + 1}
-            </span>
-            <div className="min-w-0 flex-1 flex items-baseline gap-2 text-sm">
-              <span className="font-medium text-foreground truncate">
-                {p.aName}
-              </span>
-              <span
-                aria-hidden
-                className="flex-none text-muted-foreground/60 text-xs"
-              >
-                ↔
-              </span>
-              <span className="font-medium text-foreground truncate">
-                {p.bName}
-              </span>
-            </div>
-            {/* Compact meta — single short token («×10») instead of
-                the verbose "10 совпадений · ср. 78%" that wrapped.
-                Extra right margin keeps it clear of the bar. */}
-            <span className="hidden md:inline flex-none text-xs tabular-nums text-muted-foreground w-10 mr-3 text-right">
-              ×{p.count}
-            </span>
-            <div className="hidden sm:flex flex-none items-center justify-end w-44">
-              <SimilarityBar value={p.maxSim} size="sm" width={100} />
-            </div>
-          </li>
-        ))}
-      </ol>
-    </section>
-  );
 }
 
 function buildPairStats(
@@ -504,15 +432,6 @@ function buildPairStats(
       if (b.count !== a.count) return b.count - a.count;
       return b.maxSim - a.maxSim;
     });
-}
-
-function pluralPairKey(n: number): string {
-  const mod10 = n % 10;
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'suspicious.pairs_many';
-  if (mod10 === 1) return 'suspicious.pairs_one';
-  if (mod10 >= 2 && mod10 <= 4) return 'suspicious.pairs_few';
-  return 'suspicious.pairs_many';
 }
 
 /* ----------------------------------------------------------------- */

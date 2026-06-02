@@ -23,11 +23,15 @@ import {
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { t, useTranslation } from '@/i18n';
 import {
+  useActivity,
   useInstanceOverview,
+  useLiveMetrics,
   useTenantDashboard,
 } from '@/hooks/api/useDashboards';
 import { useTenants } from '@/hooks/api/useTenants';
 import { StatsPanel } from '@/components/common/StatsPanel';
+import { AdminActivityCharts } from '@/components/dashboard/AdminActivityCharts';
+import { LiveMetricsCharts } from '@/components/dashboard/LiveMetricsCharts';
 import { Page, PageHeader } from '@/components/layout/Page';
 import {
   Select,
@@ -88,6 +92,11 @@ export default function TenantDashboardPage() {
   const instanceDash = useInstanceOverview(isAll);
   const tenantDash = useTenantDashboard(isAll ? undefined : selected);
   const data = isAll ? instanceDash.data : tenantDash.data;
+  // Chart data follows the same scope (undefined tenant ⇒ whole instance).
+  const activity = useActivity(isAll ? undefined : selected);
+  // Live infra metrics are instance-wide (no tenant dimension) — always shown,
+  // polled on its own interval inside the hook.
+  const live = useLiveMetrics();
 
   const tenantPicker = (
     <Select value={selected} onValueChange={setSelected}>
@@ -151,6 +160,10 @@ export default function TenantDashboardPage() {
           },
         ]}
       />
+
+      <LiveMetricsCharts data={live.data} loading={live.isLoading} />
+
+      <AdminActivityCharts data={activity.data} loading={activity.isLoading} />
     </Page>
   );
 }

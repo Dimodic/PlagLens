@@ -47,26 +47,29 @@ def _author_from_meta(meta: dict) -> tuple[str | None, str | None]:
 
 
 def _to_item(
-    flag, sub_meta_by_id: dict[str, dict] | None = None
+    flag,
+    sub_meta_by_id: dict[str, dict] | None = None,
+    name_by_sid: dict[str, tuple[str | None, str | None]] | None = None,
 ) -> SuspiciousFlagItem:
-    """Build the public response item. When ``sub_meta_by_id`` is
-    supplied (the course list endpoint enriches with one parallel
-    fan-out to the submission service), we attach author / assignment
-    fields for the row's own submission **and** for every ID in
-    ``paired_with`` so the frontend can render «совпало с ФИО»."""
+    """Build the public response item. Author / peer ФИО come first from the
+    plagiarism pairs (``name_by_sid`` — reliable for Yandex.Contest authors
+    that have no platform account), then fall back to the submission payload
+    (``sub_meta_by_id``, a parallel fan-out the course list endpoint does)."""
     sub_meta_by_id = sub_meta_by_id or {}
+    name_by_sid = name_by_sid or {}
     own_meta = sub_meta_by_id.get(flag.submission_id) or {}
-    author_id, author_display_name = (
-        _author_from_meta(own_meta) if own_meta else (None, None)
-    )
+
+    def resolve(sid: str, meta: dict) -> tuple[str | None, str | None]:
+        pair = name_by_sid.get(sid)
+        if pair and pair[1]:
+            return pair
+        return _author_from_meta(meta) if meta else (None, None)
+
+    author_id, author_display_name = resolve(flag.submission_id, own_meta)
     assignment_id = own_meta.get("assignment_id") if own_meta else None
     peers: list[PairedAuthor] = []
     for peer_sid in flag.paired_with or []:
-        peer_meta = sub_meta_by_id.get(peer_sid)
-        if peer_meta:
-            peer_id, peer_name = _author_from_meta(peer_meta)
-        else:
-            peer_id, peer_name = (None, None)
+        peer_id, peer_name = resolve(peer_sid, sub_meta_by_id.get(peer_sid) or {})
         peers.append(
             PairedAuthor(
                 submission_id=peer_sid,
@@ -157,8 +160,13 @@ async def list_course_suspicious(
         for peer in f.paired_with or []:
             unique_sub_ids.add(peer)
     bearer = request.headers.get("authorization")
+    # Names from the pairs first (works for yc-imported authors), submission
+    # payloads as a fallback (also carries assignment_id).
+    name_by_sid = await svc.author_names_for_submissions(
+        principal.tenant_id, list(unique_sub_ids)
+    )
     sub_meta = await _resolve_submission_meta(bearer, list(unique_sub_ids))
-    return {"data": [_to_item(f, sub_meta).model_dump() for f in flags]}
+    return {"data": [_to_item(f, sub_meta, name_by_sid).model_dump() for f in flags]}
 
 
 @router.get("/assignments/{assignment_id}/suspicious-submissions")

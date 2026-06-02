@@ -21,6 +21,9 @@ export interface CreateUserInput {
   locale?: string;
   send_invitation?: boolean;
   tenant_slug?: string;
+  /** Admin-only: create the user in this tenant (backend reads ``tenant_id``
+   *  from the create payload for admins). Used by the per-tenant users tab. */
+  tenant_id?: string;
 }
 
 export interface BulkInviteInput {
@@ -112,8 +115,13 @@ export const usersApi = {
 
   listSessions: () =>
     api
-      .get<{ data: UserSession[] }>('/users/me/sessions')
-      .then((r) => r.data.data),
+      .get<{ data: Array<UserSession & { is_current?: boolean }> }>(
+        '/users/me/sessions',
+      )
+      // Backend serialises the flag as ``is_current``; the UI reads ``current``.
+      .then((r) =>
+        r.data.data.map((s) => ({ ...s, current: s.is_current ?? s.current })),
+      ),
 
   revokeSession: (id: string) =>
     api.delete<void>(`/users/me/sessions/${id}`).then((r) => r.data),

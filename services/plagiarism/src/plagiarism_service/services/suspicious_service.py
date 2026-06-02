@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..common.ids import flag_id
@@ -119,6 +120,42 @@ class SuspiciousService:
 
     async def list_active(self, tenant_id: str) -> list[SuspiciousFlag]:
         return await self.repo.list_active(tenant_id=tenant_id)
+
+    async def author_names_for_submissions(
+        self, tenant_id: str, submission_ids: list[str]
+    ) -> dict[str, tuple[str | None, str | None]]:
+        """Map ``submission_id → (author_id, display_name)`` from the
+        plagiarism pairs, which captured the author ФИО at scan time. This is
+        the reliable source for Yandex.Contest-imported authors: they have no
+        platform account and their submission payload carries no name, but the
+        pair row does (``a_author_display_name`` / ``b_author_display_name``)."""
+        ids = [s for s in submission_ids if s]
+        if not ids:
+            return {}
+        stmt = select(PlagiarismPair).where(
+            PlagiarismPair.tenant_id == tenant_id,
+            or_(
+                PlagiarismPair.a_submission_id.in_(ids),
+                PlagiarismPair.b_submission_id.in_(ids),
+            ),
+        )
+        rows = (await self.session.execute(stmt)).scalars().all()
+        want = set(ids)
+        out: dict[str, tuple[str | None, str | None]] = {}
+        for p in rows:
+            if (
+                p.a_submission_id in want
+                and p.a_author_display_name
+                and p.a_submission_id not in out
+            ):
+                out[p.a_submission_id] = (p.a_author_id, p.a_author_display_name)
+            if (
+                p.b_submission_id in want
+                and p.b_author_display_name
+                and p.b_submission_id not in out
+            ):
+                out[p.b_submission_id] = (p.b_author_id, p.b_author_display_name)
+        return out
 
     async def list_active_for_assignment(
         self, *, tenant_id: str, submission_ids: list[str]

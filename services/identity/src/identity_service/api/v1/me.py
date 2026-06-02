@@ -3,13 +3,23 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Cookie,
+    Depends,
+    File,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...common.email_change import apply_email_update
 from ...common.events import make_event
 from ...common.pagination import Page, Pagination
 from ...common.problem import ProblemException
+from ...common.security import hash_token
 from ...config import settings
 from ...deps import CurrentUser, current_user, get_session
 from ...repositories.oauth import OAuthIdentityRepository
@@ -237,6 +247,7 @@ async def delete_avatar(
 async def my_sessions(
     user: CurrentUser = Depends(current_user),
     session: AsyncSession = Depends(get_session),
+    refresh: str | None = Cookie(default=None, alias=settings.refresh_cookie_name),
 ) -> Page[SessionOut]:
     sessions = SessionRepository(session)
     # Self-service view: hide revoked + expired sessions. The Безопасность
@@ -244,6 +255,10 @@ async def my_sessions(
     # past sessions there confuses users (they revoke a row, the click
     # succeeds, the row stays, they file a bug).
     rows = await sessions.list_active_for_user(user.id)
+    # The access token is stateless (no session link), but the refresh cookie
+    # (path="/", so it rides along here) identifies THIS session: its hash
+    # matches exactly one row's refresh_token_hash → that row is "current".
+    current_hash = hash_token(refresh) if refresh else None
     return Page[SessionOut](
         data=[
             SessionOut(
@@ -255,7 +270,10 @@ async def my_sessions(
                 last_used_at=s.last_used_at,
                 expires_at=s.expires_at,
                 revoked_at=s.revoked_at,
-                is_current=False,
+                is_current=(
+                    current_hash is not None
+                    and s.refresh_token_hash == current_hash
+                ),
             )
             for s in rows
         ],

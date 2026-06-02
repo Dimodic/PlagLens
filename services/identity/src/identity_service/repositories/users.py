@@ -88,8 +88,15 @@ class UserRepository:
         if status:
             stmt = stmt.where(User.status == status)
         if q:
-            like = f"%{q.lower()}%"
-            stmt = stmt.where(User.email.ilike(like) | User.display_name.ilike(like))
+            # LC_CTYPE=C ⇒ plain ILIKE only folds ASCII case, so a Cyrillic
+            # query ("Смирнов") wouldn't match. Fold via the ICU collation —
+            # the query side is already Python-lowercased (Unicode-aware) —
+            # mirroring ``search_people`` so name/email search works here too.
+            ql = q.strip().lower()
+            like = f"%{ql}%"
+            name_l = func.lower(User.display_name.collate("und-x-icu"))
+            email_l = func.lower(User.email.collate("und-x-icu"))
+            stmt = stmt.where(or_(name_l.like(like), email_l.like(like)))
         stmt = stmt.order_by(User.created_at.desc()).limit(limit).offset(offset)
         return list((await self.s.execute(stmt)).scalars().all())
 

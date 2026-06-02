@@ -14,7 +14,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -112,21 +111,23 @@ export function Header({ onOpenMobileNav }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            {/* Name already sits in the trigger right above — the label only
-              * carries the secondary (handle / email) to avoid showing the
-              * name twice. Falls back to the name when there's no secondary. */}
-            <DropdownMenuLabel className="font-normal">
-              <span
-                data-testid="header-user-email"
-                className="block text-xs text-muted-foreground truncate"
-              >
-                {userSecondaryLabel(user) ?? displayName}
-              </span>
-            </DropdownMenuLabel>
+            {/* The @handle / email rides as a muted subtitle under «Профиль»
+              * — no orphaned standalone label at the top, and the name isn't
+              * duplicated (it already sits in the trigger above). */}
             <DropdownMenuItem asChild data-testid="header-user-menu-profile">
               <Link to="/me/profile" className="cursor-pointer">
-                <UserIcon className="mr-2 h-4 w-4" />
-                {t('user_menu.profile')}
+                <UserIcon className="mr-2 h-4 w-4 flex-none" />
+                <span className="flex min-w-0 flex-col">
+                  <span>{t('user_menu.profile')}</span>
+                  {userSecondaryLabel(user) && (
+                    <span
+                      data-testid="header-user-email"
+                      className="truncate text-xs font-normal text-muted-foreground"
+                    >
+                      {userSecondaryLabel(user)}
+                    </span>
+                  )}
+                </span>
               </Link>
             </DropdownMenuItem>
             {/* Theme + language as two segmented toggles. Plain div (not a

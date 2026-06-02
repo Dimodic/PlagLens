@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  ChevronDown,
+  ChevronRight,
   Download,
   Eye,
   FileSpreadsheet,
@@ -127,6 +129,9 @@ export default function ExportPage() {
   const [homeworkIds, setHomeworkIds] = useState<string[]>([]);
   const [mappingOpen, setMappingOpen] = useState(false);
   const [otherOpen, setOtherOpen] = useState(false);
+  // History is collapsed by default — it's rarely needed and was eating
+  // vertical space above the fold on the main export flow.
+  const [historyOpen, setHistoryOpen] = useState(false);
   // «Предзаписать» overlay — grades painted into the on-page preview so
   // the teacher can eyeball placement before the real write. Cleared
   // whenever the course / ДЗ selection changes (it'd be stale).
@@ -414,34 +419,54 @@ export default function ExportPage() {
         </div>
       </section>
 
-      {/* History */}
+      {/* History — collapsed by default behind a toggle; rarely needed and
+          it was taking prime vertical space on the main flow. */}
       <section className="space-y-3 border-t border-border/60 pt-6">
-        <h2 className="text-base font-semibold">{t('export_page.history')}</h2>
-        {exportsLoading ? (
-          <div className="flex items-center py-3">
-            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-          </div>
-        ) : exportItems.length === 0 ? (
-          <p className="py-2 text-sm text-muted-foreground">
-            {t('export_page.history_empty')}
-          </p>
-        ) : (
-          <ul
-            className="flex flex-col divide-y divide-border/60"
-            data-testid="exports-list"
-          >
-            {exportItems.map((j) => (
-              <FlatExportRow
-                key={j.id}
-                job={j}
-                onDownload={onDownload}
-                onRetry={(id) => retry.mutate(id)}
-                onCancel={(id) => cancel.mutate(id)}
-                onDelete={(id) => remove.mutate(id)}
-              />
-            ))}
-          </ul>
-        )}
+        <button
+          type="button"
+          onClick={() => setHistoryOpen((o) => !o)}
+          aria-expanded={historyOpen}
+          data-testid="export-history-toggle"
+          className="flex items-center gap-2 text-base font-semibold text-foreground"
+        >
+          {historyOpen ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          {t('export_page.history')}
+          {exportItems.length > 0 && (
+            <span className="text-xs font-normal text-muted-foreground">
+              {exportItems.length}
+            </span>
+          )}
+        </button>
+        {historyOpen &&
+          (exportsLoading ? (
+            <div className="flex items-center py-3">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+            </div>
+          ) : exportItems.length === 0 ? (
+            <p className="py-2 text-sm text-muted-foreground">
+              {t('export_page.history_empty')}
+            </p>
+          ) : (
+            <ul
+              className="flex flex-col divide-y divide-border/60"
+              data-testid="exports-list"
+            >
+              {exportItems.map((j) => (
+                <FlatExportRow
+                  key={j.id}
+                  job={j}
+                  onDownload={onDownload}
+                  onRetry={(id) => retry.mutate(id)}
+                  onCancel={(id) => cancel.mutate(id)}
+                  onDelete={(id) => remove.mutate(id)}
+                />
+              ))}
+            </ul>
+          ))}
       </section>
 
       {courseId && hasLink && (
@@ -1054,6 +1079,17 @@ const STATUS_TONE: Record<ExportStatus, string | null> = {
   cancelled: 'text-sev-mid',
 };
 
+// Human, teacher-facing names for each export kind — the raw enum
+// («assignment_grades» / «GOOGLE_SHEETS») read as developer noise.
+const KIND_LABEL_KEY: Record<string, string> = {
+  assignment_grades: 'export_page.kind_assignment_grades',
+  course_summary: 'export_page.kind_course_summary',
+  plagiarism_report: 'export_page.kind_plagiarism_report',
+  ai_analysis_summary: 'export_page.kind_ai_summary',
+  audit_log: 'export_page.kind_audit_log',
+  tenant_usage: 'export_page.kind_tenant_usage',
+};
+
 function formatBytes(bytes?: number | null): string {
   if (bytes == null) return '—';
   const units = ['B', 'KB', 'MB', 'GB'];
@@ -1088,6 +1124,13 @@ function FlatExportRow({
     job.status === 'cancelled';
   const isActive = job.status === 'queued' || job.status === 'running';
   const statusTone = STATUS_TONE[job.status];
+  // Google-Sheets grade writes carry their counts in options — surface them
+  // so the row says what was actually done, not just the export type.
+  const opts = job.options ?? {};
+  const gradeCount =
+    typeof opts.written_cells === 'number' ? opts.written_cells : null;
+  const studentCount =
+    typeof opts.students_written === 'number' ? opts.students_written : null;
 
   return (
     <li
@@ -1097,10 +1140,12 @@ function FlatExportRow({
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline gap-2 text-sm">
           <span className="truncate font-medium text-foreground">
-            {job.kind}
+            {KIND_LABEL_KEY[job.kind] ? t(KIND_LABEL_KEY[job.kind]) : job.kind}
           </span>
-          <span className="text-xs uppercase tracking-wider text-muted-foreground">
-            {job.format}
+          <span className="text-xs text-muted-foreground">
+            {job.format === 'google_sheets'
+              ? t('export_page.format_google_sheets')
+              : job.format.toUpperCase()}
           </span>
           {statusTone && (
             <span className={cn('text-xs', statusTone)}>
@@ -1109,6 +1154,14 @@ function FlatExportRow({
           )}
         </div>
         <div className="mt-0.5 truncate text-xs text-muted-foreground">
+          {gradeCount != null && (
+            <span className="text-foreground/70">
+              {t('export_page.history_grades', { count: gradeCount })}
+              {studentCount != null &&
+                ` · ${t('export_page.history_students', { count: studentCount })}`}
+              {' · '}
+            </span>
+          )}
           {dayjs(job.created_at).format('D MMM HH:mm')}
           {job.error?.title && (
             <span className="ml-2 text-destructive">· {job.error.title}</span>
@@ -1116,7 +1169,10 @@ function FlatExportRow({
         </div>
       </div>
       <span className="hidden w-20 flex-none text-right text-xs tabular-nums text-muted-foreground sm:inline">
-        {formatBytes(job.artifact_size_bytes)}
+        {/* No artifact (e.g. a Google-Sheets write) → leave blank, not «—». */}
+        {job.artifact_size_bytes != null
+          ? formatBytes(job.artifact_size_bytes)
+          : ''}
       </span>
       <div className="flex flex-none items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
         {job.status === 'completed' &&

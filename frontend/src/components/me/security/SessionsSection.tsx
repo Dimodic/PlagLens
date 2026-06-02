@@ -12,6 +12,7 @@ import dayjs from 'dayjs';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { cn } from '@/components/ui/utils';
 import {
   useMySessions,
   useRevokeAllSessions,
@@ -107,17 +108,28 @@ export function SessionsSection() {
           {sessions.map((s) => (
             <li
               key={s.id}
-              className="flex items-center gap-3 py-2.5"
+              className={cn(
+                'flex items-center gap-3 rounded-md px-2 py-2.5',
+                s.current &&
+                  'bg-emerald-500/[0.06] ring-1 ring-inset ring-emerald-500/20',
+              )}
               data-testid={`session-row-${s.id}`}
             >
-              <Monitor className="h-4 w-4 flex-none text-muted-foreground/70" />
+              <Monitor
+                className={cn(
+                  'h-4 w-4 flex-none',
+                  s.current
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-muted-foreground/70',
+                )}
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="font-mono text-xs text-foreground/90">
                     {s.ip || '—'}
                   </span>
                   {s.current && (
-                    <span className="text-xs text-emerald-600 dark:text-emerald-400">
+                    <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
                       {t('sessions_section.current')}
                     </span>
                   )}
@@ -132,22 +144,31 @@ export function SessionsSection() {
                     : dayjs(s.created_at).format('D MMM, HH:mm')}
                 </div>
               </div>
+              {/* Icon-only — the IP + client already say which session this is,
+                  so the «Завершить» label was just noise on every row. */}
               <Button
-                size="sm"
+                size="icon"
                 variant="ghost"
-                className="h-7 px-2 text-muted-foreground hover:text-destructive"
+                className="h-8 w-8 flex-none text-muted-foreground hover:text-destructive"
                 disabled={loadingId === s.id}
                 onClick={() => onRevoke(s.id, !!s.current)}
+                aria-label={
+                  s.current
+                    ? t('sessions_section.end_current')
+                    : t('sessions_section.revoke')
+                }
+                title={
+                  s.current
+                    ? t('sessions_section.end_current')
+                    : t('sessions_section.revoke')
+                }
                 data-testid={`session-revoke-${s.id}`}
               >
                 {loadingId === s.id ? (
-                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <LogOut className="mr-1.5 h-3.5 w-3.5" />
+                  <LogOut className="h-4 w-4" />
                 )}
-                {s.current
-                  ? t('sessions_section.end_current')
-                  : t('sessions_section.revoke')}
               </Button>
             </li>
           ))}

@@ -99,7 +99,10 @@ export interface RetentionStatus {
 }
 
 export const auditApi = {
-  list: (params: AuditFilters = {}) => {
+  // ``crossTenant`` lets an admin read another tenant's events — the backend
+  // resolves scope from the ``X-Cross-Tenant`` header (admin-only; everyone
+  // else stays pinned to their own tenant).
+  list: (params: AuditFilters = {}, opts: { crossTenant?: string } = {}) => {
     const base = buildListParams(params);
     if (params.actor_id) base.actor_id = params.actor_id;
     if (params.actor_type) base.actor_type = params.actor_type;
@@ -111,7 +114,12 @@ export const auditApi = {
     if (params.until) base.until = params.until;
     if (params.source_service) base.source_service = params.source_service;
     return api
-      .get<Paginated<AuditEvent>>('/audit/events', { params: base })
+      .get<Paginated<AuditEvent>>('/audit/events', {
+        params: base,
+        headers: opts.crossTenant
+          ? { 'X-Cross-Tenant': opts.crossTenant }
+          : undefined,
+      })
       .then((r) => r.data);
   },
 

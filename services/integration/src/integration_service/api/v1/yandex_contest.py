@@ -14,7 +14,7 @@ from typing import Any
 
 import httpx
 import structlog
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request
 from plaglens_common.service_client import ServiceClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -104,6 +104,7 @@ async def list_problems(
         "imported": result.imported,
         "failed": result.failed,
         "errors": result.errors,
+        "name": await adapter.fetch_contest_name(cfg, contest_id),
     }
 
 
@@ -207,6 +208,7 @@ async def import_as_homework(
     contest_id: int,
     request: Request,
     course_id: str | None = None,
+    body: dict[str, Any] | None = Body(default=None),
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
 ) -> dict[str, Any]:
@@ -391,12 +393,14 @@ async def import_as_homework(
         trigger="manual",
     )
 
+    aliases = body.get("problem_aliases") if isinstance(body, dict) else None
     asyncio.create_task(
         run_import_as_homework(
             op_id=op_id,
             cfg=cfg_snapshot,
             contest_id=contest_id,
             job_id=job_id,
+            problem_aliases=aliases,
         )
     )
     return {"operation_id": op_id, "status_url": f"/api/v1/integrations/yandex-contest/import-operations/{op_id}"}

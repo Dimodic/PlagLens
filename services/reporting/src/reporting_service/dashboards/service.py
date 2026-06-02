@@ -15,6 +15,47 @@ from ..common.time import utcnow
 from ..repositories.read_models import ReadModelRepo
 
 
+def _prom_f(v: Any) -> float:
+    """Coerce a Prometheus sample value to float; NaN/garbage → 0."""
+    try:
+        f = float(v)
+        return 0.0 if f != f else round(f, 3)  # f != f ⇒ NaN
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _pivot_prom(result: list[Any], label: str | None) -> dict[str, Any]:
+    """Prometheus ``query_range`` result → recharts-friendly ``{keys, rows}``.
+
+    ``label=None`` → a single ``value`` series. Otherwise pivot the series by
+    their ``metric[label]`` (e.g. one column per service) so every row is
+    ``{t, <label-a>, <label-b>, …}`` with gaps filled to 0."""
+    if not result:
+        return {"keys": [], "rows": []}
+    if label is None:
+        vals = result[0].get("values", [])
+        return {
+            "keys": ["value"],
+            "rows": [{"t": int(ts) * 1000, "value": _prom_f(v)} for ts, v in vals],
+        }
+    by_ts: dict[int, dict[str, Any]] = {}
+    keys: set[str] = set()
+    for s in result:
+        k = (s.get("metric") or {}).get(label) or "—"
+        keys.add(k)
+        for ts, v in s.get("values", []):
+            row = by_ts.setdefault(int(ts), {"t": int(ts) * 1000})
+            row[k] = _prom_f(v)
+    ordered = sorted(keys)
+    rows: list[dict[str, Any]] = []
+    for ts in sorted(by_ts):
+        row = by_ts[ts]
+        for k in ordered:
+            row.setdefault(k, 0.0)
+        rows.append(row)
+    return {"keys": ordered, "rows": rows}
+
+
 class DashboardService:
     def __init__(self, session: AsyncSession, cache: JsonCache, overview_ttl: int = 300, detail_ttl: int = 60):
         self.repo = ReadModelRepo(session)
@@ -227,6 +268,186 @@ class DashboardService:
         except Exception:  # noqa: BLE001 — defensive; see docstring
             return 0
 
+    async def _rows(self, sql: str, **params: Any) -> list[Any]:
+        """Multi-row variant of ``_scalar`` for the chart series. Same
+        defensive contract — returns [] on any error."""
+        from sqlalchemy import text
+
+        try:
+            res = await self.repo.session.execute(text(sql), params)
+            return list(res.fetchall())
+        except Exception:  # noqa: BLE001 — defensive; see docstring
+            return []
+
+    async def activity(self, tenant_id: str | None, months: int = 24) -> dict[str, Any]:
+        """Chart data for the admin «Обзор»: a continuous *monthly*
+        submissions series plus the top courses by submission count. Live
+        cross-schema read for the same reason ``_compute_overview`` is live —
+        the event-fed read-models miss bulk-imported / direct-SQL rows.
+
+        ``tenant_id=None`` ⇒ whole instance (admin default). Monthly, not
+        daily: real data spans imports over many months, so a 30-day window
+        would read as empty. The series is gap-filled from the earliest
+        active month, so middle gaps render as zero instead of breaking the
+        line, while a long leading run of empty months is trimmed."""
+        months = max(3, min(int(months), 36))
+        key = f"{tenant_id or 'instance'}:activity:m{months}"
+
+        async def gen() -> dict[str, Any]:
+            tfilter = "AND s.tenant_id = :t" if tenant_id else ""
+            base_p: dict[str, Any] = {"t": tenant_id} if tenant_id else {}
+
+            rows = await self._rows(
+                "SELECT date_trunc('month', s.submitted_at)::date AS m, "  # noqa: S608 — admin stat
+                "count(*) AS n FROM submission.submissions s "
+                "WHERE s.deleted_at IS NULL "
+                "AND s.submitted_at >= (now() - make_interval(months => :months)) "
+                f"{tfilter} GROUP BY 1 ORDER BY 1",
+                months=months,
+                **base_p,
+            )
+            counts = {r[0].strftime("%Y-%m"): int(r[1]) for r in rows}
+            today = utcnow().date()
+            if counts:
+                y, m = (int(x) for x in min(counts).split("-"))
+            else:
+                y, m = today.year, today.month
+            series: list[dict[str, Any]] = []
+            while (y, m) <= (today.year, today.month):
+                k = f"{y:04d}-{m:02d}"
+                series.append({"period": k, "submissions": counts.get(k, 0)})
+                m += 1
+                if m > 12:
+                    m, y = 1, y + 1
+
+            course_rows = await self._rows(
+                "SELECT s.course_id, c.name, count(*) AS n "  # noqa: S608 — admin stat
+                "FROM submission.submissions s "
+                "LEFT JOIN course.courses c ON c.id::text = s.course_id "
+                "WHERE s.deleted_at IS NULL "
+                f"{tfilter} GROUP BY s.course_id, c.name ORDER BY n DESC LIMIT 8",
+                **base_p,
+            )
+            by_course = [
+                {
+                    "course_id": str(r[0]),
+                    "name": r[1] or "—",
+                    "submissions": int(r[2]),
+                }
+                for r in course_rows
+            ]
+            return {
+                "tenant_id": tenant_id or "all",
+                "months": months,
+                "submissions_series": series,
+                "by_course": by_course,
+            }
+
+        data, cached = await self._cached(key, gen, self.overview_ttl)
+        data["cached"] = cached
+        return data
+
+    async def live_metrics(self, minutes: int = 15) -> dict[str, Any]:
+        """Live infra metrics straight from Prometheus (the data Grafana
+        visualises) for the admin «Обзор»: request rate, p95 latency,
+        per-service traffic and HTTP status mix, plus a services-up gauge.
+
+        Deliberately UNCACHED and poll-friendly — the whole point is that the
+        charts move. Each query is independent and defensive: if Prometheus is
+        unreachable or a metric is missing, that chart is just empty rather
+        than 500-ing the dashboard."""
+        import os
+        import time as _time
+
+        import httpx
+
+        minutes = max(5, min(int(minutes), 60))
+        base = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
+        end = int(_time.time())
+        start = end - minutes * 60
+        step = 15
+
+        queries: dict[str, tuple[str, str | None]] = {
+            "rps": ("sum(rate(http_requests_total[1m]))", None),
+            "latency": (
+                "histogram_quantile(0.95, sum by (le) "
+                "(rate(http_request_duration_seconds_bucket[5m]))) * 1000",
+                None,
+            ),
+            "by_service": (
+                "sum by (service) (rate(http_requests_total[1m]))",
+                "service",
+            ),
+        }
+        charts: dict[str, Any] = {
+            k: {"keys": [], "rows": []}
+            for k in ("rps", "latency", "by_service", "by_class")
+        }
+        online = total = 0
+        try:
+            async with httpx.AsyncClient(timeout=6.0) as client:
+
+                async def rng(expr: str) -> list[Any]:
+                    try:
+                        r = await client.get(
+                            f"{base}/api/v1/query_range",
+                            params={
+                                "query": expr,
+                                "start": start,
+                                "end": end,
+                                "step": step,
+                            },
+                        )
+                        r.raise_for_status()
+                        return r.json().get("data", {}).get("result", [])
+                    except Exception:  # noqa: BLE001
+                        return []
+
+                async def scalar(expr: str) -> float:
+                    try:
+                        r = await client.get(
+                            f"{base}/api/v1/query", params={"query": expr}
+                        )
+                        r.raise_for_status()
+                        res = r.json().get("data", {}).get("result", [])
+                        return float(res[0]["value"][1]) if res else 0.0
+                    except Exception:  # noqa: BLE001
+                        return 0.0
+
+                for name, (expr, label) in queries.items():
+                    charts[name] = _pivot_prom(await rng(expr), label)
+                # Status mix as explicit 2xx/4xx/5xx series (label_replace on
+                # the status label proved finicky through the query layer) →
+                # one stacked set, gap-filled so every class is a continuous band.
+                class_pat = {"2xx": "2..", "4xx": "4..", "5xx": "5.."}
+                cls_ts: dict[int, dict[str, Any]] = {}
+                for cname, pat in class_pat.items():
+                    res = await rng(
+                        f'sum(rate(http_requests_total{{status=~"{pat}"}}[1m]))'
+                    )
+                    for ts, v in res[0].get("values", []) if res else []:
+                        row = cls_ts.setdefault(int(ts), {"t": int(ts) * 1000})
+                        row[cname] = _prom_f(v)
+                cls_rows: list[dict[str, Any]] = []
+                for ts in sorted(cls_ts):
+                    row = cls_ts[ts]
+                    for cname in class_pat:
+                        row.setdefault(cname, 0.0)
+                    cls_rows.append(row)
+                charts["by_class"] = {"keys": list(class_pat), "rows": cls_rows}
+                online = int(await scalar("sum(up)"))
+                total = int(await scalar("count(up)"))
+        except Exception:  # noqa: BLE001 — Prometheus down → empty charts, no 500
+            pass
+
+        return {
+            "minutes": minutes,
+            "step": step,
+            "charts": charts,
+            "services_online": online,
+            "services_total": total,
+        }
+
     async def _compute_overview(self, tenant_id: str | None) -> dict[str, Any]:
         """The six KPIs, computed live from the authoritative schemas
         (course / submission / plagiarism / identity). ``tenant_id=None``
@@ -255,6 +476,13 @@ class DashboardService:
                 "WHERE tenant_id = :t AND deleted_at IS NULL "
                 "AND last_login_at >= now() - interval '30 days'"
             )
+            users_w = "WHERE tenant_id = :t AND deleted_at IS NULL"
+            sessions_sql = (
+                "SELECT count(*) FROM identity.sessions s "
+                "JOIN identity.users u ON u.id = s.user_id "
+                "WHERE u.tenant_id = :t AND s.revoked_at IS NULL "
+                "AND s.expires_at > now()"
+            )
         else:
             p = {}
             courses_w = "WHERE deleted_at IS NULL AND status <> 'archived'"
@@ -267,6 +495,11 @@ class DashboardService:
             mau_w = (
                 "WHERE deleted_at IS NULL "
                 "AND last_login_at >= now() - interval '30 days'"
+            )
+            users_w = "WHERE deleted_at IS NULL"
+            sessions_sql = (
+                "SELECT count(*) FROM identity.sessions "
+                "WHERE revoked_at IS NULL AND expires_at > now()"
             )
         return {
             "tenant_id": tenant_id or "all",
@@ -290,11 +523,17 @@ class DashboardService:
                 f"FROM submission.submissions {subs_w}",
                 **p,
             ),
+            "users_total": await self._scalar(
+                f"SELECT count(*) FROM identity.users {users_w}", **p  # noqa: S608 — admin stat
+            ),
+            "active_sessions": await self._scalar(sessions_sql, **p),
         }
 
     async def tenant_overview(self, tenant_id: str) -> dict[str, Any]:
         data, cached = await self._cached(
-            f"{tenant_id}:tenant:overview",
+            # ``:v2`` — bumped when users_total/active_sessions were added so a
+            # pre-deploy cache entry (missing those keys) isn't served.
+            f"{tenant_id}:tenant:overview:v2",
             lambda: self._compute_overview(tenant_id),
             self.overview_ttl,
         )
@@ -304,7 +543,7 @@ class DashboardService:
     async def instance_overview(self) -> dict[str, Any]:
         """Whole-instance roll-up — the admin dashboard's default view."""
         data, cached = await self._cached(
-            "instance:overview",
+            "instance:overview:v2",
             lambda: self._compute_overview(None),
             self.overview_ttl,
         )

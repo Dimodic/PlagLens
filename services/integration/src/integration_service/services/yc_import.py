@@ -911,7 +911,12 @@ async def import_submissions_for_aliases(
 
 
 async def run_import_as_homework(
-    *, op_id: str, cfg: Any, contest_id: int, job_id: str | None = None
+    *,
+    op_id: str,
+    cfg: Any,
+    contest_id: int,
+    job_id: str | None = None,
+    problem_aliases: list[str] | None = None,
 ) -> None:
     """Background worker doing the actual sync (homework + assignments +
     submissions) and updating the Redis op state as it goes. Uses the
@@ -1055,6 +1060,16 @@ async def run_import_as_homework(
             result = await adapter.import_problems(
                 cfg, {"contest_id": contest_id}
             )
+            # Manual selection: keep only the problems the teacher ticked
+            # (matched by alias, falling back to external_id). Empty / None
+            # ⇒ import everything (back-compat with the old "import all" flow).
+            if problem_aliases:
+                wanted = {str(a) for a in problem_aliases}
+                result.problems = [
+                    pr
+                    for pr in result.problems
+                    if str(pr.alias or pr.external_id) in wanted
+                ]
             await op_update(
                 op_id,
                 problems_total=len(result.problems),

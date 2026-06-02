@@ -5,6 +5,7 @@ from integration_service.api.v1 import (
     admin,
     configs,
     cursor,
+    ejudge,
     google_sheets,
     health,
     manual,
@@ -23,6 +24,7 @@ def build_router() -> APIRouter:
     api.include_router(oauth.router)
     api.include_router(stepik.router)
     api.include_router(yandex_contest.router)
+    api.include_router(ejudge.router)
     api.include_router(manual.router)
     api.include_router(sync.router)
     api.include_router(schedules.router)
