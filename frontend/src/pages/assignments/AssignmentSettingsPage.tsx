@@ -21,6 +21,7 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
@@ -37,7 +38,8 @@ function fromLocalInput(value: string): string | null {
 }
 
 export default function AssignmentSettingsPage() {
-  useDocumentTitle('Настройки задания');
+  const { t } = useTranslation();
+  useDocumentTitle(t('assignment_settings.title'));
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -83,7 +85,7 @@ export default function AssignmentSettingsPage() {
         max_score: maxScore,
         weight,
       });
-      notify.success('Сохранено');
+      notify.success(t('assignment_settings.saved'));
     } catch (err) {
       setProblem(parseProblem(err));
     }
@@ -96,7 +98,7 @@ export default function AssignmentSettingsPage() {
       parsedRubric = JSON.parse(rubric || '{}');
     } catch {
       setProblem({
-        title: 'Некорректный JSON в рубрике',
+        title: t('assignment_settings.invalid_rubric_json'),
         status: 0,
         code: 'CLIENT_ERROR',
       });
@@ -108,7 +110,7 @@ export default function AssignmentSettingsPage() {
         pass_threshold: passThreshold,
         visible_to_students_at: visibleAt,
       });
-      notify.success('Сохранено');
+      notify.success(t('assignment_settings.saved'));
     } catch (err) {
       setProblem(parseProblem(err));
     }
@@ -120,7 +122,7 @@ export default function AssignmentSettingsPage() {
     // edge-to-edge layout. The subtitle (assignment title) is dropped —
     // breadcrumbs already show "Course › Homework › Assignment" up top.
     <Page width="regular">
-      <PageHeader title="Настройки задания" />
+      <PageHeader title={t('assignment_settings.title')} />
 
       <Tabs defaultValue="general">
         <TabsList>
@@ -128,20 +130,22 @@ export default function AssignmentSettingsPage() {
             value="general"
             data-testid="assignment-settings-tab-general"
           >
-            Общие
+            {t('assignment_settings.tab_general')}
           </TabsTrigger>
           <TabsTrigger
             value="grading"
             data-testid="assignment-settings-tab-grading"
           >
-            Оценивание
+            {t('assignment_settings.tab_grading')}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="general" className="pt-4">
           <form onSubmit={handleGeneralSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="assignment-settings-title-input">Название *</Label>
+              <Label htmlFor="assignment-settings-title-input">
+                {t('assignment_settings.name_label')}
+              </Label>
               <Input
                 id="assignment-settings-title-input"
                 data-testid="assignment-settings-title"
@@ -152,7 +156,7 @@ export default function AssignmentSettingsPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="assignment-settings-max-score-input">
-                  Макс. оценка
+                  {t('assignment_settings.max_score_label')}
                 </Label>
                 <Input
                   id="assignment-settings-max-score-input"
@@ -167,7 +171,9 @@ export default function AssignmentSettingsPage() {
                 />
               </div>
               <div className="space-y-1.5">
-                <Label htmlFor="assignment-settings-weight-input">Вес</Label>
+                <Label htmlFor="assignment-settings-weight-input">
+                  {t('assignment_settings.weight_label')}
+                </Label>
                 <Input
                   id="assignment-settings-weight-input"
                   type="number"
@@ -188,7 +194,7 @@ export default function AssignmentSettingsPage() {
                 onClick={() => navigate(`/assignments/${id}`)}
                 data-testid="assignment-settings-back"
               >
-                Назад
+                {t('common.back')}
               </Button>
               <Button
                 type="submit"
@@ -198,7 +204,7 @@ export default function AssignmentSettingsPage() {
                 {updateAssignment.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Сохранить
+                {t('common.save')}
               </Button>
             </div>
           </form>
@@ -208,7 +214,7 @@ export default function AssignmentSettingsPage() {
           <form onSubmit={handleGradingSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="assignment-grading-rubric-input">
-                Рубрика (JSON)
+                {t('assignment_settings.rubric_label')}
               </Label>
               <Textarea
                 id="assignment-grading-rubric-input"
@@ -219,13 +225,13 @@ export default function AssignmentSettingsPage() {
                 className="font-mono text-[13px]"
               />
               <p className="text-xs text-muted-foreground">
-                Структура критериев и весов
+                {t('assignment_settings.rubric_hint')}
               </p>
             </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="assignment-grading-pass-threshold-input">
-                Порог зачёта
+                {t('assignment_settings.pass_threshold_label')}
               </Label>
               <Input
                 id="assignment-grading-pass-threshold-input"
@@ -243,7 +249,7 @@ export default function AssignmentSettingsPage() {
 
             <div className="space-y-1.5">
               <Label htmlFor="assignment-grading-visible-at-input">
-                Оценки видны студентам с
+                {t('assignment_settings.visible_at_label')}
               </Label>
               <Input
                 id="assignment-grading-visible-at-input"
@@ -255,7 +261,7 @@ export default function AssignmentSettingsPage() {
                 }
               />
               <p className="text-xs text-muted-foreground">
-                До этого момента студент видит посылку, но не оценку
+                {t('assignment_settings.visible_at_hint')}
               </p>
             </div>
 
@@ -270,7 +276,7 @@ export default function AssignmentSettingsPage() {
                 {updateGrading.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Сохранить
+                {t('common.save')}
               </Button>
             </div>
           </form>

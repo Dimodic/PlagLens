@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { StatsPanel } from '@/components/common/StatsPanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation, t } from '@/i18n';
 import { useUsers } from '@/hooks/api/useUsers';
 import {
   useIntegrations,
@@ -27,9 +28,9 @@ function statusDot(s: IntegrationStatus | string): string {
 
 function statusLabel(s: IntegrationStatus | string): string {
   if (s === 'active') return 'OK';
-  if (s === 'pending_auth') return 'ожидает';
-  if (s === 'disabled') return 'выкл';
-  return 'ошибка';
+  if (s === 'pending_auth') return t('admin_dashboard.status_pending');
+  if (s === 'disabled') return t('admin_dashboard.status_disabled');
+  return t('admin_dashboard.status_error');
 }
 
 interface KPI {
@@ -39,7 +40,8 @@ interface KPI {
 }
 
 export function AdminDashboardPage() {
-  useDocumentTitle('Обзор');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin_dashboard.title'));
 
   const usersQ = useUsers({ limit: 1 });
   const integrationsQ = useIntegrations({ limit: 8 });
@@ -59,14 +61,14 @@ export function AdminDashboardPage() {
   ).length;
 
   const kpis: KPI[] = [
-    { label: 'Активных пользователей', v: usersTotal },
+    { label: t('admin_dashboard.kpi_active_users'), v: usersTotal },
     {
-      label: 'Интеграций',
+      label: t('admin_dashboard.kpi_integrations'),
       v: integrationsTotal === 0 ? '—' : integrationsActive,
       sub: integrationsTotal === 0 ? undefined : `/${integrationsTotal}`,
     },
-    { label: 'Проверок за день', v: '—' },
-    { label: 'Инцидентов', v: openIncidents },
+    { label: t('admin_dashboard.kpi_checks_today'), v: '—' },
+    { label: t('admin_dashboard.kpi_incidents'), v: openIncidents },
   ];
 
   const integrations = (integrationsQ.data?.data ?? []).slice(0, 6);
@@ -74,7 +76,7 @@ export function AdminDashboardPage() {
 
   return (
     <Page width="regular">
-      <PageHeader title="Обзор" />
+      <PageHeader title={t('admin_dashboard.title')} />
 
       <StatsPanel
         data-testid="admin-home-kpis"
@@ -94,7 +96,7 @@ export function AdminDashboardPage() {
       {/* Integration health */}
       <section className="space-y-3">
         <div className="flex items-end justify-between">
-          <h2 className="text-xl font-bold">Состояние интеграций</h2>
+          <h2 className="text-xl font-bold">{t('admin_dashboard.integrations_heading')}</h2>
           <Button
             asChild
             variant="ghost"
@@ -103,14 +105,14 @@ export function AdminDashboardPage() {
             data-testid="admin-home-integrations-link"
           >
             <Link to="/admin/integrations">
-              все
+              {t('admin_dashboard.see_all')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>
         {integrations.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Нет настроенных интеграций.
+            {t('admin_dashboard.integrations_empty')}
           </p>
         ) : (
           <div className="divide-y divide-border/50" data-testid="admin-home-integrations">
@@ -137,7 +139,7 @@ export function AdminDashboardPage() {
       {/* Audit log */}
       <section className="space-y-3">
         <div className="flex items-end justify-between">
-          <h2 className="text-xl font-bold">Журнал событий</h2>
+          <h2 className="text-xl font-bold">{t('admin_dashboard.audit_heading')}</h2>
           <Button
             asChild
             variant="ghost"
@@ -146,14 +148,14 @@ export function AdminDashboardPage() {
             data-testid="admin-home-audit-link"
           >
             <Link to="/admin/audit">
-              перейти
+              {t('admin_dashboard.audit_go')}
               <ArrowRight className="h-4 w-4" />
             </Link>
           </Button>
         </div>
         {auditEvents.length === 0 ? (
           <p className="py-6 text-center text-sm text-muted-foreground">
-            Событий пока нет.
+            {t('admin_dashboard.audit_empty')}
           </p>
         ) : (
           <div className="divide-y divide-border/50" data-testid="admin-home-audit">

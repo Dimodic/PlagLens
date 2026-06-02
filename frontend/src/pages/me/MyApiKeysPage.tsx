@@ -11,6 +11,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ApiKeyCreateModal } from '@/components/me/ApiKeyCreateModal';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useApiKeys,
   useCreateApiKey,
@@ -32,6 +33,7 @@ import {
 } from '@/components/ui/table';
 
 export function MyApiKeysPage() {
+  const { t } = useTranslation();
   useDocumentTitle('API keys');
   const notify = useNotifications();
   const { data, isLoading, error, refetch } = useApiKeys();
@@ -52,19 +54,19 @@ export function MyApiKeysPage() {
     try {
       const r = await rotate.mutateAsync(id);
       setRotated(r);
-      notify.success('Ключ ротирован');
+      notify.success(t('my_api_keys.rotate_success'));
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('my_api_keys.error_generic'));
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await remove.mutateAsync(id);
-      notify.success('Ключ отозван');
+      notify.success(t('my_api_keys.revoke_success'));
       refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('my_api_keys.error_generic'));
     }
   };
 
@@ -76,7 +78,7 @@ export function MyApiKeysPage() {
         action={
           <Button onClick={() => setModalOpen(true)}>
             <Plus className="mr-2 h-4 w-4" />
-            Создать
+            {t('my_api_keys.create')}
           </Button>
         }
       />
@@ -89,11 +91,11 @@ export function MyApiKeysPage() {
           </div>
         ) : data && data.length === 0 ? (
           <EmptyState
-            title="API ключей нет"
+            title={t('my_api_keys.empty_title')}
             action={
               <Button onClick={() => setModalOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
-                Создать
+                {t('my_api_keys.create')}
               </Button>
             }
           />
@@ -102,11 +104,11 @@ export function MyApiKeysPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Имя</TableHead>
+                  <TableHead>{t('my_api_keys.col_name')}</TableHead>
                   <TableHead>Scopes</TableHead>
                   <TableHead>Last used</TableHead>
                   <TableHead>Expires</TableHead>
-                  <TableHead>Действия</TableHead>
+                  <TableHead>{t('my_api_keys.col_actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

@@ -259,14 +259,18 @@ export function useGradesMatch(courseId: string) {
 }
 
 export function useGradesWrite(courseId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: {
       homework_ids: string[];
       spreadsheet_id: string;
       sheet_name: string;
-      column_map: Record<string, number>;
-      row_map: Record<string, number>;
+      cells?: { row: number; col: number; value: number }[];
     }) => reportingApi.gradesWrite(courseId, body),
+    // The write now lands a row in «История экспортов» — refresh the list.
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: exportKeys.all });
+    },
   });
 }
 
@@ -292,10 +296,12 @@ export function usePreviewSpreadsheet() {
       spreadsheetId: string;
       max_rows?: number;
       max_cols?: number;
+      sheet_name?: string;
     }) =>
       reportingApi.previewSpreadsheet(vars.spreadsheetId, {
         max_rows: vars.max_rows,
         max_cols: vars.max_cols,
+        sheet_name: vars.sheet_name,
       }),
   });
 }

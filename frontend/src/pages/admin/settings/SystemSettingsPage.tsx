@@ -20,6 +20,7 @@ import { Button } from '@/components/ui/button';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation, t } from '@/i18n';
 import { useServicesStatus, useSystemVersion } from '@/hooks/api/useSystem';
 import type { ServiceStatus } from '@/api/endpoints/system';
 import type { Problem } from '@/api/types';
@@ -32,10 +33,10 @@ function formatUptime(seconds: number | undefined | null): string {
   const h = Math.floor((total % 86400) / 3600);
   const m = Math.floor((total % 3600) / 60);
   // Compact, only show meaningful parts. "5d 3h 12m" / "3h 12m" / "12m" / "<1m".
-  if (d > 0) return `${d}д ${h}ч ${m}м`;
-  if (h > 0) return `${h}ч ${m}м`;
-  if (m > 0) return `${m}м`;
-  return '<1м';
+  if (d > 0) return t('system_settings.uptime_dhm', { d, h, m });
+  if (h > 0) return t('system_settings.uptime_hm', { h, m });
+  if (m > 0) return t('system_settings.uptime_m', { m });
+  return t('system_settings.uptime_lt_min');
 }
 
 function nonEmpty(v: string | undefined | null): string | null {
@@ -45,6 +46,7 @@ function nonEmpty(v: string | undefined | null): string | null {
 }
 
 function ServiceRow({ s }: { s: ServiceStatus }) {
+  const { t } = useTranslation();
   const tone =
     s.status === 'healthy'
       ? { ic: CheckCircle2, cls: 'text-emerald-600 dark:text-emerald-400' }
@@ -54,11 +56,11 @@ function ServiceRow({ s }: { s: ServiceStatus }) {
   const Ic = tone.ic;
   const latency =
     s.latency_ms != null && Number.isFinite(s.latency_ms)
-      ? `${Math.round(s.latency_ms)} мс`
+      ? t('system_settings.latency_ms', { ms: Math.round(s.latency_ms) })
       : '—';
   return (
     <div
-      className="grid grid-cols-[1fr_auto_auto] items-center gap-6 py-3 text-sm"
+      className="grid grid-cols-[1fr_auto_auto] items-center gap-6 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/30"
       data-testid={`system-service-${s.name}`}
     >
       <div className="flex min-w-0 items-center gap-3">
@@ -79,7 +81,8 @@ function ServiceRow({ s }: { s: ServiceStatus }) {
 }
 
 export function SystemSettingsPage() {
-  useDocumentTitle('Система');
+  const { t } = useTranslation();
+  useDocumentTitle(t('system_settings.title'));
   const ver = useSystemVersion();
   const svc = useServicesStatus();
 
@@ -87,11 +90,11 @@ export function SystemSettingsPage() {
   const rows: { k: string; v: React.ReactNode }[] = data
     ? [
         nonEmpty(data.app_name) && {
-          k: 'Приложение',
+          k: t('system_settings.app_name'),
           v: <span className="font-mono">{nonEmpty(data.app_name)}</span>,
         },
         nonEmpty(data.version) && {
-          k: 'Версия',
+          k: t('system_settings.version'),
           v: <span className="font-mono">{data.version}</span>,
         },
         nonEmpty(data.build) && {
@@ -99,11 +102,11 @@ export function SystemSettingsPage() {
           v: <span className="font-mono">{data.build}</span>,
         },
         nonEmpty(data.environment) && {
-          k: 'Окружение',
+          k: t('system_settings.environment'),
           v: <span className="font-mono">{data.environment}</span>,
         },
         data.deployed_at && {
-          k: 'Развёрнуто',
+          k: t('system_settings.deployed_at'),
           v: dayjs(data.deployed_at).format('DD.MM.YYYY HH:mm'),
         },
         {
@@ -116,25 +119,41 @@ export function SystemSettingsPage() {
   const services = svc.data?.services ?? [];
   const healthyCount = services.filter((s) => s.status === 'healthy').length;
 
+  // Observability panels live on their own subdomains (grafana.<host>,
+  // prometheus.<host>, jaeger.<host>) behind Traefik with HTTP basic-auth — so
+  // only the admin (who has the password) can open them. The raw container
+  // ports are bound to localhost. Build from the current hostname so it works
+  // in dev (grafana.localhost) and prod alike.
+  const obsHost =
+    typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  const observability = [
+    { label: t('system_settings.grafana'), href: `https://grafana.${obsHost}/` },
+    {
+      label: t('system_settings.prometheus'),
+      href: `https://prometheus.${obsHost}/`,
+    },
+    { label: t('system_settings.jaeger'), href: `https://jaeger.${obsHost}/` },
+  ];
+
   return (
     <Page width="narrow">
-      <PageHeader title="Система" />
+      <PageHeader title={t('system_settings.title')} />
 
       {ver.error && <ProblemAlert problem={ver.error as unknown as Problem} />}
 
       {/* ===== Платформа ===== */}
       <section className="space-y-3">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Платформа
+          {t('system_settings.platform')}
         </h2>
         {ver.isLoading ? (
           <div className="flex items-center py-3">
             <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
           </div>
         ) : rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Нет данных.</p>
+          <p className="text-sm text-muted-foreground">{t('system_settings.no_data')}</p>
         ) : (
-          <div className="divide-y divide-border/50 border-y border-border/50">
+          <div>
             {rows.map((it) => (
               <div
                 key={it.k}
@@ -149,14 +168,17 @@ export function SystemSettingsPage() {
       </section>
 
       {/* ===== Сервисы ===== */}
-      <section className="space-y-3">
+      <section className="space-y-3 border-t border-border/50 pt-6">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Сервисы
+            {t('system_settings.services')}
           </h2>
           {services.length > 0 && (
             <span className="text-xs text-muted-foreground tabular-nums">
-              {healthyCount} / {services.length} живы
+              {t('system_settings.healthy_count', {
+                healthy: healthyCount,
+                total: services.length,
+              })}
             </span>
           )}
         </div>
@@ -166,10 +188,10 @@ export function SystemSettingsPage() {
           </div>
         ) : services.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Шлюз не вернул список сервисов.
+            {t('system_settings.services_empty')}
           </p>
         ) : (
-          <div className="divide-y divide-border/50 border-y border-border/50">
+          <div className="space-y-0.5">
             {services.map((s) => (
               <ServiceRow key={s.name} s={s} />
             ))}
@@ -178,7 +200,7 @@ export function SystemSettingsPage() {
         <div className="pt-1">
           <Button asChild variant="link" className="h-auto p-0">
             <Link to="/admin/system/health">
-              Подробные проверки
+              {t('system_settings.detailed_checks')}
               <ArrowRight className="ml-1 h-3.5 w-3.5" />
             </Link>
           </Button>
@@ -186,22 +208,18 @@ export function SystemSettingsPage() {
       </section>
 
       {/* ===== Наблюдаемость ===== */}
-      <section className="space-y-3">
+      <section className="space-y-3 border-t border-border/50 pt-6">
         <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-          Наблюдаемость
+          {t('system_settings.observability')}
         </h2>
-        <div className="divide-y divide-border/50 border-y border-border/50">
-          {[
-            { label: 'Grafana — дашборды', href: '/grafana/' },
-            { label: 'Prometheus — метрики', href: '/prometheus/' },
-            { label: 'Jaeger — распределённые трассы', href: '/jaeger/' },
-          ].map((it) => (
+        <div className="space-y-0.5">
+          {observability.map((it) => (
             <a
               key={it.href}
               href={it.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="group grid grid-cols-[1fr_auto] items-center gap-4 py-2.5 text-sm transition-colors hover:bg-muted/30"
+              className="group grid grid-cols-[1fr_auto] items-center gap-4 rounded-md px-2 py-2.5 text-sm transition-colors hover:bg-muted/30"
             >
               <span className="text-foreground">{it.label}</span>
               <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-foreground" />
@@ -209,7 +227,7 @@ export function SystemSettingsPage() {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          Доступ к этим панелям ограничен внутренней сетью / VPN.
+          {t('system_settings.observability_note')}
         </p>
       </section>
     </Page>

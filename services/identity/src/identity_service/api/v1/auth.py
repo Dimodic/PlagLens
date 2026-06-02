@@ -199,11 +199,11 @@ async def me(
             last = (raw.get("last_name") or "").strip()
             full = f"{first} {last}".strip()
             external_handle = full or None
-    email_is_placeholder = db_user.email.endswith("@telegram.plaglens.local")
+    email_is_placeholder = db_user.email is None
 
     return MeResponse(
         id=db_user.id,
-        email=db_user.email,
+        email=db_user.email or "",
         display_name=db_user.display_name,
         avatar_url=db_user.avatar_url,
         locale=db_user.locale,
@@ -225,13 +225,13 @@ async def me(
 
 @router.post(
     "/service-token",
-    summary="Mint a long-lived super_admin JWT for an internal service",
+    summary="Mint a long-lived admin JWT for an internal service",
 )
 async def issue_service_token(
     request: Request,
     body: dict[str, str] | None = None,
 ) -> dict[str, object]:
-    """Internal sidecars / schedulers obtain a super_admin token here.
+    """Internal sidecars / schedulers obtain an admin token here.
 
     Auth is via the ``X-Service-Secret`` header matching ``settings.service_auth_secret``;
     no user authentication is involved. The resulting JWT is *long-lived*

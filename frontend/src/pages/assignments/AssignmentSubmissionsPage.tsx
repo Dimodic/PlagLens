@@ -36,15 +36,9 @@ import type {
 } from '@/api/endpoints/submissions';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
 const ALL = '__all__';
-
-const STATUS_OPTIONS = [
-  { value: 'received', label: 'Получено' },
-  { value: 'processing', label: 'Обработка' },
-  { value: 'ready', label: 'Готово' },
-  { value: 'error', label: 'Ошибка' },
-];
 
 const LANGUAGE_OPTIONS = [
   { value: 'python', label: 'Python' },
@@ -56,9 +50,17 @@ const LANGUAGE_OPTIONS = [
 type StatusValue = SubmissionStatus | undefined;
 
 export default function AssignmentSubmissionsPage() {
-  useDocumentTitle('Посылки задания');
+  const { t } = useTranslation();
+  useDocumentTitle(t('assignment_submissions.document_title'));
   const { id } = useParams<{ id: string }>();
   const { data: assignment } = useAssignment(id);
+
+  const STATUS_OPTIONS = [
+    { value: 'received', label: t('assignment_submissions.status_received') },
+    { value: 'processing', label: t('assignment_submissions.status_processing') },
+    { value: 'ready', label: t('assignment_submissions.status_ready') },
+    { value: 'error', label: t('assignment_submissions.status_error') },
+  ];
 
   const [status, setStatus] = useState<StatusValue>(undefined);
   const [language, setLanguage] = useState<string | undefined>(undefined);
@@ -96,14 +98,14 @@ export default function AssignmentSubmissionsPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Посылки</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t('assignment_submissions.heading')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {assignment?.title ?? 'Задание'}
+            {assignment?.title ?? t('assignment_submissions.assignment_fallback')}
           </p>
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline">
-            <Link to={`/assignments/${id}/deadlines`}>Дедлайны</Link>
+            <Link to={`/assignments/${id}/deadlines`}>{t('assignment_submissions.deadlines')}</Link>
           </Button>
         </div>
       </div>
@@ -116,7 +118,7 @@ export default function AssignmentSubmissionsPage() {
           <div className="relative w-full max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="ID автора"
+              placeholder={t('assignment_submissions.author_placeholder')}
               value={author}
               onChange={(e) => setAuthor(e.currentTarget.value)}
               className="pl-9"
@@ -132,10 +134,10 @@ export default function AssignmentSubmissionsPage() {
               }
             >
               <SelectTrigger data-testid="assignment-submissions-filter-status">
-                <SelectValue placeholder="Статус" />
+                <SelectValue placeholder={t('assignment_submissions.status_placeholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Все статусы</SelectItem>
+                <SelectItem value={ALL}>{t('assignment_submissions.status_all')}</SelectItem>
                 {STATUS_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
@@ -153,10 +155,10 @@ export default function AssignmentSubmissionsPage() {
               }
             >
               <SelectTrigger data-testid="assignment-submissions-filter-language">
-                <SelectValue placeholder="Язык" />
+                <SelectValue placeholder={t('assignment_submissions.language_placeholder')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL}>Все языки</SelectItem>
+                <SelectItem value={ALL}>{t('assignment_submissions.language_all')}</SelectItem>
                 {LANGUAGE_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
                     {o.label}
@@ -177,7 +179,7 @@ export default function AssignmentSubmissionsPage() {
               htmlFor="assignment-submissions-filter-late-switch"
               className="font-normal"
             >
-              Только late
+              {t('assignment_submissions.only_late')}
             </Label>
           </div>
 
@@ -192,7 +194,7 @@ export default function AssignmentSubmissionsPage() {
               htmlFor="assignment-submissions-filter-suspicious-switch"
               className="font-normal"
             >
-              Только подозрительные
+              {t('assignment_submissions.only_suspicious')}
             </Label>
           </div>
         </div>

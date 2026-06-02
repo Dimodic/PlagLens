@@ -12,6 +12,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { TimelinePoint } from '@/api/endpoints/reporting';
+import { useTranslation } from '@/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 
@@ -20,16 +21,20 @@ interface SubmissionsTimelineProps {
 }
 
 export function SubmissionsTimeline({ data }: SubmissionsTimelineProps) {
+  const { t } = useTranslation();
   if (!data || data.length === 0) {
     return (
-      <EmptyState title="Нет данных" message="Пока нет активности по неделям." />
+      <EmptyState
+        title={t('submissions_timeline.empty_title')}
+        message={t('submissions_timeline.empty_message')}
+      />
     );
   }
   return (
     <Card data-testid="submissions-timeline">
       <CardContent className="p-4">
         <div className="flex flex-col gap-2">
-          <span className="font-medium">Активность по неделям</span>
+          <span className="font-medium">{t('submissions_timeline.heading')}</span>
           <div className="h-60 w-full">
             <ResponsiveContainer>
               <LineChart data={data}>
@@ -44,14 +49,14 @@ export function SubmissionsTimeline({ data }: SubmissionsTimelineProps) {
                 <Line
                   type="monotone"
                   dataKey="submissions"
-                  name="Отправки"
+                  name={t('submissions_timeline.series_submissions')}
                   stroke="var(--chart-1)"
                   strokeWidth={2}
                 />
                 <Line
                   type="monotone"
                   dataKey="graded"
-                  name="Оценено"
+                  name={t('submissions_timeline.series_graded')}
                   stroke="var(--chart-2)"
                   strokeWidth={2}
                 />

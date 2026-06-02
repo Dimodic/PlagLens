@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useTenantDashboard } from '@/hooks/api/useDashboards';
 import { useServicesStatus } from '@/hooks/api/useSystem';
 import type { ServiceStatus } from '@/api/endpoints/system';
@@ -33,7 +34,8 @@ const STATUS_DOT: Record<ServiceStatus['status'], string> = {
 };
 
 export default function AdminMetricsPage() {
-  useDocumentTitle('Метрики');
+  const { t } = useTranslation();
+  useDocumentTitle(t('admin_metrics.title'));
   // Backend does not resolve a literal "current" tenant — pass the actor's
   // tenant_id from the auth context instead.
   const { user } = useAuth();
@@ -48,11 +50,11 @@ export default function AdminMetricsPage() {
 
   return (
     <Page width="wide">
-      <PageHeader title="Метрики" />
+      <PageHeader title={t('admin_metrics.title')} />
 
       {/* Services */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">Состояние сервисов</h2>
+        <h2 className="text-base font-semibold tracking-tight">{t('admin_metrics.services_heading')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {SERVICES.map((s) => (
             <ServiceTile
@@ -68,10 +70,10 @@ export default function AdminMetricsPage() {
 
       {/* LLM */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">LLM-расходы</h2>
+        <h2 className="text-base font-semibold tracking-tight">{t('admin_metrics.llm_heading')}</h2>
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           <Metric
-            label="Токены"
+            label={t('admin_metrics.tokens')}
             value={
               tokens != null
                 ? Number(tokens).toLocaleString('ru-RU')
@@ -81,7 +83,7 @@ export default function AdminMetricsPage() {
             }
           />
           <Metric
-            label="Стоимость"
+            label={t('admin_metrics.cost')}
             value={
               cost != null
                 ? `$${Number(cost).toFixed(2)}`
@@ -91,11 +93,11 @@ export default function AdminMetricsPage() {
             }
           />
           <Metric
-            label="Активных пользователей"
+            label={t('admin_metrics.active_users')}
             value={String((dash.data as any)?.active_users ?? '—')}
           />
           <Metric
-            label="Активных курсов"
+            label={t('admin_metrics.active_courses')}
             value={String(dash.data?.active_courses ?? '—')}
           />
         </div>
@@ -103,7 +105,7 @@ export default function AdminMetricsPage() {
 
       {/* External dashboards */}
       <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">Внешние дашборды</h2>
+        <h2 className="text-base font-semibold tracking-tight">{t('admin_metrics.external_heading')}</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <ExternalDashboardLink name="Grafana" href="http://localhost:3000" />
           <ExternalDashboardLink name="Prometheus" href="http://localhost:9090" />

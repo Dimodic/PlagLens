@@ -22,9 +22,8 @@ from ..common.security import (
     verify_password,
 )
 from ..config import settings
-from ..models import EmailVerifyToken
+from ..models import EmailVerifyToken, User
 from ..models import Session as DBSession
-from ..models import User
 from ..repositories.sessions import SessionRepository
 from ..repositories.tenants import TenantRepository
 from ..repositories.tokens import EmailVerifyTokenRepository

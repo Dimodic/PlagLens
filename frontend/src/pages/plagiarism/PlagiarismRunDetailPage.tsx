@@ -23,6 +23,7 @@ import {
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { usePersistedTabState } from '@/hooks/usePersistedTabState';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useCancelRun,
   useClusters,
@@ -83,6 +84,7 @@ interface PairsTabProps {
 }
 
 function PairsTab({ runId }: PairsTabProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewId>('table');
   const [minSimilarity, setMinSimilarity] = useState(0.4);
@@ -112,7 +114,7 @@ function PairsTab({ runId }: PairsTabProps) {
       {/* Filter strip */}
       <div className="flex flex-wrap items-center gap-4 border-b pb-4">
         <div className="flex items-center gap-3 text-sm text-muted-foreground">
-          <span>Минимальная схожесть</span>
+          <span>{t('plagiarism_run_detail.min_similarity')}</span>
           <span
             data-testid="plagiarism-pairs-min-similarity-value"
             className="font-mono font-medium tabular-nums text-foreground"
@@ -137,13 +139,17 @@ function PairsTab({ runId }: PairsTabProps) {
             checked={crossOnly}
             onCheckedChange={(v) => setCrossOnly(v === true)}
           />
-          Только cross-course
+          {t('plagiarism_run_detail.cross_only')}
         </label>
         <div className="flex-1" />
         <Tabs value={view} onValueChange={(v) => setView(v as ViewId)}>
           <TabsList>
-            <TabsTrigger value="table">Таблица</TabsTrigger>
-            <TabsTrigger value="list">Список</TabsTrigger>
+            <TabsTrigger value="table">
+              {t('plagiarism_run_detail.view_table')}
+            </TabsTrigger>
+            <TabsTrigger value="list">
+              {t('plagiarism_run_detail.view_list')}
+            </TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
@@ -152,7 +158,7 @@ function PairsTab({ runId }: PairsTabProps) {
       {isLoading ? (
         <div className="py-16 text-center text-sm text-muted-foreground">
           <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-          Загрузка пар…
+          {t('plagiarism_run_detail.loading_pairs')}
         </div>
       ) : (
         <div data-testid="plagiarism-pairs-list">
@@ -164,11 +170,15 @@ function PairsTab({ runId }: PairsTabProps) {
                 <section key={key} className="space-y-3">
                   <div className="flex items-baseline gap-3 border-b pb-3">
                     <h3 className="text-lg font-medium tracking-tight">
-                      {key === 'cross' ? 'Cross-course пары' : 'Внутри курса'}
+                      {key === 'cross'
+                        ? t('plagiarism_run_detail.group_cross')
+                        : t('plagiarism_run_detail.group_same')}
                     </h3>
                     <div className="flex-1" />
                     <span className="text-xs text-muted-foreground">
-                      <span className="tabular-nums">{list.length}</span> пар
+                      {t('plagiarism_run_detail.pairs_count', {
+                        count: list.length,
+                      })}
                     </span>
                   </div>
                   <Card className="border-border/70">
@@ -253,6 +263,7 @@ interface MapTabProps {
  *  whom by how strong a match) instead of a wall of numbers. Falls back
  *  to a friendly empty state when there are no pairs to draw. */
 function MapTab({ runId, totalSubmissions }: MapTabProps) {
+  const { t } = useTranslation();
   // Pull a generous slice of pairs + clusters — the graph is sized for
   // up to ~80 nodes so 200 pairs comfortably covers the common case
   // (assignment of ~50 students with O(N²) checks pruned to top
@@ -271,7 +282,7 @@ function MapTab({ runId, totalSubmissions }: MapTabProps) {
     return (
       <div className="py-16 text-center text-sm text-muted-foreground">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-        Загрузка карты…
+        {t('plagiarism_run_detail.loading_map')}
       </div>
     );
   }
@@ -281,8 +292,8 @@ function MapTab({ runId, totalSubmissions }: MapTabProps) {
   if (pairs.length === 0) {
     return (
       <EmptyState
-        title="Совпадений не найдено"
-        description="Антиплагиат не нашёл пар выше порога. Рисовать карту нечего."
+        title={t('plagiarism_run_detail.map_empty_title')}
+        description={t('plagiarism_run_detail.map_empty_description')}
       />
     );
   }
@@ -310,6 +321,7 @@ interface ClustersTabProps {
 }
 
 function ClustersTab({ runId }: ClustersTabProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // Just the clusters here — each card lazy-fetches its own pairs when
   // expanded (see ClusterCard / useClusterPairs), so we don't pull the
@@ -320,13 +332,13 @@ function ClustersTab({ runId }: ClustersTabProps) {
     return (
       <div className="py-16 text-center text-sm text-muted-foreground">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-        Загрузка кластеров…
+        {t('plagiarism_run_detail.loading_clusters')}
       </div>
     );
   }
   if (error) return <ProblemAlert problem={error as unknown as Problem} />;
   if (!data || data.data.length === 0) {
-    return <EmptyState title="Кластеров нет" />;
+    return <EmptyState title={t('plagiarism_run_detail.clusters_empty')} />;
   }
   // Document-style hairline list — no per-row Card chrome. Clusters
   // arrive pre-sorted by avg similarity desc from the backend.
@@ -347,8 +359,9 @@ function ClustersTab({ runId }: ClustersTabProps) {
 }
 
 export function PlagiarismRunDetailPage() {
+  const { t } = useTranslation();
   const { runId = '' } = useParams<{ runId: string }>();
-  useDocumentTitle('Проверка на плагиат');
+  useDocumentTitle(t('plagiarism_run_detail.title'));
   const notify = useNotifications();
   // Карта — default. Графическая разбивка пар по кластерам куда полезнее
   // голой таблицы при первом взгляде на отчёт. Persisted per-run so
@@ -368,7 +381,7 @@ export function PlagiarismRunDetailPage() {
     return (
       <div className="py-20 text-center text-sm text-muted-foreground">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-        Загрузка отчёта…
+        {t('plagiarism_run_detail.loading_report')}
       </div>
     );
   }
@@ -385,20 +398,24 @@ export function PlagiarismRunDetailPage() {
   const handleCancel = async () => {
     try {
       await cancel.mutateAsync();
-      notify.info('Запрос на отмену отправлен');
+      notify.info(t('plagiarism_run_detail.cancel_requested'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось отменить');
+      notify.error(
+        p?.detail ?? p?.title ?? t('plagiarism_run_detail.cancel_failed'),
+      );
     }
   };
 
   const handleRetry = async () => {
     try {
       await retry.mutateAsync();
-      notify.success('Run перезапущен');
+      notify.success(t('plagiarism_run_detail.retry_done'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось перезапустить');
+      notify.error(
+        p?.detail ?? p?.title ?? t('plagiarism_run_detail.retry_failed'),
+      );
     }
   };
 
@@ -408,15 +425,23 @@ export function PlagiarismRunDetailPage() {
       <div className="flex flex-wrap items-end gap-6 border-b pb-5">
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight">
-            Проверка на плагиат
+            {t('plagiarism_run_detail.title')}
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             {statusBadge(run.status)}
             <span className="uppercase tracking-wider text-xs text-muted-foreground/70">
               {run.provider}
             </span>
-            <span>Запущен {fmt(run.started_at)}</span>
-            <span>Завершён {fmt(run.finished_at)}</span>
+            <span>
+              {t('plagiarism_run_detail.started_at', {
+                date: fmt(run.started_at),
+              })}
+            </span>
+            <span>
+              {t('plagiarism_run_detail.finished_at', {
+                date: fmt(run.finished_at),
+              })}
+            </span>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -429,7 +454,7 @@ export function PlagiarismRunDetailPage() {
               {cancel.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Отменить
+              {t('plagiarism_run_detail.cancel')}
             </Button>
           )}
           {run.status === 'failed' && (
@@ -437,7 +462,7 @@ export function PlagiarismRunDetailPage() {
               {retry.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Перезапустить
+              {t('plagiarism_run_detail.retry')}
             </Button>
           )}
         </div>
@@ -460,14 +485,23 @@ export function PlagiarismRunDetailPage() {
               ? similarityPercent(summary.mean_similarity)
               : '—',
           },
-          { label: 'Всего пар', value: summary?.pairs_total ?? '—' },
           {
-            label: 'Подозрительных',
+            label: t('plagiarism_run_detail.stat_pairs_total'),
+            value: summary?.pairs_total ?? '—',
+          },
+          {
+            label: t('plagiarism_run_detail.stat_suspected'),
             value: summary?.pairs_suspected ?? '—',
             high: !!summary && summary.pairs_suspected > 0,
           },
-          { label: 'Кластеры', value: summary?.clusters_count ?? '—' },
-          { label: 'Посылок', value: run.submissions_count },
+          {
+            label: t('plagiarism_run_detail.stat_clusters'),
+            value: summary?.clusters_count ?? '—',
+          },
+          {
+            label: t('plagiarism_run_detail.stat_submissions'),
+            value: run.submissions_count,
+          },
         ].map((it, i) => (
           <div
             key={i}
@@ -504,13 +538,13 @@ export function PlagiarismRunDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList data-testid="plagiarism-run-tabs">
           <TabsTrigger value="map" data-testid="plagiarism-tab-map">
-            Карта
+            {t('plagiarism_run_detail.tab_map')}
           </TabsTrigger>
           <TabsTrigger value="pairs" data-testid="plagiarism-tab-pairs">
-            Пары
+            {t('plagiarism_run_detail.tab_pairs')}
           </TabsTrigger>
           <TabsTrigger value="clusters" data-testid="plagiarism-tab-clusters">
-            Кластеры
+            {t('plagiarism_run_detail.tab_clusters')}
           </TabsTrigger>
         </TabsList>
 

@@ -27,6 +27,11 @@ export function useHomeworksForCourse(
     queryKey: [...homeworkKeys.forCourse(course_id ?? ''), filters],
     queryFn: () => homeworksApi.listForCourse(course_id as string, filters),
     enabled: !!course_id,
+    // Homeworks are created on a separate /homeworks/new page, which
+    // invalidates this list while the course page is unmounted. With the
+    // global refetchOnMount:false that left the new ДЗ invisible until a hard
+    // reload — opt back into refetch-on-mount so the invalidation lands.
+    refetchOnMount: true,
   });
 }
 

@@ -28,9 +28,11 @@ import { useNotifications } from '@/hooks/useNotifications';
 import { useRedeemInvitation } from '@/hooks/api/useInvitations';
 import { useAuth } from '@/auth/useAuth';
 import { roleLabel } from '@/lib/roles';
+import { useTranslation } from '@/i18n';
 import type { GlobalRole, Problem } from '@/api/types';
 
 export function RedeemInvitePanel() {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const { refresh } = useAuth();
   const queryClient = useQueryClient();
@@ -50,7 +52,7 @@ export function RedeemInvitePanel() {
 
       if (r.role_applied) {
         const human = roleLabel(r.role_applied as GlobalRole);
-        notify.success(`Роль обновлена: ${human}`);
+        notify.success(t('redeem_invite.role_updated', { role: human }));
         // Bounce to root so the role-gated shell (sidebar, default
         // landing for the new role) rebuilds from a clean tree.
         // assign() not reload() — keeps the freshly minted access
@@ -60,13 +62,13 @@ export function RedeemInvitePanel() {
       }
 
       if (r.course_id) {
-        notify.success('Вы добавлены в курс');
+        notify.success(t('redeem_invite.added_to_course'));
       } else {
-        notify.success('Код применён');
+        notify.success(t('redeem_invite.code_applied'));
       }
     } catch (err) {
       const p = err as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось применить код');
+      notify.error(p?.detail ?? p?.title ?? t('redeem_invite.apply_failed'));
     }
   };
 
@@ -74,7 +76,7 @@ export function RedeemInvitePanel() {
     <form onSubmit={onSubmit} className="space-y-2">
       <Label htmlFor="redeem-code" className="flex items-center gap-1.5">
         <KeyRound className="h-3.5 w-3.5" />
-        Код приглашения
+        {t('redeem_invite.label')}
       </Label>
       <div className="flex gap-2">
         <Input
@@ -92,11 +94,11 @@ export function RedeemInvitePanel() {
           data-testid="redeem-code-submit"
         >
           {redeem.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Применить
+          {t('redeem_invite.submit')}
         </Button>
       </div>
       <p className="text-xs text-muted-foreground">
-        Код выдаёт администратор учреждения или преподаватель курса.
+        {t('redeem_invite.hint')}
       </p>
     </form>
   );

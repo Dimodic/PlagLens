@@ -19,6 +19,7 @@ import { useCourse } from '@/hooks/api/useCourses';
 import { useCreateHomework } from '@/hooks/api/useHomeworks';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
@@ -39,7 +40,8 @@ function fromLocalDateTimeInput(value: string): string | null {
 }
 
 export default function HomeworkCreatePage() {
-  useDocumentTitle('Новое ДЗ');
+  const { t } = useTranslation();
+  useDocumentTitle(t('homework_create.title'));
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -56,7 +58,7 @@ export default function HomeworkCreatePage() {
 
   const validate = (v: FormVals): Partial<Record<keyof FormVals, string>> => {
     const errs: Partial<Record<keyof FormVals, string>> = {};
-    if (v.title.trim().length < 2) errs.title = 'Не короче 2 символов';
+    if (v.title.trim().length < 2) errs.title = t('homework_create.title_too_short');
     return errs;
   };
 
@@ -77,7 +79,7 @@ export default function HomeworkCreatePage() {
         description: vals.description || null,
         due_at: fromLocalDateTimeInput(vals.due_at),
       });
-      notify.success('ДЗ создано');
+      notify.success(t('homework_create.created'));
       // HW detail page is gone — drop the teacher back on the course
       // page, where the new ДЗ now lives in the inline list.
       navigate(`/courses/${slug}`);
@@ -89,7 +91,7 @@ export default function HomeworkCreatePage() {
   return (
     <Page width="narrow">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Новое ДЗ</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t('homework_create.title')}</h1>
         {course?.name && (
           <p className="mt-1 text-sm text-muted-foreground">{course.name}</p>
         )}
@@ -102,15 +104,15 @@ export default function HomeworkCreatePage() {
       >
         <div className="space-y-1.5">
           <Label htmlFor="homework-create-title">
-            Название <span className="text-destructive">*</span>
+            {t('homework_create.name_label')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="homework-create-title"
-            placeholder="Неделя 3 — функции и рекурсия"
+            placeholder={t('homework_create.name_placeholder')}
             required
             data-testid="homework-create-title"
             value={vals.title}
-            onChange={(e) => setVals((v) => ({ ...v, title: e.currentTarget.value }))}
+            onChange={(e) => setVals((v) => ({ ...v, title: e.target.value }))}
             aria-invalid={!!errors.title}
           />
           {errors.title && (
@@ -120,26 +122,26 @@ export default function HomeworkCreatePage() {
 
         <div data-testid="homework-create-description">
           <MarkdownEditor
-            label="Описание (Markdown)"
+            label={t('homework_create.description_label')}
             value={vals.description}
             onChange={(v) => setVals((prev) => ({ ...prev, description: v }))}
-            placeholder="Опишите тему недели и задания"
+            placeholder={t('homework_create.description_placeholder')}
           />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="homework-create-due_at">Дедлайн</Label>
+          <Label htmlFor="homework-create-due_at">{t('homework_create.deadline_label')}</Label>
           <Input
             id="homework-create-due_at"
             type="datetime-local"
             data-testid="homework-create-due_at"
             value={vals.due_at}
             onChange={(e) =>
-              setVals((v) => ({ ...v, due_at: e.currentTarget.value }))
+              setVals((v) => ({ ...v, due_at: e.target.value }))
             }
           />
           <p className="text-xs text-muted-foreground">
-            Применяется ко всем заданиям без собственного дедлайна
+            {t('homework_create.deadline_hint')}
           </p>
         </div>
 
@@ -152,7 +154,7 @@ export default function HomeworkCreatePage() {
             onClick={() => navigate(`/courses/${slug}`)}
             data-testid="homework-create-cancel"
           >
-            Отмена
+            {t('homework_create.cancel')}
           </Button>
           <Button
             type="submit"
@@ -160,7 +162,7 @@ export default function HomeworkCreatePage() {
             data-testid="homework-create-submit"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Создать
+            {t('homework_create.submit')}
           </Button>
         </div>
       </form>

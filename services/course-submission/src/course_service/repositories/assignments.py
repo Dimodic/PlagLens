@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import (
@@ -87,7 +87,7 @@ class AssignmentRepository:
 
     async def list_with_filter(
         self,
-        tenant_id: str,
+        tenant_id: str | None,
         *,
         q: str | None = None,
         course_ids: list[int] | None = None,
@@ -99,7 +99,7 @@ class AssignmentRepository:
 
         ``course_ids`` — when provided, restricts to assignments in these courses
         (used for non-admin actors to enforce membership scope). When ``None``,
-        returns all tenant assignments (admin/super_admin).
+        returns all tenant assignments (admin).
         ``q`` — case-insensitive substring against title or slug.
         """
         from ..models import Course
@@ -108,11 +108,13 @@ class AssignmentRepository:
             select(Assignment)
             .join(Course, Assignment.course_id == Course.id)
             .where(
-                Course.tenant_id == tenant_id,
                 Assignment.deleted_at.is_(None),
                 Course.deleted_at.is_(None),
             )
         )
+        # ``tenant_id=None`` → span ALL tenants (admin-only global search).
+        if tenant_id is not None:
+            stmt = stmt.where(Course.tenant_id == tenant_id)
         if course_ids is not None:
             if not course_ids:
                 return [], None
@@ -123,8 +125,10 @@ class AssignmentRepository:
             # "exclude archived rows".
             stmt = stmt.where(Assignment.status == "active")
         if q:
+            # LC_CTYPE=C → fold via ICU so Cyrillic titles match.
             like = f"%{q.lower()}%"
-            stmt = stmt.where(Assignment.title.ilike(like) | Assignment.slug.ilike(like))
+            title_l = func.lower(Assignment.title.collate("und-x-icu"))
+            stmt = stmt.where(title_l.like(like) | Assignment.slug.ilike(like))
         if cursor_id is not None:
             stmt = stmt.where(Assignment.id > cursor_id)
         stmt = stmt.order_by(Assignment.title, Assignment.id).limit(limit + 1)

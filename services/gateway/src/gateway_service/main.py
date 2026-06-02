@@ -38,6 +38,9 @@ from gateway_service.api.v1 import (
     operations as ops_router,
 )
 from gateway_service.api.v1 import (
+    profiles as profiles_router,
+)
+from gateway_service.api.v1 import (
     proxy_router,
 )
 from gateway_service.api.v1 import (
@@ -108,6 +111,9 @@ def create_app() -> FastAPI:
     # Federated search must be registered BEFORE the universal proxy so that
     # `/api/v1/search` is handled in-gateway (no routing-table entry needed).
     app.include_router(search_router.router)
+    # Aggregated public profile (/api/v1/profiles/{id}) — gateway-owned
+    # fan-out, also before the proxy catch-all.
+    app.include_router(profiles_router.router)
     # Debug endpoint for client-side error reporting (public, no JWT).
     # Must be registered BEFORE proxy_router for the same reason.
     app.include_router(debug_router.router)

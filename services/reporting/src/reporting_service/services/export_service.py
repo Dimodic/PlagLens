@@ -134,6 +134,81 @@ class ExportService:
         )
         return job
 
+    async def record_sheets_grades(
+        self,
+        session: AsyncSession,
+        *,
+        tenant_id: str,
+        triggered_by: str,
+        course_id: str | None,
+        spreadsheet_id: str,
+        sheet_name: str,
+        written_cells: int,
+        students_written: int,
+        homework_ids: list[str] | None = None,
+        trace_id: str | None = None,
+    ) -> ExportJob:
+        """Record an already-finished Google-Sheets grade write in the
+        export history.
+
+        The grade write happens synchronously in the endpoint (the cells are
+        already in the sheet by the time we get here), so — unlike
+        ``create`` + ``run_now`` — there is no artifact to build and no queue
+        to drain. This just persists a ``completed`` row so the write shows
+        up in «История экспортов» next to the CSV exports. Best-effort: the
+        caller commits and swallows failures so a history hiccup never fails
+        the actual write."""
+        repo = ExportJobRepo(session)
+        export_id = new_export_id()
+        op_id = new_operation_id()
+        now = utcnow()
+        job = ExportJob(
+            id=export_id,
+            operation_id=op_id,
+            tenant_id=tenant_id,
+            kind="assignment_grades",
+            scope={
+                "course_id": course_id,
+                "spreadsheet_id": spreadsheet_id,
+                "sheet_name": sheet_name,
+                "homework_ids": homework_ids or [],
+            },
+            fmt="google_sheets",
+            options={
+                "written_cells": written_cells,
+                "students_written": students_written,
+            },
+            status="completed",
+            progress_completed=written_cells,
+            progress_total=written_cells,
+            triggered_by=triggered_by,
+            started_at=now,
+            finished_at=now,
+            created_at=now,
+            expiry_at=now + timedelta(days=self.settings.artifact_default_ttl_days),
+        )
+        await repo.add(job)
+        try:
+            await self.producer.publish(
+                "plaglens.reporting.export.v1",
+                build_envelope(
+                    "reporting.export.completed.v1",
+                    tenant_id=tenant_id,
+                    subject=f"exports/{export_id}",
+                    data={
+                        "export_id": export_id,
+                        "format": "google_sheets",
+                        "written_cells": written_cells,
+                        "students_written": students_written,
+                    },
+                    actor={"type": "user", "id": triggered_by},
+                    trace_id=trace_id,
+                ),
+            )
+        except Exception:  # noqa: BLE001 - row already added; event is best-effort
+            pass
+        return job
+
     async def run_now(
         self, export_id: str, bearer_token: str | None = None
     ) -> None:

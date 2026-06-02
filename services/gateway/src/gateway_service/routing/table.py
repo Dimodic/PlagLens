@@ -37,7 +37,6 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/courses/{id}/google-sheets", "integration", "default"),
     Route("/api/v1/courses/{id}/exports", "reporting", "run"),
     Route("/api/v1/courses/{id}/suspicious-submissions", "plagiarism", "default"),
-    Route("/api/v1/courses/{id}/ai", "ai-analysis", "default"),
     # Auth & sensitive identity flows
     Route("/api/v1/auth/login", "identity", "auth_sensitive"),
     Route("/api/v1/auth/register", "identity", "auth_sensitive"),
@@ -61,10 +60,16 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/users/me/notifications", "notification", "default"),
     Route("/api/v1/users/me/web-push", "notification", "default"),
     Route("/api/v1/users", "identity", "default"),
-    # Tenant-scoped admin dashboards live in reporting; AI budgets/usage in
-    # ai-analysis. Both are mounted under /api/v1/tenants/{id}/... .
+    # Cross-tenant people directory (search + public card) lives in identity.
+    # Profile *data* sub-paths (/people/{id}/courses, /people/{id}/submissions)
+    # are NOT proxied — the gateway's /profiles aggregator calls those
+    # backends directly — so this single rule is safe.
+    Route("/api/v1/people", "identity", "default"),
+    # Public avatar proxy (no JWT — see PUBLIC_PREFIXES): streams a user's
+    # avatar bytes from MinIO so the browser never needs a MinIO URL.
+    Route("/api/v1/avatars", "identity", "default"),
+    # Tenant-scoped admin dashboards live in reporting.
     Route("/api/v1/tenants/{id}/dashboard", "reporting", "default"),
-    Route("/api/v1/tenants/{id}/ai", "ai-analysis", "default"),
     Route("/api/v1/tenants", "identity", "default"),
     Route("/api/v1/roles", "identity", "default"),
     Route("/api/v1/permissions", "identity", "default"),
@@ -87,6 +92,11 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/assignments/{id}/grades", "submission", "default"),
     Route("/api/v1/assignments/{id}/aggregate-stats", "submission", "default"),
     Route("/api/v1/assignments/{id}/plagiarism-runs", "plagiarism", "run"),
+    # Batch action (Google-style ``:batchCreate``) — needs its own rule:
+    # the segment matcher treats ``ai-analyses:batchCreate`` as a distinct
+    # segment from ``ai-analyses``, so the generic rule below won't catch it
+    # and it would fall through to /assignments → course → 404.
+    Route("/api/v1/assignments/{id}/ai-analyses:batchCreate", "ai-analysis", "run"),
     Route("/api/v1/assignments/{id}/ai-analyses", "ai-analysis", "run"),
     Route("/api/v1/assignments/{id}/exports", "reporting", "run"),
     Route("/api/v1/assignments", "course", "default"),
@@ -107,6 +117,8 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/plagiarism-runs", "plagiarism", "run"),
     Route("/api/v1/plagiarism-corpus", "plagiarism", "default"),
     # AI Analysis
+    # Per-user provider connections (teacher/assistant "bring your own key").
+    Route("/api/v1/me/ai", "ai-analysis", "default"),
     Route("/api/v1/ai-analyses", "ai-analysis", "run"),
     # Notification
     Route("/api/v1/notifications", "notification", "default"),
@@ -136,7 +148,6 @@ ROUTING_TABLE: tuple[Route, ...] = (
     Route("/api/v1/admin/dashboard", "reporting", "default"),
     Route("/api/v1/admin/plagiarism", "plagiarism", "default"),
     Route("/api/v1/admin/ai-analysis", "ai-analysis", "default"),
-    Route("/api/v1/admin/ai", "ai-analysis", "default"),
     # Both singular and plural admin/integration(s) routes go to integration.
     Route("/api/v1/admin/integration", "integration", "default"),
     Route("/api/v1/admin/integrations", "integration", "default"),

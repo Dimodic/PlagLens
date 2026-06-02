@@ -28,10 +28,57 @@ class AssignmentInfo:
     max_score: float | None = None
 
 
+@dataclass
+class AssignmentTitles:
+    """Denormalised titles for one assignment, used to label submission rows.
+
+    Mirrors the shape ``self_service._enrich_titles`` needs: the assignment's
+    own title plus the (optional) homework title and course name it rolls up
+    into. ``homework_title`` / ``course_name`` are ``None`` when the parent row
+    is missing (e.g. a course id that isn't an integer, matching the old
+    ``isdigit()`` guard)."""
+
+    assignment_title: str
+    homework_title: str | None = None
+    course_name: str | None = None
+
+
 class CourseClient(Protocol):
     async def get_assignment(
         self, assignment_id: str, *, auth_token: str | None = None
     ) -> AssignmentInfo | None: ...
+
+    async def visible_course_ids(self, user_id: str) -> set[str]:
+        """Course ids the user owns or is a (non-removed) member of.
+
+        String-keyed to match ``Submission.course_id``. Mirrors
+        ``self_service._visible_course_ids``: owners are always included;
+        members only while ``removed_at IS NULL``."""
+        ...
+
+    async def staff_course_ids(self, user_id: str) -> set[str]:
+        """Course ids where the user is staff (owner or member, regardless of
+        ``removed_at``). Used to scope the assistant inbox. Note this is the
+        looser variant — unlike :meth:`visible_course_ids` it does NOT filter
+        removed members, preserving the original assistant-scoping query."""
+        ...
+
+    async def search_assignment_ids_by_title(self, query: str) -> set[str]:
+        """Assignment ids whose own title — or whose parent homework title —
+        contains ``query`` (case-insensitive, ICU-folded so Cyrillic matches).
+        String-keyed. Best-effort: returns an empty set on any failure."""
+        ...
+
+    async def enrich_titles(
+        self, assignment_ids: list[str]
+    ) -> dict[str, AssignmentTitles]:
+        """Map assignment id -> denormalised titles for a page of rows.
+
+        Resolves assignment title, parent homework title and course name via a
+        few batched ``IN`` lookups. Keys are the string assignment ids that
+        actually resolved; ids that don't parse as integers or have no row are
+        omitted (the caller then leaves those rows' labels untouched)."""
+        ...
 
 
 class InMemoryCourseClient:
@@ -51,6 +98,28 @@ class InMemoryCourseClient:
         # passes the caller's bearer for cross-tenant authorisation).
         del auth_token
         return self._store.get(assignment_id)
+
+    # The read-model methods below back the student/staff scoping + search in
+    # self_service. The in-memory stub has no course tables, so it returns
+    # empty results — the same graceful-degradation the old code fell back to
+    # when its cross-schema queries tripped (no rows scoped/matched/enriched).
+    async def visible_course_ids(self, user_id: str) -> set[str]:
+        del user_id
+        return set()
+
+    async def staff_course_ids(self, user_id: str) -> set[str]:
+        del user_id
+        return set()
+
+    async def search_assignment_ids_by_title(self, query: str) -> set[str]:
+        del query
+        return set()
+
+    async def enrich_titles(
+        self, assignment_ids: list[str]
+    ) -> dict[str, AssignmentTitles]:
+        del assignment_ids
+        return {}
 
 
 def _parse_dt(value: object) -> datetime | None:
@@ -114,7 +183,7 @@ class HttpCourseClient:
         course_id = str(data.get("course_id") or "")
         # AssignmentRead doesn't expose tenant_id today (the column lives on
         # course, not assignment), so we fall back to a /courses/{id} probe.
-        # That keeps cross-tenant super_admin imports (e.g. background YC
+        # That keeps cross-tenant admin imports (e.g. background YC
         # integration) routing submissions into the *course's* tenant rather
         # than the caller's (system).
         if not tenant_id and course_id:
@@ -139,6 +208,30 @@ class HttpCourseClient:
             visible_to_students_at=_parse_dt(data.get("visible_to_students_at")),
             max_score=_parse_float(data.get("max_score"), 0.0) or None,
         )
+
+    # Read-model methods for self_service scoping/search. These exist only so
+    # ``HttpCourseClient`` stays a structural ``CourseClient`` (it is dormant in
+    # the merged deployable — see submission_service.api.deps.get_course_client).
+    # The merged process always wires ``InProcessCourseClient`` for these. If
+    # course+submission are ever re-split, these need real course endpoints; for
+    # now they return the empty/best-effort result so a stray wiring can't 500.
+    async def visible_course_ids(self, user_id: str) -> set[str]:
+        del user_id
+        return set()
+
+    async def staff_course_ids(self, user_id: str) -> set[str]:
+        del user_id
+        return set()
+
+    async def search_assignment_ids_by_title(self, query: str) -> set[str]:
+        del query
+        return set()
+
+    async def enrich_titles(
+        self, assignment_ids: list[str]
+    ) -> dict[str, AssignmentTitles]:
+        del assignment_ids
+        return {}
 
     async def aclose(self) -> None:
         await self._client.aclose()

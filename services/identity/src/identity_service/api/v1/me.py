@@ -6,6 +6,7 @@ import logging
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.email_change import apply_email_update
 from ...common.events import make_event
 from ...common.pagination import Page, Pagination
 from ...common.problem import ProblemException
@@ -89,11 +90,11 @@ async def me(
             full = f"{first} {last}".strip()
             external_handle = full or None
 
-    email_is_placeholder = db_user.email.endswith("@telegram.plaglens.local")
+    email_is_placeholder = db_user.email is None
 
     return MeResponse(
         id=db_user.id,
-        email=db_user.email,
+        email=db_user.email or "",
         display_name=db_user.display_name,
         avatar_url=db_user.avatar_url,
         locale=db_user.locale,
@@ -132,6 +133,10 @@ async def patch_me(
         db_user.timezone = payload.timezone
     if payload.avatar_url is not None:
         db_user.avatar_url = payload.avatar_url
+    if payload.email is not None:
+        # Any user — password, OAuth, or Telegram — can add/change/clear their
+        # own email here (empty string clears it). Validated + uniqueness-checked.
+        await apply_email_update(users, db_user, payload.email)
     # global_role on PATCH /me is rejected for non-admins below
     if payload.global_role is not None and user.global_role not in ("admin",):
         raise ProblemException(
@@ -172,9 +177,11 @@ async def upload_avatar(
             code="BAD_REQUEST",
             title="Empty file",
         )
+    import time
+
     avatars = AvatarService()
     try:
-        key, url = await asyncio.to_thread(
+        key, _presigned = await asyncio.to_thread(
             avatars.put, user_id=user.id, data=raw, content_type=content_type
         )
     except AvatarStorageError as exc:
@@ -189,8 +196,13 @@ async def upload_avatar(
     db_user = await users.get(user.id)
     if db_user is None:
         raise ProblemException(status=404, code="NOT_FOUND", title="User not found")
-    db_user.avatar_url = url
-    return {"avatar_url": url, "key": key}
+    # Store a same-origin proxy URL — NOT the MinIO presigned URL, which points
+    # at the internal ``minio:9000`` host (unreachable from the browser) and
+    # expires. The public GET /api/v1/avatars/{id} endpoint streams the bytes
+    # via the gateway. ``?v=`` busts the browser cache on re-upload.
+    public_url = f"/api/v1/avatars/{user.id}?v={int(time.time())}"
+    db_user.avatar_url = public_url
+    return {"avatar_url": public_url, "key": key}
 
 
 @router.delete(
@@ -210,9 +222,7 @@ async def delete_avatar(
         # Best-effort wipe from MinIO; never fail the API call if storage is down.
         try:
             avatars = AvatarService()
-            await asyncio.to_thread(
-                avatars.delete, key=f"users/{user.id}/avatar.png"
-            )
+            await asyncio.to_thread(avatars.delete_all, user_id=user.id)
         except Exception as exc:  # pragma: no cover - best-effort
             logger.info("avatar delete from storage skipped: %s", exc)
         db_user.avatar_url = None

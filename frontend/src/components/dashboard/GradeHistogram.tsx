@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { GradesDistribution } from '@/api/endpoints/reporting';
+import { useTranslation } from '@/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
 
@@ -20,8 +21,14 @@ interface GradeHistogramProps {
 }
 
 export function GradeHistogram({ data, loading }: GradeHistogramProps) {
+  const { t } = useTranslation();
   if (!loading && (!data || data.buckets.length === 0)) {
-    return <EmptyState title="Нет оценок" message="Пока нет оценённых посылок." />;
+    return (
+      <EmptyState
+        title={t('grade_histogram.empty_title')}
+        message={t('grade_histogram.empty_message')}
+      />
+    );
   }
   const buckets = data?.buckets ?? [];
   return (
@@ -29,14 +36,15 @@ export function GradeHistogram({ data, loading }: GradeHistogramProps) {
       <CardContent className="p-4">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <span className="font-medium">Распределение оценок</span>
+            <span className="font-medium">{t('grade_histogram.title')}</span>
             {data && (
               <div className="flex items-center gap-4 text-sm text-muted-foreground">
                 <span>
-                  Среднее: {data.mean !== null ? data.mean.toFixed(2) : '—'}
+                  {t('grade_histogram.mean_label')}{' '}
+                  {data.mean !== null ? data.mean.toFixed(2) : '—'}
                 </span>
                 <span>
-                  Медиана:{' '}
+                  {t('grade_histogram.median_label')}{' '}
                   {data.median !== null ? data.median.toFixed(2) : '—'}
                 </span>
               </div>

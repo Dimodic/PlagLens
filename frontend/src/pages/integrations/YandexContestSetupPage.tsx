@@ -18,9 +18,11 @@ import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { integrationsApi } from '@/api/endpoints/integrations';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export default function YandexContestSetupPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Yandex.Contest');
   const myCoursesQ = useMyCourses();
 
@@ -43,7 +45,7 @@ export default function YandexContestSetupPage() {
     setProblem(null);
     if (!courseId) {
       setProblem({
-        title: 'Выберите курс',
+        title: t('ycontest_setup.select_course'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -70,7 +72,7 @@ export default function YandexContestSetupPage() {
          
         console.error('Unexpected create() response', created);
         throw {
-          title: 'OAuth-приложение не настроено',
+          title: t('ycontest_setup.oauth_not_configured'),
           status: 500,
           code: 'INTERNAL',
         } as Problem;
@@ -88,7 +90,7 @@ export default function YandexContestSetupPage() {
         to="/integrations"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Интеграции
+        ← {t('ycontest_setup.back_to_integrations')}
       </Link>
       <PageHeader title="Yandex.Contest" />
 
@@ -96,10 +98,10 @@ export default function YandexContestSetupPage() {
         {problem && <ProblemAlert problem={problem} />}
 
         <div className="space-y-1.5">
-          <Label htmlFor="yc-course">Курс</Label>
+          <Label htmlFor="yc-course">{t('ycontest_setup.course')}</Label>
           <Select value={courseId} onValueChange={setCourseId}>
             <SelectTrigger id="yc-course" data-testid="yc-course-select">
-              <SelectValue placeholder="Выберите курс" />
+              <SelectValue placeholder={t('ycontest_setup.select_course')} />
             </SelectTrigger>
             <SelectContent>
               {courses.map((c) => (
@@ -118,7 +120,7 @@ export default function YandexContestSetupPage() {
             data-testid="yc-submit"
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Подключить
+            {t('ycontest_setup.connect')}
           </Button>
         </div>
       </form>

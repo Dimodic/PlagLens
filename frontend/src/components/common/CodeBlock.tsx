@@ -9,6 +9,7 @@ import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 interface CodeBlockProps {
   code: string;
@@ -23,6 +24,7 @@ export function CodeBlock({
   withCopyButton = true,
   maxHeight,
 }: CodeBlockProps) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const onCopy = async () => {
@@ -42,7 +44,7 @@ export function CodeBlock({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={copied ? 'Скопировано' : 'Копировать'}
+          aria-label={copied ? t('code_block.copied') : t('code_block.copy')}
           onClick={onCopy}
           className="absolute right-1.5 top-1.5 size-7 opacity-70 transition-opacity hover:opacity-100"
         >

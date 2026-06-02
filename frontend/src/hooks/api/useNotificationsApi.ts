@@ -34,6 +34,8 @@ export function useNotifications(filters: NotificationFilter = {}) {
   return useQuery({
     queryKey: notificationKeys.list(filters),
     queryFn: () => notificationsApi.list(filters),
+    // Refresh the dropdown list when the user returns to the tab.
+    refetchOnWindowFocus: true,
   });
 }
 
@@ -41,7 +43,12 @@ export function useUnreadCount(opts: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: notificationKeys.unreadCount(),
     queryFn: () => notificationsApi.unreadCount().catch(() => 0),
-    refetchInterval: 30_000,
+    // Near-real-time without SSE: poll the (cheap) unread count every 15s and
+    // refetch instantly when the tab regains focus. The gateway buffers
+    // responses, so a true SSE stream would hang there — polling is the
+    // robust path until/unless a streaming proxy is added.
+    refetchInterval: 15_000,
+    refetchOnWindowFocus: true,
     enabled: opts.enabled ?? true,
   });
 }

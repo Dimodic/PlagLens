@@ -273,6 +273,59 @@ class SubmissionRepository:
         await self.session.flush()
         return result.rowcount or 0
 
+    async def migrate_external_authors(
+        self,
+        *,
+        tenant_id: str,
+        remaps: list[tuple[str, str]],
+        claims: list[tuple[str, str]],
+    ) -> tuple[int, int]:
+        """Bulk author-id reconciliation for Yandex.Contest imports.
+
+        Two passes, both scoped to ``tenant_id`` + ``source='yandex_contest'``:
+
+          * **rename** — for each ``(from, to)`` remap, rewrite submissions
+            whose ``author_id`` is the unstable ``yc:<participantId>`` key to
+            the stable ``yc:<login>`` key.
+          * **claim** — for each ``(external_id, user_id)`` claim, rewrite
+            submissions whose ``author_id`` is the external key to the bound
+            ``user_id`` (the ``yc:<login>`` rows the rename just produced, now
+            attributed to the redeemed user).
+
+        Returns ``(submissions_updated, claimed)`` — the row counts of the two
+        passes. Idempotent: a re-run matches nothing (rows already carry the
+        target id) → ``(0, 0)``. Uses bound params via the ORM; touches only
+        submission's own table.
+        """
+        submissions_updated = 0
+        for from_author_id, to_author_id in remaps:
+            result = await self.session.execute(
+                update(Submission)
+                .where(
+                    Submission.tenant_id == tenant_id,
+                    Submission.source == "yandex_contest",
+                    Submission.author_id == from_author_id,
+                )
+                .values(author_id=to_author_id)
+            )
+            submissions_updated += result.rowcount or 0
+
+        claimed = 0
+        for external_id, user_id in claims:
+            result = await self.session.execute(
+                update(Submission)
+                .where(
+                    Submission.tenant_id == tenant_id,
+                    Submission.source == "yandex_contest",
+                    Submission.author_id == external_id,
+                )
+                .values(author_id=user_id)
+            )
+            claimed += result.rowcount or 0
+
+        await self.session.flush()
+        return submissions_updated, claimed
+
     async def list_external_participants(
         self, *, tenant_id: str, course_id: str
     ) -> list[dict[str, Any]]:
@@ -342,13 +395,18 @@ class SubmissionRepository:
         return list((await self.session.execute(stmt)).scalars().all())
 
     async def list_flagged(
-        self, *, course_id: str | None = None, assignment_id: str | None = None, tenant_id: str
+        self,
+        *,
+        course_id: str | None = None,
+        assignment_id: str | None = None,
+        tenant_id: str | None,
     ) -> list[Submission]:
-        stmt = (
-            select(Submission)
-            .where(Submission.tenant_id == tenant_id)
-            .where(Submission.deleted_at.is_(None))
-        )
+        # ``tenant_id=None`` → span all tenants (admin viewing a course that
+        # lives in another tenant). Always scoped to a course/assignment by
+        # the callers, so this never returns the whole platform.
+        stmt = select(Submission).where(Submission.deleted_at.is_(None))
+        if tenant_id is not None:
+            stmt = stmt.where(Submission.tenant_id == tenant_id)
         if course_id is not None:
             stmt = stmt.where(Submission.course_id == course_id)
         if assignment_id is not None:
@@ -401,7 +459,7 @@ class SubmissionRepository:
     async def list_inbox_for_staff(
         self,
         *,
-        tenant_id: str,
+        tenant_id: str | None,
         course_id: str | None = None,
         assignment_id: str | None = None,
         assignment_ids: list[str] | None = None,
@@ -430,11 +488,13 @@ class SubmissionRepository:
             # "проверено / не проверено" (grade present + score set)
             # without an async lazy-load per row.
             .options(selectinload(Submission.grade))
-            .where(Submission.tenant_id == tenant_id)
             .where(Submission.deleted_at.is_(None))
             .order_by(Submission.submitted_at.desc())
             .limit(limit)
         )
+        # ``tenant_id=None`` → span ALL tenants (admin-only global search).
+        if tenant_id is not None:
+            stmt = stmt.where(Submission.tenant_id == tenant_id)
         if course_id is not None:
             stmt = stmt.where(Submission.course_id == course_id)
         if assignment_id is not None:

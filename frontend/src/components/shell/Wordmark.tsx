@@ -22,6 +22,10 @@ interface WordmarkProps {
   /** Full variant only: seat the mark in the rail's 72px centered slot so
    *  its x-position matches the collapsed rail exactly (no drift on hover). */
   railAligned?: boolean;
+  /** railAligned only: fade the "lagLens" text in/out. When false the text
+   *  is invisible (so a collapsed rail shows ONLY the «P», never a clipped
+   *  "la" peeking past the 72px edge). Defaults to true. */
+  textRevealed?: boolean;
   className?: string;
   /** Optional click target; defaults to "/". */
   to?: string;
@@ -50,6 +54,7 @@ const TEXT_STYLE = {
 export function Wordmark({
   variant = 'full',
   railAligned = false,
+  textRevealed = true,
   className,
   to = '/',
   ariaLabel = 'plaglens',
@@ -82,7 +87,10 @@ export function Wordmark({
         <span className={`flex ${RAIL_SLOT} shrink-0 items-center justify-center`}>
           <BrandMark cropped className={MARK} />
         </span>
-        <span className={`-ml-6 ${TEXT_CLASS}`} style={TEXT_STYLE}>
+        <span
+          className={`-ml-6 ${TEXT_CLASS} transition-opacity duration-200 ${textRevealed ? 'opacity-100' : 'opacity-0'}`}
+          style={TEXT_STYLE}
+        >
           lagLens
         </span>
       </Link>

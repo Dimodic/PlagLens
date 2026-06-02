@@ -87,6 +87,12 @@ class ProviderConfig(Base):
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Staff user who connected this provider (per-user "bring your own key").
+    # NULL = tenant/admin-level config: fallback when the actor has no personal
+    # provider, and the source for the column-matcher assist.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     provider: Mapped[str] = mapped_column(String(64), nullable=False)
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     model: Mapped[str] = mapped_column(String(200), nullable=False)

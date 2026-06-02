@@ -51,8 +51,8 @@ export function ResetPasswordPage() {
   const validate = (): boolean => {
     const next: FieldErrors = {};
     const r = passwordSchema.safeParse(newPassword);
-    if (!r.success) next.new_password = r.error.issues[0]?.message ?? 'Слабый пароль';
-    if (confirm !== newPassword) next.confirm = 'Пароли не совпадают';
+    if (!r.success) next.new_password = r.error.issues[0]?.message ?? t('auth.reset.errors.weak');
+    if (confirm !== newPassword) next.confirm = t('auth.reset.errors.confirm');
     setErrors(next);
     return Object.keys(next).length === 0;
   };
@@ -149,6 +149,7 @@ interface ShellProps {
 }
 
 function SingleCardShell({ heading, sub, children }: ShellProps) {
+  const { t } = useTranslation();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-md space-y-6">
@@ -164,7 +165,7 @@ function SingleCardShell({ heading, sub, children }: ShellProps) {
 
         <p className="text-center text-xs text-muted-foreground">
           <Link to="/login" className="text-primary hover:underline">
-            Вернуться ко входу
+            {t('auth.reset.back_to_login')}
           </Link>
         </p>
       </div>

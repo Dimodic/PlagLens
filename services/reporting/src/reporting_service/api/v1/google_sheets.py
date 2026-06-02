@@ -21,8 +21,9 @@ def _ensure_course_role(p: Principal, course_id: str) -> None:
         return
     # JWT ``course_roles`` are empty by default — identity-service doesn't
     # populate them — so a teacher who owns the course has nothing to
-    # match. Fall back to the global role: any teacher passes.
-    if p.has_global("teacher"):
+    # match. Fall back to the global role: any teacher OR assistant passes —
+    # assistants grade for the course, so they may export those grades too.
+    if p.has_global("teacher", "assistant"):
         return
     raise forbidden("No course role")
 
@@ -34,14 +35,15 @@ async def preview_spreadsheet(
     p: Principal = Depends(get_principal),
     max_rows: int = Query(default=200, ge=1, le=2000),
     max_cols: int = Query(default=40, ge=1, le=200),
+    sheet_name: str | None = Query(default=None),
 ) -> dict[str, Any]:
-    """Render a Google spreadsheet for the interactive picker — all
-    worksheets, cell values + notes, capped to ``max_rows × max_cols`` so
-    big sheets don't blow the payload. The service account must have read
-    access to the spreadsheet (teacher shares it with the SA email).
+    """Render a Google spreadsheet for the interactive picker, capped to
+    ``max_rows × max_cols``. Pass ``sheet_name`` to fetch just one tab —
+    a gradebook can have 20 wide tabs and pulling them all is slow.
+    The service account must have read access (teacher shares it).
     """
-    if not p.has_global("teacher", "admin"):
-        raise forbidden("Teacher or admin role required")
+    if not p.has_global("teacher", "admin", "assistant"):
+        raise forbidden("Teacher, assistant or admin role required")
     # Prefer the teacher's own Google OAuth token (Iteration 2) if
     # they've connected their account. Else fall back to the admin's
     # tenant-level SA (Iteration 1). No credentials at all → honest 503.
@@ -60,7 +62,10 @@ async def preview_spreadsheet(
         )
     try:
         return await client.fetch_preview(
-            spreadsheet_id, max_rows=max_rows, max_cols=max_cols
+            spreadsheet_id,
+            max_rows=max_rows,
+            max_cols=max_cols,
+            sheet_name=sheet_name,
         )
     except Exception as exc:  # noqa: BLE001
         raise Problem(
@@ -170,8 +175,6 @@ async def grades_match_preview(
     homework_ids = [str(h) for h in (body.get("homework_ids") or []) if h]
     spreadsheet_id = str(body.get("spreadsheet_id") or "").strip()
     sheet_name = body.get("sheet_name")
-    header_row = int(body.get("header_row") or 0)
-    name_col = int(body.get("name_col") or 0)
     if not homework_ids or not spreadsheet_id:
         raise Problem(
             status=400,
@@ -182,8 +185,9 @@ async def grades_match_preview(
 
     from ...exports.sheet_match import (
         build_homework_matrix,
+        build_placements,
+        detect_layout,
         llm_resolve_columns,
-        match_columns,
         match_rows,
     )
     from ...services.sheets_sa_loader import get_sheets_client_for_user
@@ -198,7 +202,7 @@ async def grades_match_preview(
         )
     try:
         preview = await client.fetch_preview(
-            spreadsheet_id, max_rows=1000, max_cols=80
+            spreadsheet_id, max_rows=1000, max_cols=160, sheet_name=sheet_name
         )
     except Exception as exc:  # noqa: BLE001
         raise Problem(
@@ -217,44 +221,45 @@ async def grades_match_preview(
             detail=f"В таблице нет листа «{sheet_name}».",
         )
     rows_grid: list[list[dict[str, Any]]] = ws.get("rows") or []
-    header = rows_grid[header_row] if len(rows_grid) > header_row else []
-    header_cells = [
-        {"index": i, "text": (c or {}).get("v")} for i, c in enumerate(header)
-    ]
-    name_cells = [
-        {
-            "index": r,
-            "text": (row[name_col] or {}).get("v") if len(row) > name_col else "",
-        }
-        for r, row in enumerate(rows_grid)
-        if r != header_row
-    ]
+    # Analyse the whole top of the sheet — find the real header row (it's
+    # often below a banner / merged "ДЗ - N" labels), the ФИО + login
+    # columns, and each ДЗ's *total* column inside its banner block.
+    layout = detect_layout(rows_grid)
+    header_row = layout["header_row"]
+    header_cells = layout["header_cells"]
+    name_col = layout["name_col"]
+    login_col = layout["login_col"]
+    name_cells = layout["name_cells"]
+    login_cells = layout["login_cells"]
 
     bearer = request.headers.get("authorization")
     matrix = await build_homework_matrix(homework_ids, bearer)
-    columns = match_columns(matrix["homeworks"], header_cells)
+    row_map = match_rows(matrix["students"], name_cells, login_cells)
+    placements = build_placements(matrix, layout, row_map)
 
-    # GS5 hook — let the LLM try the homeworks the number heuristic missed.
-    missing = [c for c in columns if c["column_index"] is None]
-    if missing:
-        resolved = await llm_resolve_columns(missing, header_cells, p.tenant_id)
-        for c in columns:
-            ci = resolved.get(c["homework_id"])
-            if c["column_index"] is None and ci is not None:
-                c["column_index"] = ci
-                c["header_text"] = next(
-                    (h["text"] for h in header_cells if h["index"] == ci), None
-                )
-                c["source"] = "llm"
-                c["confidence"] = "medium"
+    # GS5 — for any homework the structural pass couldn't place at all, let
+    # the LLM try to find a single total column, then re-place the sums.
+    unplaced = [s for s in placements["summary"] if s["mode"] == "none"]
+    if unplaced:
+        resolved = await llm_resolve_columns(
+            [{"homework_id": s["homework_id"], "title": s["title"]} for s in unplaced],
+            header_cells,
+            p.tenant_id,
+        )
+        injected = False
+        for s in unplaced:
+            col = resolved.get(s["homework_id"])
+            if col is not None and s["number"] is not None:
+                layout["dz_cols"][s["number"]] = col
+                injected = True
+        if injected:
+            placements = build_placements(matrix, layout, row_map)
 
-    row_map = match_rows(matrix["students"], name_cells)
     students = [
         {
             "author_id": st["author_id"],
             "name": st["name"],
             "row_index": row_map.get(st["author_id"]),
-            "values": st["totals"],
         }
         for st in matrix["students"]
     ]
@@ -263,14 +268,18 @@ async def grades_match_preview(
         "sheet_name": ws.get("title"),
         "header_row": header_row,
         "name_col": name_col,
+        "login_col": login_col,
         "header": [c["text"] for c in header_cells],
-        "columns": columns,
+        "homeworks": placements["summary"],
+        "placements": placements["cells"],
         "students": students,
-        "unmatched_homeworks": [
-            c["homework_id"] for c in columns if c["column_index"] is None
-        ],
+        "matched_students": sum(1 for s in students if s["row_index"] is not None),
+        "total_students": len(students),
         "unmatched_students": [
-            s["author_id"] for s in students if s["row_index"] is None
+            s["name"] for s in students if s["row_index"] is None
+        ],
+        "unplaced_homeworks": [
+            s["homework_id"] for s in placements["summary"] if s["mode"] == "none"
         ],
     }
 
@@ -281,36 +290,37 @@ async def grades_write(
     request: Request,
     body: dict[str, Any],
     p: Principal = Depends(get_principal),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    """Write grades into the linked sheet using the teacher-confirmed
-    placement. ``column_map`` (``{homework_id: col_index}``) and
-    ``row_map`` (``{author_id: row_index}``) come from the match preview
-    after any manual fixes; the *values* are re-fetched server-side, so
-    only the placement is client-supplied. Writes scattered cells —
-    never overwrites a block."""
+    """Write grades into the linked sheet.
+
+    Fast path: if the client passes ``cells`` (the exact placement
+    «Предзаписать» already computed and the teacher just saw), they're
+    written verbatim — no recompute, no double work.
+
+    Fallback (direct «Записать» without a pre-write): the placement is
+    recomputed server-side from the live sheet (each task → its A…J
+    column, or a homework total → one column; "Итог"/"∑" untouched).
+    Writes scattered cells — never a block."""
     _ensure_course_role(p, course_id)
     homework_ids = [str(h) for h in (body.get("homework_ids") or []) if h]
     spreadsheet_id = str(body.get("spreadsheet_id") or "").strip()
     sheet_name = str(body.get("sheet_name") or "").strip()
-    column_map = {
-        str(k): int(v)
-        for k, v in (body.get("column_map") or {}).items()
-        if v is not None
-    }
-    row_map = {
-        str(k): int(v)
-        for k, v in (body.get("row_map") or {}).items()
-        if v is not None
-    }
-    if not homework_ids or not spreadsheet_id or not sheet_name:
+    client_cells = body.get("cells")
+    if not spreadsheet_id or not sheet_name or (not homework_ids and not client_cells):
         raise Problem(
             status=400,
             code="BAD_REQUEST",
             title="Недостаточно данных",
-            detail="Нужны homework_ids, spreadsheet_id и sheet_name",
+            detail="Нужны spreadsheet_id, sheet_name и (homework_ids или cells)",
         )
 
-    from ...exports.sheet_match import build_homework_matrix
+    from ...exports.sheet_match import (
+        build_homework_matrix,
+        build_placements,
+        detect_layout,
+        match_rows,
+    )
     from ...services.sheets_sa_loader import get_sheets_client_for_user
 
     client = await get_sheets_client_for_user(p.tenant_id, p.user_id)
@@ -322,24 +332,60 @@ async def grades_write(
             detail="Админу: подключите Google Sheets в разделе «Интеграции».",
         )
 
-    bearer = request.headers.get("authorization")
-    matrix = await build_homework_matrix(homework_ids, bearer)
-    cells: list[dict[str, Any]] = []
-    students_written: set[str] = set()
-    for st in matrix["students"]:
-        r = row_map.get(st["author_id"])
-        if r is None:
-            continue
-        for hw_id, val in st["totals"].items():
-            col = column_map.get(hw_id)
-            if col is None or val is None:
+    if client_cells:
+        # Pre-write path — write exactly what the teacher previewed.
+        sheet_title = sheet_name
+        cells = []
+        for c in client_cells:
+            try:
+                cells.append(
+                    {
+                        "row": int(c["row"]),
+                        "col": int(c["col"]),
+                        "value": c.get("value"),
+                    }
+                )
+            except (KeyError, TypeError, ValueError):
                 continue
-            cells.append({"row": r, "col": col, "value": val})
-            students_written.add(st["author_id"])
+        students_written = {(c["row"]) for c in cells}
+    else:
+        # Re-read the sheet + re-run the same placement engine as preview.
+        try:
+            preview = await client.fetch_preview(
+                spreadsheet_id, max_rows=1000, max_cols=160, sheet_name=sheet_name
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise Problem(
+                status=400,
+                code="SHEETS_PREVIEW_FAILED",
+                title="Не удалось открыть таблицу",
+                detail=str(exc)[:300],
+            ) from exc
+        ws = _pick_worksheet(preview.get("worksheets") or [], sheet_name)
+        if ws is None:
+            raise Problem(
+                status=404,
+                code="SHEET_TAB_NOT_FOUND",
+                title="Лист не найден",
+                detail=f"В таблице нет листа «{sheet_name}».",
+            )
+        sheet_title = ws.get("title") or sheet_name
+        layout = detect_layout(ws.get("rows") or [])
+        bearer = request.headers.get("authorization")
+        matrix = await build_homework_matrix(homework_ids, bearer)
+        row_map = match_rows(
+            matrix["students"], layout["name_cells"], layout["login_cells"]
+        )
+        placements = build_placements(matrix, layout, row_map)
+        cells = [
+            {"row": c["row"], "col": c["col"], "value": c["value"]}
+            for c in placements["cells"]
+        ]
+        students_written = {c["author_id"] for c in placements["cells"]}
 
     try:
         res = (
-            await client.write_cells(spreadsheet_id, sheet_name, cells)
+            await client.write_cells(spreadsheet_id, sheet_title, cells)
             if cells
             else {"updated_cells": 0}
         )
@@ -351,10 +397,30 @@ async def grades_write(
             detail=str(exc)[:300],
         ) from exc
 
+    # Record the write in «История экспортов». The cells are already in the
+    # sheet, so this is a pure audit row — best-effort: a history failure
+    # must never surface as a write failure to the teacher.
+    try:
+        await request.app.state.export_service.record_sheets_grades(
+            session,
+            tenant_id=p.tenant_id,
+            triggered_by=p.user_id,
+            course_id=course_id,
+            spreadsheet_id=spreadsheet_id,
+            sheet_name=sheet_title,
+            written_cells=len(cells),
+            students_written=len(students_written),
+            homework_ids=homework_ids,
+            trace_id=getattr(request.state, "request_id", None),
+        )
+        await session.commit()
+    except Exception:  # noqa: BLE001
+        await session.rollback()
+
     return {
         "written_cells": len(cells),
         "students_written": len(students_written),
-        "sheet_name": sheet_name,
+        "sheet_name": sheet_title,
         "response": res,
     }
 

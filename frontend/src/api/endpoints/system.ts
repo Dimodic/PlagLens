@@ -10,6 +10,7 @@ export interface ServiceStatus {
   last_checked_at: string;
   version?: string | null;
   message?: string | null;
+  checks?: Record<string, string> | null; // per-dependency: db/redis/kafka → ok|fail|error: …
 }
 
 export interface ServicesStatus {

@@ -20,6 +20,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import { useClusterPairs } from '@/hooks/api/usePlagiarism';
 import type { PlagiarismCluster } from '@/api/endpoints/plagiarism';
 import { SimilarityBar } from './SimilarityBar';
@@ -46,6 +47,7 @@ export function ClusterCard({
   runId,
   onPairClick,
 }: ClusterCardProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   // Lazy — the request only fires once the row is expanded.
   const pairsQ = useClusterPairs(runId, cluster.id, { enabled: open });
@@ -80,7 +82,7 @@ export function ClusterCard({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium">
-              Кластер {cluster.id.slice(-6)}
+              {t('cluster_card.name', { id: cluster.id.slice(-6) })}
             </span>
             {cluster.dominant_language && (
               <span className="font-mono text-xs text-muted-foreground">
@@ -88,7 +90,7 @@ export function ClusterCard({
               </span>
             )}
             <span className="text-xs text-muted-foreground">
-              · {cluster.members.length} участников
+              · {t('cluster_card.members_count', { count: cluster.members.length })}
             </span>
           </div>
 
@@ -117,7 +119,7 @@ export function ClusterCard({
 
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-xs text-muted-foreground">
-            Средняя схожесть
+            {t('cluster_card.avg_similarity')}
           </span>
           <SimilarityBar value={cluster.avg_similarity} width={110} />
         </div>
@@ -130,11 +132,11 @@ export function ClusterCard({
           {pairsQ.isLoading ? (
             <div className="flex items-center justify-center gap-2 px-2 py-5 text-sm text-muted-foreground">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Загрузка пар…
+              {t('cluster_card.loading_pairs')}
             </div>
           ) : pairs.length === 0 ? (
             <div className="px-2 py-5 text-center text-sm text-muted-foreground">
-              Пары внутри кластера не найдены.
+              {t('cluster_card.empty')}
             </div>
           ) : (
             <div className="flex flex-col">

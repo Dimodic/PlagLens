@@ -2,9 +2,9 @@
 
 Fine-grained checks (resource ownership, course role) are done in services.
 Here we only enforce that:
-  * `super_admin` is required for `/v1/services-status` and any
-    `/api/v1/admin/tenants*`, `/api/v1/admin/users*` cross-tenant ops.
-  * `admin` is required for tenant-wide admin endpoints.
+  * `admin` is required for `/v1/services-status`, any
+    `/api/v1/admin/tenants*`, `/api/v1/admin/users*` cross-tenant ops,
+    and tenant-wide admin endpoints.
   * Authenticated bearer is required for everything that is not in
     PUBLIC_PATHS / PUBLIC_PREFIXES.
 

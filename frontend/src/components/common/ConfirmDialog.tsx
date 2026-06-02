@@ -1,17 +1,15 @@
 import { ReactNode } from 'react';
 import { Loader2 } from 'lucide-react';
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { cn } from '@/components/ui/utils';
-import { buttonVariants } from '@/components/ui/button';
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 
 interface ConfirmDialogProps {
   opened: boolean;
@@ -25,50 +23,62 @@ interface ConfirmDialogProps {
   onClose: () => void;
 }
 
+/**
+ * Built on the plain Dialog (not AlertDialog) on purpose: clicking the
+ * overlay / pressing Esc / the ✕ all dismiss it (= cancel), which is the
+ * expected behaviour. Dismissal is blocked only while a confirm action is
+ * in flight.
+ */
 export function ConfirmDialog({
   opened,
   title,
   message,
-  confirmLabel = 'Подтвердить',
-  cancelLabel = 'Отмена',
+  confirmLabel,
+  cancelLabel,
   destructive,
   loading,
   onConfirm,
   onClose,
 }: ConfirmDialogProps) {
+  const { t } = useTranslation();
   return (
-    <AlertDialog open={opened} onOpenChange={(o) => { if (!o) onClose(); }}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
+    <Dialog
+      open={opened}
+      onOpenChange={(o) => {
+        if (!o && !loading) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
           {typeof message === 'string' ? (
-            <AlertDialogDescription>{message}</AlertDialogDescription>
+            <DialogDescription>{message}</DialogDescription>
           ) : message ? (
             <div className="text-sm text-muted-foreground">{message}</div>
           ) : null}
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
             data-testid="confirm-dialog-cancel"
             disabled={loading}
             onClick={onClose}
           >
-            {cancelLabel}
-          </AlertDialogCancel>
-          <AlertDialogAction
+            {cancelLabel ?? t('common.cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? 'destructive' : 'default'}
             data-testid="confirm-dialog-confirm"
             disabled={loading}
-            onClick={(e) => { e.preventDefault(); onConfirm(); }}
-            className={cn(
-              destructive &&
-                buttonVariants({ variant: 'destructive' }),
-            )}
+            onClick={onConfirm}
           >
             {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            {confirmLabel}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            {confirmLabel ?? t('common.confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

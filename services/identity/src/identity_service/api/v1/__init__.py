@@ -13,12 +13,16 @@ from .auth_email import router as auth_email_router
 from .auth_oauth import router as auth_oauth_router
 from .auth_password import router as auth_password_router
 from .auth_telegram import router as auth_telegram_router
+from .avatars import router as avatars_router
+from .external_bindings import admin_router as external_bindings_admin_router
 from .external_bindings import router as external_bindings_router
 from .invitations import router as invitations_router
 from .jwks import router as jwks_router
 from .me import router as me_router
 from .operations import router as operations_router
+from .people import router as people_router
 from .roles import router as roles_router
+from .telegram_binding import router as telegram_binding_router
 from .tenants import router as tenants_router
 from .users import router as users_router
 from .version import router as version_router
@@ -40,8 +44,15 @@ api_v1.include_router(tenants_router)
 # otherwise be eaten by /users/{target_user_id} (with target='me'),
 # which is exactly the 404 'User not found' regression we kept hitting.
 api_v1.include_router(me_router)
+# telegram-binding lives under /users/me/telegram-binding (+ :start / :confirm
+# colon-actions). Register before users_router so /users/{target_user_id}
+# (with target='me') doesn't swallow it — same ordering rule as me_router.
+api_v1.include_router(telegram_binding_router)
+api_v1.include_router(avatars_router)
+api_v1.include_router(people_router)
 api_v1.include_router(users_router)
 api_v1.include_router(external_bindings_router)
+api_v1.include_router(external_bindings_admin_router)
 api_v1.include_router(roles_router)
 api_v1.include_router(invitations_router)
 api_v1.include_router(api_keys_router)

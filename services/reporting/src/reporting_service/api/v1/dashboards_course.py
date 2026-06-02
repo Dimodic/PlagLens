@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Request
+from plaglens_common.errors import PlagLensError
+from plaglens_common.service_client import ServiceClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...common.cache import JsonCache
@@ -16,6 +18,34 @@ from ...dashboards.service import DashboardService
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses/{course_id}/dashboard", tags=["dashboards-course"])
+
+
+def _dashboard_client(base_url: str, provider: str) -> ServiceClient:
+    """A ServiceClient tuned for the live-dashboard fan-out: the same tight
+    4s budget the old ``httpx.AsyncClient(timeout=4.0)`` used, and
+    ``max_retries=0`` so a slow upstream can't multiply that budget — these
+    endpoints would rather show cached zeros than hang the page."""
+    return ServiceClient(
+        base_url, provider=provider, timeout=4.0, max_retries=0
+    )
+
+
+async def _get_json(
+    client: ServiceClient,
+    path: str,
+    headers: dict[str, str],
+    *,
+    params: Any = None,
+) -> Any | None:
+    """GET ``path`` and return the parsed JSON body, or ``None`` on any
+    transport error / non-2xx. Lets the fan-out below skip a failed
+    assignment (the old ``if resp.status_code >= 400: continue``) without
+    one bad request cancelling its siblings inside ``asyncio.gather``."""
+    try:
+        resp = await client.get(path, headers=headers, params=params)
+    except PlagLensError:
+        return None
+    return resp.json()
 
 
 async def _live_overview_fallback(
@@ -44,22 +74,21 @@ async def _live_overview_fallback(
     course_url = settings.course_service_base_url.rstrip("/")
     sub_url = settings.submission_service_base_url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            course_resp, asg_resp = await _gather(
-                client.get(
-                    f"{course_url}/api/v1/courses/{course_id}",
-                    headers=headers,
-                ),
-                client.get(
-                    f"{course_url}/api/v1/courses/{course_id}/assignments",
-                    headers=headers,
+        async with (
+            _dashboard_client(course_url, "course") as course_client,
+            _dashboard_client(sub_url, "submission") as sub_client,
+        ):
+            course_payload, asg_payload = await _gather(
+                _get_json(course_client, f"/api/v1/courses/{course_id}", headers),
+                _get_json(
+                    course_client,
+                    f"/api/v1/courses/{course_id}/assignments",
+                    headers,
                     params={"limit": 500},
                 ),
             )
-            if course_resp.status_code >= 400 or asg_resp.status_code >= 400:
+            if course_payload is None or asg_payload is None:
                 return None
-            course_payload = course_resp.json() or {}
-            asg_payload = asg_resp.json() or {}
             assignments = asg_payload.get("data") or []
             # `members_count` on the course payload counts ALL roles
             # (incl. owners/co-owners/assistants), so we'll override
@@ -89,28 +118,30 @@ async def _live_overview_fallback(
                 #      submission_grades table (this is where the
                 #      teacher-assigned scores actually live).
                 sub_tasks = [
-                    client.get(
-                        f"{sub_url}/api/v1/assignments/{aid}/submissions",
-                        headers=headers,
+                    _get_json(
+                        sub_client,
+                        f"/api/v1/assignments/{aid}/submissions",
+                        headers,
                         params={"limit": 200},
                     )
                     for aid in asg_ids
                 ]
                 grade_tasks = [
-                    client.get(
-                        f"{sub_url}/api/v1/assignments/{aid}/grades",
-                        headers=headers,
+                    _get_json(
+                        sub_client,
+                        f"/api/v1/assignments/{aid}/grades",
+                        headers,
                     )
                     for aid in asg_ids
                 ]
-                sub_responses, grade_responses = await _gather(
+                sub_payloads, grade_payloads = await _gather(
                     _gather(*sub_tasks),
                     _gather(*grade_tasks),
                 )
-                for sr in sub_responses:
-                    if sr.status_code >= 400:
+                for sr in sub_payloads:
+                    if sr is None:
                         continue
-                    rows = (sr.json() or {}).get("data") or []
+                    rows = (sr or {}).get("data") or []
                     submissions_total += len(rows)
                     for row in rows:
                         author_id = row.get("author_id")
@@ -121,10 +152,10 @@ async def _live_overview_fallback(
                             if last_activity_iso is None or ts > last_activity_iso:
                                 last_activity_iso = ts
                 scores: list[float] = []
-                for gr in grade_responses:
-                    if gr.status_code >= 400:
+                for gr in grade_payloads:
+                    if gr is None:
                         continue
-                    grade_rows = gr.json() or []
+                    grade_rows = gr or []
                     # The grades endpoint returns a bare list, not a
                     # paginated envelope.
                     if isinstance(grade_rows, dict):
@@ -152,7 +183,10 @@ async def _live_overview_fallback(
                 "last_activity_at": last_activity_iso,
                 "cached": False,
             }
-    except (httpx.HTTPError, ValueError) as exc:  # pragma: no cover - network
+    except ValueError as exc:  # pragma: no cover - network
+        # Transport / non-2xx no longer surface here — ``_get_json`` swallows
+        # them to ``None`` so one slow assignment can't sink the whole fan-out.
+        # A malformed-but-2xx JSON body still raises ``ValueError`` → zeros.
         logger.warning("live overview fallback failed: %s", exc)
         return None
 
@@ -293,31 +327,36 @@ async def _live_grades_distribution(
     course_url = settings.course_service_base_url.rstrip("/")
     sub_url = settings.submission_service_base_url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=4.0) as client:
-            asg_resp = await client.get(
-                f"{course_url}/api/v1/courses/{course_id}/assignments",
-                headers=headers,
+        async with (
+            _dashboard_client(course_url, "course") as course_client,
+            _dashboard_client(sub_url, "submission") as sub_client,
+        ):
+            asg_payload = await _get_json(
+                course_client,
+                f"/api/v1/courses/{course_id}/assignments",
+                headers,
                 params={"limit": 500},
             )
-            if asg_resp.status_code >= 400:
+            if asg_payload is None:
                 return None
-            assignments = (asg_resp.json() or {}).get("data") or []
+            assignments = (asg_payload or {}).get("data") or []
             if not assignments:
                 return None
             grade_tasks = [
-                client.get(
-                    f"{sub_url}/api/v1/assignments/{a.get('id')}/grades",
-                    headers=headers,
+                _get_json(
+                    sub_client,
+                    f"/api/v1/assignments/{a.get('id')}/grades",
+                    headers,
                 )
                 for a in assignments[:50]
                 if a.get("id") is not None
             ]
-            grade_responses = await _gather(*grade_tasks)
+            grade_payloads = await _gather(*grade_tasks)
             scores: list[float] = []
-            for gr in grade_responses:
-                if gr.status_code >= 400:
+            for gr in grade_payloads:
+                if gr is None:
                     continue
-                rows = gr.json() or []
+                rows = gr or []
                 if isinstance(rows, dict):
                     rows = rows.get("data") or []
                 for row in rows:
@@ -360,7 +399,9 @@ async def _live_grades_distribution(
                 "mean": mean,
                 "median": round(float(median), 2),
             }
-    except (httpx.HTTPError, ValueError) as exc:  # pragma: no cover - network
+    except ValueError as exc:  # pragma: no cover - network
+        # Transport / non-2xx are swallowed to ``None`` inside ``_get_json``;
+        # only a malformed 2xx JSON body reaches here.
         logger.warning("live grades-dist fallback failed: %s", exc)
         return None
 

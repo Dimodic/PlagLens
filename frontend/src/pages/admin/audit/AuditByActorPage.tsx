@@ -9,9 +9,11 @@ import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuditByActor } from '@/hooks/api/useAudit';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function AuditByActorPage() {
+  const { t } = useTranslation();
   const { userId } = useParams<{ userId: string }>();
   useDocumentTitle('Audit · Actor');
   const { data, isLoading, error } = useAuditByActor(userId, { limit: 50 });
@@ -28,7 +30,7 @@ export function AuditByActorPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Событий нет" />
+        <EmptyState title={t('audit_by_actor.empty')} />
       ) : (
         <div className="space-y-3">
           {data?.data.map((e) => <AuditEventCard key={e.id} event={e} />)}

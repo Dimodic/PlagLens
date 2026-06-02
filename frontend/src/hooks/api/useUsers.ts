@@ -10,6 +10,7 @@ import {
   type UpdateUserInput,
   type UserListFilters,
 } from '@/api/endpoints/users';
+import type { GlobalRole } from '@/api/types';
 
 export const userKeys = {
   all: ['users'] as const,
@@ -69,6 +70,21 @@ export function useUpdateUser(id: string) {
   return useMutation({
     mutationFn: (input: UpdateUserInput) => usersApi.update(id, input),
     onSuccess: () => {
+      qc.invalidateQueries({ queryKey: userKeys.detail(id) });
+      qc.invalidateQueries({ queryKey: userKeys.all });
+    },
+  });
+}
+
+/** Change a user's global role from the admin Users list (admin only — the
+ *  backend rejects a non-admin trying to set ``global_role``). Takes the id
+ *  per-call so one hook instance serves every row in the table. */
+export function useSetUserRole() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, role }: { id: string; role: GlobalRole }) =>
+      usersApi.update(id, { global_role: role }),
+    onSuccess: (_data, { id }) => {
       qc.invalidateQueries({ queryKey: userKeys.detail(id) });
       qc.invalidateQueries({ queryKey: userKeys.all });
     },
@@ -169,6 +185,17 @@ export function useRevokeApiKey(userId: string) {
 
 // -------- Self-service --------
 
+/** Terminate every session (including the current one) — «Завершить все».
+ *  The caller logs the user out afterwards since this kills the current
+ *  session server-side too. */
+export function useRevokeAllSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => usersApi.revokeAllSessions(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.mySessions }),
+  });
+}
+
 export function useMySessions() {
   return useQuery({
     queryKey: userKeys.mySessions,
@@ -263,7 +290,7 @@ export function useUpdateMe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (
-      patch: Partial<{ display_name: string; locale: string; timezone: string | null }>,
+      patch: Partial<{ display_name: string; locale: string; timezone: string | null; email: string }>,
     ) => usersApi.patchMe(patch),
     onSuccess: () => qc.invalidateQueries({ queryKey: userKeys.me }),
   });

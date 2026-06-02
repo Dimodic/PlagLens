@@ -28,6 +28,7 @@
  */
 import { useEffect, useState } from 'react';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type {
   PreviewSpreadsheet,
   PreviewWorksheet,
@@ -90,6 +91,7 @@ export function SpreadsheetPicker({
   maxVisibleRows = 200,
   maxVisibleCols = 40,
 }: SpreadsheetPickerProps) {
+  const { t } = useTranslation();
   const [activeTabIdx, setActiveTabIdx] = useState(0);
   useEffect(() => {
     // Defensive — preview swap could leave us pointing past the end.
@@ -124,7 +126,7 @@ export function SpreadsheetPicker({
   if (!active) {
     return (
       <div className="rounded-md border border-border/60 p-8 text-center text-sm text-muted-foreground">
-        В таблице нет листов.
+        {t('spreadsheet_picker.no_worksheets')}
       </div>
     );
   }
@@ -290,27 +292,25 @@ export function SpreadsheetPicker({
         <div data-testid="spreadsheet-picker-selection">
           {selection && selection.sheet_title === active.title ? (
             <span>
-              Выбрано:{' '}
+              {t('spreadsheet_picker.selected_label')}{' '}
               <span className="font-mono text-foreground">
                 {active.title}!{selectionToA1(selection)}
               </span>{' '}
-              · левый-верхний угол =
+              {t('spreadsheet_picker.top_left_corner')}
               <span className="ml-1 font-mono text-foreground">
                 {selectionAnchor(selection)}
               </span>
             </span>
           ) : selection ? (
             <span>
-              Выделение на вкладке{' '}
+              {t('spreadsheet_picker.selection_on_tab')}{' '}
               <span className="font-mono text-foreground">
                 {selection.sheet_title}
               </span>{' '}
-              · переключите вкладку, чтобы увидеть
+              {t('spreadsheet_picker.switch_tab_hint')}
             </span>
           ) : (
-            <span>
-              Кликните или выделите прямоугольник — куда положить оценки
-            </span>
+            <span>{t('spreadsheet_picker.click_or_drag_hint')}</span>
           )}
         </div>
         {selection && (
@@ -320,7 +320,7 @@ export function SpreadsheetPicker({
             className="hover:text-foreground"
             data-testid="spreadsheet-picker-reset"
           >
-            Сбросить
+            {t('spreadsheet_picker.reset')}
           </button>
         )}
       </div>

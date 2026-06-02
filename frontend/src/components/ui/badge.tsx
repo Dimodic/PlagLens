@@ -19,14 +19,16 @@ const badgeVariants = cva(
   {
     variants: {
       variant: {
+        // Muted tinted fills — same quiet visual language as
+        // <RoleBadge>/<StatusPill>; dark-mode text held at ~80% to avoid neon.
         default:
-          "border-transparent bg-primary text-primary-foreground [a&]:hover:bg-primary/90",
+          "border-transparent bg-primary/10 text-primary/90 [a&]:hover:bg-primary/20",
         secondary:
-          "border-border bg-background text-foreground",
+          "border-transparent bg-slate-500/10 text-slate-600 dark:bg-slate-400/10 dark:text-slate-300/80 [a&]:hover:bg-slate-500/15",
         destructive:
-          "border-transparent bg-destructive text-white [a&]:hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60",
+          "border-transparent bg-red-500/10 text-red-600 dark:bg-red-400/10 dark:text-red-300/80 [a&]:hover:bg-red-500/15",
         outline:
-          "border-border bg-background text-foreground [a&]:hover:bg-accent",
+          "border-transparent bg-slate-500/10 text-slate-600 dark:bg-slate-400/10 dark:text-slate-300/80 [a&]:hover:bg-slate-500/15",
       },
     },
     defaultVariants: {

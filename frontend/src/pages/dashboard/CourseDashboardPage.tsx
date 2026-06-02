@@ -32,6 +32,7 @@ import {
 } from '@/hooks/api/useDashboards';
 import { useCourse } from '@/hooks/api/useCourses';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { KPICard } from '@/components/dashboard/KPICard';
 // Chart components pull recharts (~70 KB gz) — defer them through
 // React.lazy so the KPI grid + tab strip render immediately and each
@@ -72,7 +73,8 @@ import {
 } from '@/components/ui/tabs';
 
 export default function CourseDashboardPage() {
-  useDocumentTitle('Дашборд курса');
+  const { t } = useTranslation();
+  useDocumentTitle(t('course_dashboard.title'));
   const { slug } = useParams<{ slug: string }>();
   const { data: course } = useCourse(slug);
   const courseId = course?.id;
@@ -94,14 +96,14 @@ export default function CourseDashboardPage() {
   return (
     <Page width="wide">
       <PageHeader
-        title="Дашборд курса"
+        title={t('course_dashboard.title')}
         action={
           <>
             <Button asChild variant="outline" size="sm">
-              <Link to={`/courses/${slug}/exports`}>Экспорты</Link>
+              <Link to={`/courses/${slug}/exports`}>{t('course_dashboard.exports')}</Link>
             </Button>
             <Button asChild variant="outline" size="sm">
-              <Link to={`/courses/${slug}/scheduled-exports`}>Расписание</Link>
+              <Link to={`/courses/${slug}/scheduled-exports`}>{t('course_dashboard.schedule')}</Link>
             </Button>
           </>
         }
@@ -111,35 +113,35 @@ export default function CourseDashboardPage() {
         <TabsList className="flex flex-wrap h-auto">
           <TabsTrigger value="overview" className="gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" />
-            Обзор
+            {t('course_dashboard.tab_overview')}
           </TabsTrigger>
           <TabsTrigger value="grades" className="gap-1.5">
             <Book className="h-3.5 w-3.5" />
-            Оценки
+            {t('course_dashboard.tab_grades')}
           </TabsTrigger>
           <TabsTrigger value="plagiarism" className="gap-1.5">
             <Shield className="h-3.5 w-3.5" />
-            Плагиат
+            {t('course_dashboard.tab_plagiarism')}
           </TabsTrigger>
           <TabsTrigger value="ai" className="gap-1.5">
             <Brain className="h-3.5 w-3.5" />
-            AI
+            {t('course_dashboard.tab_ai')}
           </TabsTrigger>
           <TabsTrigger value="timeline" className="gap-1.5">
             <History className="h-3.5 w-3.5" />
-            Таймлайн
+            {t('course_dashboard.tab_timeline')}
           </TabsTrigger>
           <TabsTrigger value="languages" className="gap-1.5">
             <Languages className="h-3.5 w-3.5" />
-            Языки
+            {t('course_dashboard.tab_languages')}
           </TabsTrigger>
           <TabsTrigger value="activity" className="gap-1.5">
             <ClipboardList className="h-3.5 w-3.5" />
-            Активность
+            {t('course_dashboard.tab_activity')}
           </TabsTrigger>
           <TabsTrigger value="late" className="gap-1.5">
             <Clock className="h-3.5 w-3.5" />
-            Опоздания
+            {t('course_dashboard.tab_late')}
           </TabsTrigger>
         </TabsList>
 
@@ -149,28 +151,28 @@ export default function CourseDashboardPage() {
           className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
         >
           <KPICard
-            label="Студентов"
+            label={t('course_dashboard.kpi_enrolled_students')}
             value={kpi?.enrolled_students}
             icon={<Users className="h-4 w-4" />}
             loading={isLoading}
             testId="kpi-enrolled-students"
           />
           <KPICard
-            label="Заданий"
+            label={t('course_dashboard.kpi_assignments_count')}
             value={kpi?.assignments_count}
             icon={<ClipboardList className="h-4 w-4" />}
             loading={isLoading}
             testId="kpi-assignments-count"
           />
           <KPICard
-            label="Посылок"
+            label={t('course_dashboard.kpi_submissions_total')}
             value={kpi?.submissions_total}
             icon={<BookOpen className="h-4 w-4" />}
             loading={isLoading}
             testId="kpi-submissions-total"
           />
           <KPICard
-            label="Средняя оценка"
+            label={t('course_dashboard.kpi_average_score')}
             value={kpi?.average_score ?? null}
             icon={<BarChart3 className="h-4 w-4" />}
             color="blue"
@@ -178,7 +180,7 @@ export default function CourseDashboardPage() {
             testId="kpi-avg-score"
           />
           <KPICard
-            label="Plagiarism alerts"
+            label={t('course_dashboard.kpi_plagiarism_alerts')}
             value={kpi?.plagiarism_alerts_count}
             icon={<Shield className="h-4 w-4" />}
             color="red"
@@ -186,7 +188,7 @@ export default function CourseDashboardPage() {
             testId="kpi-plagiarism-alerts"
           />
           <KPICard
-            label="AI-запусков"
+            label={t('course_dashboard.kpi_ai_runs')}
             value={kpi?.ai_runs_count}
             icon={<Brain className="h-4 w-4" />}
             color="grape"
@@ -212,7 +214,7 @@ export default function CourseDashboardPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex flex-col gap-3">
-                  <span className="font-medium">Средние по заданиям</span>
+                  <span className="font-medium">{t('course_dashboard.grades_averages_by_assignment')}</span>
                   {gradesByAssign.isLoading ? (
                     <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                   ) : (
@@ -257,15 +259,18 @@ export default function CourseDashboardPage() {
             <Card>
               <CardContent className="p-4">
                 <div className="flex flex-col gap-2">
-                  <span className="font-medium">Сводка</span>
+                  <span className="font-medium">{t('course_dashboard.plagiarism_summary')}</span>
                   <p className="text-sm">
-                    Запусков: {plagiarism.data?.total_runs ?? 0}
+                    {t('course_dashboard.plagiarism_runs', {
+                      count: plagiarism.data?.total_runs ?? 0,
+                    })}
                   </p>
                   <p className="text-sm">
-                    Подозрительных пар:{' '}
-                    {plagiarism.data?.total_pairs_flagged ?? 0}
+                    {t('course_dashboard.plagiarism_pairs_flagged', {
+                      count: plagiarism.data?.total_pairs_flagged ?? 0,
+                    })}
                   </p>
-                  <p className="mt-3 font-medium text-sm">По языкам</p>
+                  <p className="mt-3 font-medium text-sm">{t('course_dashboard.plagiarism_by_language')}</p>
                   {(plagiarism.data?.by_language ?? []).map((l) => (
                     <div
                       key={l.language}

@@ -144,8 +144,8 @@ async def _resolve_course_role(
 def require_course_role(*allowed: str, allow_admin: bool = True):
     """Dependency factory enforcing a course-scoped role.
 
-    Reads ``course_id`` from the path. Global ``super_admin`` and (if ``allow_admin``)
-    ``admin`` always pass.
+    Reads ``course_id`` from the path. Global ``admin`` (if ``allow_admin``)
+    always passes.
     """
     allowed_set = set(allowed)
 

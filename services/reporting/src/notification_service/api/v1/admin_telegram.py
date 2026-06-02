@@ -1,4 +1,4 @@
-"""Section G: telegram bot config (super_admin)."""
+"""Section G: telegram bot config (admin)."""
 from __future__ import annotations
 
 from datetime import UTC, datetime
@@ -16,7 +16,7 @@ from notification_service.schemas import (
     TelegramConfigPatch,
     TelegramSetWebhookBody,
 )
-from notification_service.security import Principal, require_super_admin
+from notification_service.security import Principal, require_admin
 
 router = APIRouter(tags=["admin-telegram"])
 
@@ -45,7 +45,7 @@ def _to_out(cfg: TelegramBotConfig) -> TelegramConfigOut:
 
 @router.get("/admin/notifications/telegram-config", response_model=TelegramConfigOut)
 async def get_tg_config(
-    _: Principal = Depends(require_super_admin),
+    _: Principal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TelegramConfigOut:
     cfg = await _get_or_create(db)
@@ -55,7 +55,7 @@ async def get_tg_config(
 @router.patch("/admin/notifications/telegram-config", response_model=TelegramConfigOut)
 async def patch_tg_config(
     body: TelegramConfigPatch,
-    _: Principal = Depends(require_super_admin),
+    _: Principal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TelegramConfigOut:
     cfg = await _get_or_create(db)
@@ -72,7 +72,7 @@ async def patch_tg_config(
 )
 async def set_webhook(
     body: TelegramSetWebhookBody,
-    _: Principal = Depends(require_super_admin),
+    _: Principal = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ) -> TelegramConfigOut:
     cfg = await _get_or_create(db)

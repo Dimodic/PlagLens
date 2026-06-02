@@ -38,6 +38,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useGoogleSheetsSetup } from '@/hooks/api/useIntegrations';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 interface Props {
@@ -51,6 +52,7 @@ interface Props {
 const GCP_SA_URL = 'https://console.cloud.google.com/iam-admin/serviceaccounts';
 
 export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const setup = useGoogleSheetsSetup();
 
@@ -90,7 +92,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
       }
     } catch (err) {
       setProblem({
-        title: 'Не удалось прочитать файл',
+        title: t('gsheets_sa.read_file_error_title'),
         detail: String(err),
         status: 400,
         code: 'BAD_REQUEST',
@@ -105,9 +107,8 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
     const json = saJson.trim();
     if (!json) {
       setProblem({
-        title: 'Вставьте JSON или загрузите файл',
-        detail:
-          'Без JSON сервисного аккаунта подключение сохранить не получится.',
+        title: t('gsheets_sa.empty_json_title'),
+        detail: t('gsheets_sa.empty_json_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -119,7 +120,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
       {
         onSuccess: (res) => {
           setSaved({ client_email: res.client_email });
-          notify.success('Google Sheets подключён');
+          notify.success(t('gsheets_sa.connected'));
         },
         onError: (p) => setProblem(p as unknown as Problem),
       },
@@ -133,7 +134,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
       navigator.clipboard
     ) {
       void navigator.clipboard.writeText(saved.client_email);
-      notify.info('Скопировано');
+      notify.info(t('gsheets_sa.copied'));
     }
   };
 
@@ -141,9 +142,9 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>Сервисный аккаунт Google</DialogTitle>
+          <DialogTitle>{t('gsheets_sa.title')}</DialogTitle>
           <DialogDescription>
-            Загрузите JSON-ключ или вставьте его содержимое.
+            {t('gsheets_sa.description')}
           </DialogDescription>
         </DialogHeader>
 
@@ -151,11 +152,11 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
           <div className="space-y-3" data-testid="sa-saved">
             <div className="flex items-center gap-2 text-sm text-foreground">
               <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-              Подключение сохранено.
+              {t('gsheets_sa.saved')}
             </div>
             {saved.client_email && (
               <div className="space-y-1.5">
-                <Label>E-mail сервисного аккаунта</Label>
+                <Label>{t('gsheets_sa.sa_email_label')}</Label>
                 <div className="flex items-center gap-2">
                   <Input
                     readOnly
@@ -168,21 +169,20 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
                     size="icon"
                     variant="outline"
                     onClick={copyEmail}
-                    title="Скопировать"
-                    aria-label="Скопировать e-mail"
+                    title={t('gsheets_sa.copy')}
+                    aria-label={t('gsheets_sa.copy_email_aria')}
                   >
                     <Copy className="h-4 w-4" />
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Откройте таблицу → «Настройки доступа» → добавьте этот e-mail
-                  как редактора.
+                  {t('gsheets_sa.share_hint')}
                 </p>
               </div>
             )}
             <DialogFooter>
               <Button onClick={() => onOpenChange(false)} data-testid="sa-close">
-                Готово
+                {t('gsheets_sa.done')}
               </Button>
             </DialogFooter>
           </div>
@@ -199,7 +199,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
 
             <div className="space-y-1.5">
               <div className="flex items-center gap-2">
-                <Label htmlFor="sa-json">JSON сервисного аккаунта</Label>
+                <Label htmlFor="sa-json">{t('gsheets_sa.json_label')}</Label>
                 {/* Direct deep-link instead of the old «Google Cloud →
                     IAM & Admin → Service Accounts → ваш SA → Keys → Add
                     Key → JSON» prose path — one click, no reading. */}
@@ -208,8 +208,8 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
-                  title="Открыть Google Cloud Console"
-                  aria-label="Открыть Google Cloud Console"
+                  title={t('gsheets_sa.open_console')}
+                  aria-label={t('gsheets_sa.open_console')}
                   data-testid="sa-docs-link"
                 >
                   <ExternalLink className="h-3.5 w-3.5" />
@@ -223,7 +223,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
                   data-testid="sa-pick-file"
                 >
                   <Upload className="h-3.5 w-3.5" />
-                  Загрузить файл
+                  {t('gsheets_sa.upload_file')}
                 </Button>
                 <input
                   ref={fileInputRef}
@@ -249,7 +249,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
 
             <DialogFooter>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={onSave}
@@ -259,7 +259,7 @@ export function GoogleSheetsServiceAccountDialog({ open, onOpenChange }: Props) 
                 {setup.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Сохранить
+                {t('common.save')}
               </Button>
             </DialogFooter>
           </div>

@@ -9,9 +9,11 @@ import { OAuthLinksList } from '@/components/me/OAuthLinksList';
 import { useUnlinkOAuth } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/auth/useAuth';
+import { useTranslation } from '@/i18n';
 import type { OAuthProvider, Problem } from '@/api/types';
 
 export function OAuthLinksSection() {
+  const { t } = useTranslation();
   const { user, reloadMe } = useAuth();
   const notify = useNotifications();
   const unlink = useUnlinkOAuth();
@@ -21,10 +23,10 @@ export function OAuthLinksSection() {
     setLoading(p);
     try {
       await unlink.mutateAsync(p);
-      notify.success(`Отвязано: ${p}`);
+      notify.success(t('oauth_links_section.unlinked', { provider: p }));
       await reloadMe();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('oauth_links_section.unlink_failed'));
     } finally {
       setLoading(null);
     }
@@ -38,7 +40,7 @@ export function OAuthLinksSection() {
 
   return (
     <div className="space-y-3">
-      <h3 className="text-sm text-foreground">Привязанные аккаунты</h3>
+      <h3 className="text-sm text-foreground">{t('oauth_links_section.linked_accounts')}</h3>
       <OAuthLinksList
         linked={(user?.linked_oauth as OAuthProvider[]) ?? []}
         loadingProvider={loading}

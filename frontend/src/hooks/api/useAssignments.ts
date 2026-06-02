@@ -33,6 +33,10 @@ export function useAssignmentsByCourse(
     queryKey: [...assignmentKeys.byCourse(course_id ?? ''), filters],
     queryFn: () => assignmentsApi.listInCourse(course_id as string, filters),
     enabled: !!course_id,
+    // Tasks are created on separate pages that invalidate this list while the
+    // course page is unmounted; with the global refetchOnMount:false the new
+    // task / its "N заданий" count stayed stale until a hard reload.
+    refetchOnMount: true,
   });
 }
 

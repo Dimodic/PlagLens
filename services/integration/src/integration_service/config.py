@@ -110,7 +110,7 @@ class Settings(BaseSettings):
 
     # ---- service-to-service auth ----
     # Shared secret with identity-service. We exchange it for a long-lived
-    # super_admin JWT at startup (and refresh on demand) so background workers
+    # admin JWT at startup (and refresh on demand) so background workers
     # like the autosync scheduler can call other services without a real user
     # session.
     service_auth_secret: str = "service-auth-shared-secret-change-me"

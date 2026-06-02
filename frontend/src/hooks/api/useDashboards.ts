@@ -29,10 +29,7 @@ export const dashboardKeys = {
   courseActivity: (id: string) =>
     ['dashboards', 'course', id, 'activity'] as const,
   tenant: (id: string) => ['dashboards', 'tenant', id] as const,
-  tenantIntegrations: (id: string) =>
-    ['dashboards', 'tenant', id, 'integrations'] as const,
   instance: () => ['dashboards', 'instance'] as const,
-  instanceIntegrations: () => ['dashboards', 'instance', 'integrations'] as const,
   global: () => ['dashboards', 'global'] as const,
 };
 
@@ -153,14 +150,6 @@ export function useTenantDashboard(tenantId: string | undefined) {
   });
 }
 
-export function useTenantIntegrationsHealth(tenantId: string | undefined) {
-  return useQuery({
-    queryKey: dashboardKeys.tenantIntegrations(tenantId ?? ''),
-    queryFn: () => reportingApi.tenantIntegrationsHealth(tenantId as string),
-    enabled: !!tenantId,
-  });
-}
-
 /** Whole-instance roll-up (all tenants). Backs the admin dashboard's
  *  default «Все организации» view. `enabled` so the page can switch
  *  between this and a single-tenant query. */
@@ -168,14 +157,6 @@ export function useInstanceOverview(enabled = true) {
   return useQuery({
     queryKey: dashboardKeys.instance(),
     queryFn: () => reportingApi.instanceOverview(),
-    enabled,
-  });
-}
-
-export function useInstanceIntegrationsHealth(enabled = true) {
-  return useQuery({
-    queryKey: dashboardKeys.instanceIntegrations(),
-    queryFn: () => reportingApi.instanceIntegrationsHealth(),
     enabled,
   });
 }

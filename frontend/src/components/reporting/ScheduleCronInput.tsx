@@ -2,6 +2,7 @@
  * ScheduleCronInput — cron text input with helper presets.
  */
 import { useId } from 'react';
+import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,11 +14,11 @@ export interface ScheduleCronInputProps {
 }
 
 const PRESETS = [
-  { label: 'Каждый день 09:00', cron: '0 9 * * *' },
-  { label: 'Каждую неделю (пн 09:00)', cron: '0 9 * * 1' },
-  { label: 'Каждый месяц (1-е, 09:00)', cron: '0 9 1 * *' },
-  { label: 'Каждый час', cron: '0 * * * *' },
-];
+  { labelKey: 'schedule_cron.preset_daily', cron: '0 9 * * *' },
+  { labelKey: 'schedule_cron.preset_weekly', cron: '0 9 * * 1' },
+  { labelKey: 'schedule_cron.preset_monthly', cron: '0 9 1 * *' },
+  { labelKey: 'schedule_cron.preset_hourly', cron: '0 * * * *' },
+] as const;
 
 const CRON_RE = /^[\d*/,\-\s]+$/;
 
@@ -26,15 +27,17 @@ export function ScheduleCronInput({
   onChange,
   error,
 }: ScheduleCronInputProps) {
+  const { t } = useTranslation();
   const id = useId();
   const isValid =
     !value || (CRON_RE.test(value) && value.split(/\s+/).length === 5);
-  const errorMsg = error ?? (!isValid && value ? 'Неверный формат cron' : null);
+  const errorMsg =
+    error ?? (!isValid && value ? t('schedule_cron.invalid') : null);
 
   return (
     <div className="space-y-2">
       <div className="space-y-1.5">
-        <Label htmlFor={id}>Cron-выражение</Label>
+        <Label htmlFor={id}>{t('schedule_cron.label')}</Label>
         <Input
           id={id}
           placeholder="0 9 * * *"
@@ -47,12 +50,14 @@ export function ScheduleCronInput({
           <p className="text-sm text-destructive">{errorMsg}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            Минута Час День Месяц День_недели
+            {t('schedule_cron.fields_hint')}
           </p>
         )}
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">Пресеты:</span>
+        <span className="text-xs text-muted-foreground">
+          {t('schedule_cron.presets')}
+        </span>
         {PRESETS.map((p) => (
           <Button
             key={p.cron}
@@ -63,7 +68,7 @@ export function ScheduleCronInput({
             onClick={() => onChange(p.cron)}
             data-testid={`cron-preset-${p.cron.replace(/\s/g, '_')}`}
           >
-            {p.label}
+            {t(p.labelKey)}
           </Button>
         ))}
       </div>

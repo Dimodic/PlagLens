@@ -11,12 +11,13 @@ import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import { MarkdownEditor } from '@/components/forms/MarkdownEditor';
 import { DeadlineFields } from '@/components/forms/DeadlineFields';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import type { SelectionStrategy } from '@/api/endpoints/assignments';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import NotFoundPage from '@/pages/NotFoundPage';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,8 @@ interface FormVals {
 }
 
 export default function HomeworkAssignmentCreatePage() {
-  useDocumentTitle('Новое задание');
+  const { t } = useTranslation();
+  useDocumentTitle(t('hw_assignment_create.title'));
   const { slug, hwSlug } = useParams<{ slug: string; hwSlug: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -83,17 +85,88 @@ export default function HomeworkAssignmentCreatePage() {
 
   const validate = (v: FormVals): Partial<Record<keyof FormVals, string>> => {
     const errs: Partial<Record<keyof FormVals, string>> = {};
-    if (v.title.trim().length < 2) errs.title = 'Не короче 2 символов';
+    if (v.title.trim().length < 2) errs.title = t('hw_assignment_create.error_title_min');
     return errs;
   };
 
   if ((courseLoading || homeworksQ.isLoading) && (!course || !homeworksQ.data)) {
+    // Mirror the real form: header (title + subtitle), label+input fields,
+    // a taller description editor, the two field grids, and the button row.
+    const Field = ({ inputClass = 'h-9' }: { inputClass?: string }) => (
+      <div className="space-y-1.5">
+        <Skeleton className="h-3.5 w-24 rounded-md bg-muted/40" />
+        <Skeleton className={`${inputClass} w-full rounded-md bg-muted/40`} />
+      </div>
+    );
     return (
-      <div className="space-y-6 max-w-3xl">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Новое задание</h1>
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={t('skeleton.aria_label')}
+        className="space-y-6 max-w-3xl"
+      >
+        {/* Header: title + subtitle */}
+        <div className="space-y-2">
+          <Skeleton className="h-8 w-1/2 rounded-md bg-muted/40" />
+          <Skeleton className="h-4 w-2/3 rounded-md bg-muted/30" />
         </div>
-        <SkeletonList rows={4} rowHeight={48} />
+
+        <div className="space-y-4">
+          {/* Homework (disabled) + title fields */}
+          <Field />
+          <Field />
+
+          {/* Description editor: tabs bar + tall textarea */}
+          <div className="space-y-1.5">
+            <Skeleton className="h-3.5 w-28 rounded-md bg-muted/40" />
+            <Skeleton className="h-9 w-44 rounded-md bg-muted/30" />
+            <Skeleton className="h-36 w-full rounded-md bg-muted/40" />
+          </div>
+
+          {/* language / max_score / weight */}
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Field />
+            <Field />
+            <Field />
+          </div>
+
+          {/* soft + hard deadlines */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field />
+            <Field />
+          </div>
+
+          {/* late multiplier */}
+          <Field />
+
+          {/* selection strategy: label + radio row */}
+          <div className="space-y-2">
+            <Skeleton className="h-3.5 w-32 rounded-md bg-muted/40" />
+            <div className="flex flex-wrap gap-4">
+              <Skeleton className="h-5 w-24 rounded-md bg-muted/30" />
+              <Skeleton className="h-5 w-28 rounded-md bg-muted/30" />
+              <Skeleton className="h-5 w-24 rounded-md bg-muted/30" />
+            </div>
+          </div>
+
+          {/* plagiarism toggle + threshold */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field />
+            <Field />
+          </div>
+
+          {/* external system + external id */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field />
+            <Field />
+          </div>
+
+          {/* button row (right-aligned) */}
+          <div className="flex items-center justify-end gap-2">
+            <Skeleton className="h-9 w-24 rounded-md bg-muted/30" />
+            <Skeleton className="h-9 w-28 rounded-md bg-muted/40" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -134,7 +207,7 @@ export default function HomeworkAssignmentCreatePage() {
             : [],
         homework_id: homework.id,
       });
-      notify.success('Задание создано');
+      notify.success(t('hw_assignment_create.notify_created'));
       void result;
       // HW detail page is gone — go back to the course page where the
       // homework is in the inline ДЗ list.
@@ -144,12 +217,14 @@ export default function HomeworkAssignmentCreatePage() {
     }
   };
 
-  const subtitle = course?.name ? `${course.name} → ${homework.title}` : homework.title;
+  const subtitle = course?.name
+    ? t('hw_assignment_create.subtitle', { course: course.name, homework: homework.title })
+    : homework.title;
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Новое задание</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('hw_assignment_create.title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
       </div>
 
@@ -159,7 +234,7 @@ export default function HomeworkAssignmentCreatePage() {
         className="space-y-4"
       >
         <div className="space-y-1.5">
-          <Label htmlFor="hw-assignment-form-homework">ДЗ</Label>
+          <Label htmlFor="hw-assignment-form-homework">{t('hw_assignment_create.homework_label')}</Label>
           <Input
             id="hw-assignment-form-homework"
             value={homework.title}
@@ -167,20 +242,20 @@ export default function HomeworkAssignmentCreatePage() {
             data-testid="hw-assignment-form-homework"
           />
           <p className="text-xs text-muted-foreground">
-            Задание создаётся в текущем ДЗ
+            {t('hw_assignment_create.homework_hint')}
           </p>
         </div>
 
         <div className="space-y-1.5">
           <Label htmlFor="hw-assignment-form-title">
-            Название <span className="text-destructive">*</span>
+            {t('hw_assignment_create.title_label')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="hw-assignment-form-title"
             required
             data-testid="hw-assignment-form-title"
             value={vals.title}
-            onChange={(e) => setVals((v) => ({ ...v, title: e.currentTarget.value }))}
+            onChange={(e) => setVals((v) => ({ ...v, title: e.target.value }))}
             aria-invalid={!!errors.title}
           />
           {errors.title && (
@@ -190,7 +265,7 @@ export default function HomeworkAssignmentCreatePage() {
 
         <div data-testid="hw-assignment-form-description">
           <MarkdownEditor
-            label="Описание (Markdown)"
+            label={t('hw_assignment_create.description_label')}
             value={vals.description}
             onChange={(v) => setVals((prev) => ({ ...prev, description: v }))}
           />
@@ -198,7 +273,7 @@ export default function HomeworkAssignmentCreatePage() {
 
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label htmlFor="hw-assignment-form-language">Язык</Label>
+            <Label htmlFor="hw-assignment-form-language">{t('hw_assignment_create.language_label')}</Label>
             <Select
               value={vals.language_hint}
               onValueChange={(v) => setVals((prev) => ({ ...prev, language_hint: v }))}
@@ -218,12 +293,12 @@ export default function HomeworkAssignmentCreatePage() {
                 <SelectItem value="csharp">C#</SelectItem>
                 <SelectItem value="kotlin">Kotlin</SelectItem>
                 <SelectItem value="rust">Rust</SelectItem>
-                <SelectItem value="other">Другой</SelectItem>
+                <SelectItem value="other">{t('hw_assignment_create.language_other')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="hw-assignment-form-max_score">Макс. оценка</Label>
+            <Label htmlFor="hw-assignment-form-max_score">{t('hw_assignment_create.max_score_label')}</Label>
             <Input
               id="hw-assignment-form-max_score"
               type="number"
@@ -234,13 +309,13 @@ export default function HomeworkAssignmentCreatePage() {
               onChange={(e) =>
                 setVals((v) => ({
                   ...v,
-                  max_score: Number(e.currentTarget.value) || 0,
+                  max_score: Number(e.target.value) || 0,
                 }))
               }
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="hw-assignment-form-weight">Вес</Label>
+            <Label htmlFor="hw-assignment-form-weight">{t('hw_assignment_create.weight_label')}</Label>
             <Input
               id="hw-assignment-form-weight"
               type="number"
@@ -252,7 +327,7 @@ export default function HomeworkAssignmentCreatePage() {
               onChange={(e) =>
                 setVals((v) => ({
                   ...v,
-                  weight: Number(e.currentTarget.value) || 0,
+                  weight: Number(e.target.value) || 0,
                 }))
               }
             />
@@ -273,7 +348,7 @@ export default function HomeworkAssignmentCreatePage() {
 
         <div className="space-y-1.5">
           <Label htmlFor="hw-assignment-form-late_multiplier">
-            Множитель для late submissions
+            {t('hw_assignment_create.late_multiplier_label')}
           </Label>
           <Input
             id="hw-assignment-form-late_multiplier"
@@ -286,17 +361,17 @@ export default function HomeworkAssignmentCreatePage() {
             onChange={(e) =>
               setVals((v) => ({
                 ...v,
-                late_score_multiplier: Number(e.currentTarget.value) || 0,
+                late_score_multiplier: Number(e.target.value) || 0,
               }))
             }
           />
           <p className="text-xs text-muted-foreground">
-            Применяется к оценке посылок после soft-дедлайна
+            {t('hw_assignment_create.late_multiplier_hint')}
           </p>
         </div>
 
         <div className="space-y-2" data-testid="hw-assignment-form-selection_strategy">
-          <Label>Стратегия выбора посылки</Label>
+          <Label>{t('hw_assignment_create.selection_strategy_label')}</Label>
           <RadioGroup
             value={vals.selection_strategy}
             onValueChange={(v) =>
@@ -310,19 +385,19 @@ export default function HomeworkAssignmentCreatePage() {
             <div className="flex items-center gap-2">
               <RadioGroupItem value="last" id="hw-asg-strategy-last" />
               <Label htmlFor="hw-asg-strategy-last" className="font-normal">
-                Последняя
+                {t('hw_assignment_create.strategy_last')}
               </Label>
             </div>
             <div className="flex items-center gap-2">
               <RadioGroupItem value="best" id="hw-asg-strategy-best" />
               <Label htmlFor="hw-asg-strategy-best" className="font-normal">
-                Лучшая
+                {t('hw_assignment_create.strategy_best')}
               </Label>
             </div>
             <div className="flex items-center gap-2">
               <RadioGroupItem value="manual" id="hw-asg-strategy-manual" />
               <Label htmlFor="hw-asg-strategy-manual" className="font-normal">
-                Вручную
+                {t('hw_assignment_create.strategy_manual')}
               </Label>
             </div>
           </RadioGroup>
@@ -332,7 +407,7 @@ export default function HomeworkAssignmentCreatePage() {
           <div className="space-y-1.5">
             <div className="flex items-center justify-between gap-3">
               <Label htmlFor="hw-assignment-form-plagiarism_auto_run">
-                Авто-запуск проверки плагиата
+                {t('hw_assignment_create.plagiarism_auto_run_label')}
               </Label>
               <Switch
                 id="hw-assignment-form-plagiarism_auto_run"
@@ -346,7 +421,7 @@ export default function HomeworkAssignmentCreatePage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="hw-assignment-form-plagiarism_threshold">
-              Порог сходства
+              {t('hw_assignment_create.plagiarism_threshold_label')}
             </Label>
             <Input
               id="hw-assignment-form-plagiarism_threshold"
@@ -359,7 +434,7 @@ export default function HomeworkAssignmentCreatePage() {
               onChange={(e) =>
                 setVals((v) => ({
                   ...v,
-                  plagiarism_threshold: Number(e.currentTarget.value) || 0,
+                  plagiarism_threshold: Number(e.target.value) || 0,
                 }))
               }
             />
@@ -369,7 +444,7 @@ export default function HomeworkAssignmentCreatePage() {
 
         <div className="flex items-center justify-between gap-3">
           <Label htmlFor="hw-assignment-form-ai_auto_run">
-            Авто-запуск AI-анализа
+            {t('hw_assignment_create.ai_auto_run_label')}
           </Label>
           <Switch
             id="hw-assignment-form-ai_auto_run"
@@ -382,7 +457,7 @@ export default function HomeworkAssignmentCreatePage() {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="hw-assignment-form-external_system">
-              Внешняя интеграция
+              {t('hw_assignment_create.external_system_label')}
             </Label>
             <Select
               value={vals.external_system}
@@ -397,22 +472,22 @@ export default function HomeworkAssignmentCreatePage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="none">Нет</SelectItem>
+                <SelectItem value="none">{t('hw_assignment_create.external_none')}</SelectItem>
                 <SelectItem value="stepik">Stepik</SelectItem>
-                <SelectItem value="yandex_contest">Яндекс.Контест</SelectItem>
+                <SelectItem value="yandex_contest">{t('hw_assignment_create.external_yandex_contest')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="hw-assignment-form-external_id">
-              Внешний ID задания
+              {t('hw_assignment_create.external_id_label')}
             </Label>
             <Input
               id="hw-assignment-form-external_id"
               disabled={vals.external_system === 'none'}
               value={vals.external_id}
               onChange={(e) =>
-                setVals((v) => ({ ...v, external_id: e.currentTarget.value }))
+                setVals((v) => ({ ...v, external_id: e.target.value }))
               }
             />
           </div>
@@ -427,7 +502,7 @@ export default function HomeworkAssignmentCreatePage() {
             data-testid="hw-assignment-form-cancel"
             onClick={() => navigate(`/courses/${slug}`)}
           >
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -435,7 +510,7 @@ export default function HomeworkAssignmentCreatePage() {
             data-testid="hw-assignment-form-submit"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Создать
+            {t('common.create')}
           </Button>
         </div>
       </form>

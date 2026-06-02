@@ -17,10 +17,13 @@ import {
   ChevronLeft,
   ChevronRight,
   FileText,
+  Flag,
+  UserCheck,
 } from 'lucide-react';
 import { sanitizeHtml } from '@/utils/sanitizeHtml';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Page } from '@/components/layout/Page';
 import {
   Popover,
@@ -48,6 +51,9 @@ import {
   useSubmissionFiles,
   useSubmissionFileContent,
   useSubmissionHistory,
+  useFlags,
+  useFlagSubmission,
+  useUnflagSubmission,
 } from '@/hooks/api/useSubmissions';
 import { useAssignment } from '@/hooks/api/useAssignments';
 import {
@@ -69,7 +75,9 @@ import {
   CodeViewer,
   type CodeAnnotation,
 } from '@/components/submissions/CodeViewer';
+import { PdfFileView, isPdfFile } from '@/components/submissions/PdfFileView';
 import { GradeForm, GradeDisplay } from '@/components/submissions/GradeForm';
+import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { StatusPill } from '@/components/common/StatusPill';
 import { ClusterMapView } from '@/components/plagiarism/ClusterMapView';
@@ -87,20 +95,26 @@ import { parseProblem } from '@/api/problem';
 import { formatDateTime } from '@/utils/formatters';
 import type { Problem } from '@/api/types';
 import { displayAuthor } from '@/api/endpoints/submissions';
+import { useProfile } from '@/hooks/api/useSearch';
 import type { SubmissionFile } from '@/api/endpoints/submissions';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
-const RISK_TYPE_LABEL: Record<RiskSignal['type'], string> = {
-  style_jump: 'Скачок стиля',
-  generic_solution: 'Шаблонное решение',
-  non_idiomatic: 'Не идиоматично',
-  complexity_jump: 'Скачок сложности',
-  library_misuse: 'Неправильное использование библиотеки',
-  stub_code: 'Заглушка',
-  other: 'Другое',
+// Maps a risk-signal type to its i18n key suffix; the label itself is
+// resolved through `t('submission_detail.risk_type.<suffix>')` at the call
+// site so the component can stay translation-aware.
+const RISK_TYPE_KEY: Record<RiskSignal['type'], string> = {
+  style_jump: 'style_jump',
+  generic_solution: 'generic_solution',
+  non_idiomatic: 'non_idiomatic',
+  complexity_jump: 'complexity_jump',
+  library_misuse: 'library_misuse',
+  stub_code: 'stub_code',
+  other: 'other',
 };
 
 export default function SubmissionDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -108,6 +122,15 @@ export default function SubmissionDetailPage() {
   const [problem, setProblem] = useState<Problem | null>(null);
 
   const { data: submission, isLoading } = useSubmission(id);
+  // Resolve the author's real name via the public profile — manual-upload
+  // submissions carry no ``author_label``, so ``displayAuthor`` would
+  // otherwise show the opaque ``usr_…`` id as the page heading. (Unredeemed
+  // Y.Contest ghosts have a ``yc:`` author_id and keep their roster label.)
+  const authorId = submission?.author_id ?? undefined;
+  const authorProfileQ = useProfile(
+    authorId && authorId.startsWith('usr_') ? authorId : undefined,
+  );
+  const authorName = authorProfileQ.data?.card.display_name;
   const { data: assignment } = useAssignment(submission?.assignment_id);
   // Peer-navigation list for the "Предыдущая / Следующая" buttons. We pull
   // the latest-per-student feed (one row per author, their current
@@ -400,11 +423,13 @@ export default function SubmissionDetailPage() {
           // Use `ai:` prefix so the teacher-note action callbacks can
           // discriminate AI vs persisted-feedback ids at the call site.
           id: `ai:${aiSignalKey(s)}`,
-          title: RISK_TYPE_LABEL[s.type] ?? s.type,
+          title: RISK_TYPE_KEY[s.type]
+            ? t(`submission_detail.risk_type.${RISK_TYPE_KEY[s.type]}`)
+            : s.type,
           body: s.details,
         };
       });
-  }, [currentAnalysis, dismissedAi]);
+  }, [currentAnalysis, dismissedAi, t]);
 
   // Teacher-authored inline comments live in the feedback API. We
   // encode the anchor line as a leading "[L<N>] " prefix in the body
@@ -431,12 +456,12 @@ export default function SubmissionDetailPage() {
         kind: 'teacher',
         id: f.id,
         visibleToStudent: f.visible_to_student,
-        title: 'Заметка проверяющего',
+        title: t('submission_detail.teacher_note'),
         body: m[2],
       });
     }
     return out;
-  }, [feedbacks, id]);
+  }, [feedbacks, id, t]);
   const codeAnnotations = useMemo<CodeAnnotation[]>(
     () => [...teacherAnnotations, ...aiAnnotations],
     [teacherAnnotations, aiAnnotations],
@@ -650,11 +675,11 @@ export default function SubmissionDetailPage() {
     const aiOk = aiResult.status === 'fulfilled';
     const plagOk = plagResult.status === 'fulfilled';
     if (aiOk && plagOk) {
-      notify.success('Анализ запущен');
+      notify.success(t('submission_detail.notify.analysis_started'));
     } else if (aiOk) {
-      notify.success('LLM запущен; плагиат недоступен');
+      notify.success(t('submission_detail.notify.llm_only'));
     } else if (plagOk) {
-      notify.success('Плагиат запущен; LLM недоступен');
+      notify.success(t('submission_detail.notify.plag_only'));
     } else {
       setProblem(
         parseProblem(
@@ -687,10 +712,19 @@ export default function SubmissionDetailPage() {
     }
   }, [files, selectedFile]);
 
+  // PDF submissions (math / scans) are previewed via <PdfFileView>, not the
+  // text CodeViewer — skip the (binary-garbage) text fetch for them.
+  const selectedIsPdf = isPdfFile(selectedFile);
   const { data: content, isPlaceholderData: contentIsStale } =
-    useSubmissionFileContent(id, selectedFile?.id);
+    useSubmissionFileContent(id, selectedIsPdf ? undefined : selectedFile?.id);
 
-  useDocumentTitle(submission ? `Посылка v${submission.version}` : 'Посылка');
+  useDocumentTitle(
+    submission
+      ? t('submission_detail.doc_title_versioned', {
+          version: submission.version,
+        })
+      : t('submission_detail.doc_title'),
+  );
 
   const isTeacher = useMemo(() => {
     if (!user || !submission) return false;
@@ -715,6 +749,63 @@ export default function SubmissionDetailPage() {
     return hasGlobalRole(user, ['teacher', 'assistant']);
   }, [user, submission]);
 
+  // Manual "suspicious" flag toggle (staff only). useFlags is disabled for
+  // non-staff (id passed as undefined). Hooks live here, above the early
+  // returns, so the hook order is stable across loading → loaded renders.
+  const flagsQ = useFlags(isTeacher ? id : undefined);
+  const flagMut = useFlagSubmission(id ?? '');
+  const unflagMut = useUnflagSubmission(id ?? '');
+  const activeManualFlag = (flagsQ.data?.data ?? []).find(
+    (f) => !f.cleared_at && (f.kind === 'suspicious' || f.kind === 'manual'),
+  );
+  const flagBusy = flagMut.isPending || unflagMut.isPending;
+  const [confirmFlagOpen, setConfirmFlagOpen] = useState(false);
+  // Marking suspicious is a notable action → confirm first. Un-marking is
+  // benign → apply directly.
+  const requestFlag = () => {
+    if (activeManualFlag) unflagMut.mutate(activeManualFlag.id);
+    else setConfirmFlagOpen(true);
+  };
+  const confirmFlag = () => {
+    flagMut.mutate(
+      {
+        kind: 'suspicious',
+        reason: t('submission_detail.flag_reason'),
+      },
+      { onSuccess: () => setConfirmFlagOpen(false) },
+    );
+  };
+  // Quiet "mark suspicious" control — barely visible by default, turns red
+  // on hover; sits to the left of Save in the grade rail. When already
+  // flagged it's shown red with "снять".
+  const flagControl = isTeacher ? (
+    <button
+      type="button"
+      onClick={requestFlag}
+      disabled={flagBusy}
+      data-testid="submission-flag-toggle"
+      aria-pressed={!!activeManualFlag}
+      aria-label={
+        activeManualFlag
+          ? t('submission_detail.flag_clear')
+          : t('submission_detail.flag_set')
+      }
+      title={
+        activeManualFlag
+          ? t('submission_detail.flag_clear')
+          : t('submission_detail.flag_set')
+      }
+      className={cn(
+        'inline-flex h-7 w-7 items-center justify-center rounded-md transition-colors disabled:opacity-50',
+        activeManualFlag
+          ? 'text-destructive hover:bg-destructive/10'
+          : 'text-muted-foreground/50 hover:bg-muted/40 hover:text-destructive',
+      )}
+    >
+      <Flag className={cn('h-4 w-4', activeManualFlag && 'fill-current')} />
+    </button>
+  ) : null;
+
   // Pre-early-return computations.
   //
   // Everything that uses a hook (useMemo here) must be called
@@ -735,7 +826,7 @@ export default function SubmissionDetailPage() {
     isStaleSubmission ||
     filesPage === undefined ||
     filesIsStale ||
-    (selectedFile != null && content === undefined) ||
+    (selectedFile != null && !selectedIsPdf && content === undefined) ||
     contentIsStale;
   // Defensive filter — only trust history entries whose author matches
   // the submission we're rendering. Without this, a stale `history`
@@ -777,43 +868,51 @@ export default function SubmissionDetailPage() {
     // different page" between the breadcrumb and the real content.
     return (
       <Page width="wide" data-testid="submission-detail-loading">
+        {/* Header: author name + meta line on the left, the square
+            "Запустить анализ" action on the right. */}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="space-y-2">
-            <div className="h-7 w-56 rounded-md bg-muted/40 animate-pulse" />
-            <div className="h-3 w-72 rounded-md bg-muted/30 animate-pulse" />
+            <Skeleton className="h-7 w-56 bg-muted/40" />
+            <Skeleton className="h-3 w-72 bg-muted/30" />
           </div>
-          <div className="h-9 w-44 rounded-full bg-muted/30 animate-pulse" />
+          <Skeleton className="h-9 w-40 bg-muted/30" />
         </div>
-        <div className="h-10 w-full rounded-md bg-muted/20 animate-pulse" />
+        {/* Collapsible "Условие задачи" row above the hero. */}
+        <Skeleton className="h-10 w-full bg-muted/20" />
+        {/* Hero: code block on the left, teacher rail on the right —
+            same columns as the loaded `lg:grid-cols-[minmax(0,1fr)_300px]`. */}
         <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div
-            className="h-[480px] w-full rounded-md bg-muted animate-pulse"
-            aria-label="Загрузка кода"
+          <Skeleton
+            className="h-[480px] w-full bg-muted"
+            aria-label={t('submission_detail.code_loading')}
           />
           <aside className="space-y-6">
-            <div className="space-y-3">
-              <div className="h-3 w-16 rounded-md bg-muted/40 animate-pulse" />
+            {/* Grade rail: «Оценка» label + the score-pill grid
+                (0..max + manual input → 12 cells / 6 cols), then the
+                «Комментарий» label + textarea, mirroring GradeForm. */}
+            <div className="space-y-2">
+              <Skeleton className="h-3 w-16 bg-muted/40" />
               <div className="grid grid-cols-6 gap-1.5">
                 {Array.from({ length: 12 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-9 rounded-md bg-muted/30 animate-pulse"
-                  />
+                  <Skeleton key={i} className="h-9 bg-muted/30" />
                 ))}
               </div>
             </div>
-            <div className="space-y-2">
-              <div className="h-3 w-24 rounded-md bg-muted/40 animate-pulse" />
-              <div className="h-20 w-full rounded-md bg-muted/20 animate-pulse" />
+            <div className="space-y-1.5">
+              <Skeleton className="h-3 w-24 bg-muted/40" />
+              <Skeleton className="h-20 w-full bg-muted/20" />
             </div>
-            <div className="space-y-2">
-              <div className="h-3 w-16 rounded-md bg-muted/40 animate-pulse" />
-              <div className="h-3 w-2/3 rounded-md bg-muted/30 animate-pulse" />
-            </div>
-            <div className="space-y-2">
-              <div className="h-3 w-20 rounded-md bg-muted/40 animate-pulse" />
-              <div className="h-3 w-3/4 rounded-md bg-muted/30 animate-pulse" />
-              <div className="h-3 w-1/2 rounded-md bg-muted/30 animate-pulse" />
+            {/* AI section: bordered «AI-анализ» header + a few summary
+                lines, mirroring SectionLabel + AISummary. */}
+            <div className="space-y-3">
+              <div className="border-b border-border/50 pb-2">
+                <Skeleton className="h-3 w-20 bg-muted/40" />
+              </div>
+              <div className="space-y-2">
+                <Skeleton className="h-3 w-2/3 bg-muted/30" />
+                <Skeleton className="h-3 w-3/4 bg-muted/30" />
+                <Skeleton className="h-3 w-1/2 bg-muted/30" />
+              </div>
             </div>
           </aside>
         </div>
@@ -823,7 +922,9 @@ export default function SubmissionDetailPage() {
 
   if (!submission) {
     return (
-      <p className="text-sm text-muted-foreground">Посылка не найдена</p>
+      <p className="text-sm text-muted-foreground">
+        {t('submission_detail.not_found')}
+      </p>
     );
   }
 
@@ -859,7 +960,7 @@ export default function SubmissionDetailPage() {
               data-testid="submission-author"
               className="text-2xl font-semibold tracking-tight leading-tight"
             >
-              {displayAuthor(submission)}
+              {authorName ?? displayAuthor(submission)}
             </h1>
             {submission.assignment_id && (() => {
               // Five visible states; pill always opens the same modal
@@ -891,11 +992,13 @@ export default function SubmissionDetailPage() {
                 matches: 'destructive' as const,
               };
               const LABEL = {
-                unchecked: 'Плагиат не проверялся',
-                pending: 'Плагиат: проверяется…',
-                failed: 'Плагиат: ошибка проверки',
-                clean: 'Плагиат: чисто',
-                matches: `Плагиат: ${pairsForSubmission.length}`,
+                unchecked: t('submission_detail.plag_pill.unchecked'),
+                pending: t('submission_detail.plag_pill.pending'),
+                failed: t('submission_detail.plag_pill.failed'),
+                clean: t('submission_detail.plag_pill.clean'),
+                matches: t('submission_detail.plag_pill.matches', {
+                  count: pairsForSubmission.length,
+                }),
               };
               return (
                 <button
@@ -918,23 +1021,36 @@ export default function SubmissionDetailPage() {
               still surface but as plain text, not pills; plagiarism is
               shown next to the code title). */}
           <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
-            {submission.external_url ? (
-              <a
-                href={submission.external_url}
-                target="_blank"
-                rel="noopener"
-                className="underline-offset-2 hover:text-foreground hover:underline"
-                data-testid="submission-external-link"
-              >
-                Открыть в Yandex.Contest ↗
-              </a>
-            ) : (
-              <span data-testid="submission-id" className="font-mono text-xs">
-                {submission.id}
-              </span>
+            {/* The opaque ``sub_…`` id leaked DB plumbing — dropped. For
+                Y.Contest submissions we keep the link back to the source. */}
+            {submission.external_url && (
+              <>
+                <a
+                  href={submission.external_url}
+                  target="_blank"
+                  rel="noopener"
+                  className="underline-offset-2 hover:text-foreground hover:underline"
+                  data-testid="submission-external-link"
+                >
+                  {t('submission_detail.open_external')}
+                </a>
+                <span>·</span>
+              </>
             )}
-            <span>·</span>
             <span>{formatDateTime(submission.submitted_at)}</span>
+            {isTeacher && submission.assigned_grader_name && (
+              <>
+                <span>·</span>
+                <span
+                  className="inline-flex items-center gap-1"
+                  title={t('submission_detail.assigned_grader')}
+                  data-testid="submission-assigned-grader"
+                >
+                  <UserCheck className="h-3.5 w-3.5" />
+                  {submission.assigned_grader_name}
+                </span>
+              </>
+            )}
             {submission.is_late && (
               <>
                 <span>·</span>
@@ -951,17 +1067,6 @@ export default function SubmissionDetailPage() {
                 </span>
               </>
             )}
-            {submission.flags.suspicious && (
-              <>
-                <span>·</span>
-                <span
-                  data-testid="submission-suspicious-badge"
-                  className="text-destructive"
-                >
-                  подозрит.
-                </span>
-              </>
-            )}
             {isOutdated && latestVersionEntry && (
               <>
                 <span>·</span>
@@ -970,7 +1075,9 @@ export default function SubmissionDetailPage() {
                   className="text-foreground underline-offset-2 hover:underline"
                   data-testid="submission-latest-link"
                 >
-                  Актуальная: v{latestVersionEntry.version} →
+                  {t('submission_detail.latest_version', {
+                    version: latestVersionEntry.version,
+                  })}
                 </Link>
               </>
             )}
@@ -1002,11 +1109,11 @@ export default function SubmissionDetailPage() {
               <PopoverContent align="start" className="w-64 p-2">
                 {versionPopoverOpened && versions.length === 0 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Загрузка…
+                    {t('submission_detail.loading')}
                   </div>
                 ) : versions.length <= 1 ? (
                   <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Других версий нет
+                    {t('submission_detail.no_other_versions')}
                   </div>
                 ) : (
                   <ol className="space-y-0.5">
@@ -1052,7 +1159,7 @@ export default function SubmissionDetailPage() {
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              Запустить анализ
+              {t('submission_detail.run_analysis')}
             </Button>
           )}
         </div>
@@ -1073,7 +1180,7 @@ export default function SubmissionDetailPage() {
         onStart={async () => {
           try {
             await runPlag.mutateAsync({});
-            notify.success('Проверка плагиата запущена');
+            notify.success(t('submission_detail.notify.plag_check_started'));
           } catch (e) {
             setProblem(parseProblem(e));
           }
@@ -1098,7 +1205,7 @@ export default function SubmissionDetailPage() {
           >
             <FileText className="h-4 w-4 text-muted-foreground" />
             <span className="flex-1">
-              {assignment.title || 'Условие задачи'}
+              {assignment.title || t('submission_detail.statement')}
             </span>
             <ChevronRight className="h-4 w-4 transition-transform group-open:rotate-90 text-muted-foreground" />
           </summary>
@@ -1109,6 +1216,42 @@ export default function SubmissionDetailPage() {
             }}
           />
         </details>
+      )}
+
+      {/* Student-facing grade: the grade rail on the right is teacher-only,
+          so a student who opens their own graded submission would otherwise
+          see no score and — crucially — none of the teacher's comment. Show
+          a flat read-only result here (the backend only returns the grade to
+          the author once it's released, i.e. comment_visible_to_student). */}
+      {!isTeacher && grade && grade.score != null && (
+        <section
+          data-testid="submission-student-grade"
+          className="space-y-3 border-b border-border/50 pb-5"
+        >
+          <div>
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">
+              {t('submission_detail.score')}
+            </span>
+            <div className="mt-1 flex items-baseline gap-1.5">
+              <span className="text-4xl font-semibold leading-none tabular-nums">
+                {Number(grade.score).toString()}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                / {Number(assignment?.max_score ?? 10).toString()}
+              </span>
+            </div>
+          </div>
+          {grade.comment && grade.comment.trim() && (
+            <div className="space-y-1">
+              <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                {t('submission_detail.teacher_comment')}
+              </span>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">
+                {grade.comment}
+              </p>
+            </div>
+          )}
+        </section>
       )}
 
       {/* Hero: code on the left, grade rail on the right (teacher only). */}
@@ -1128,15 +1271,14 @@ export default function SubmissionDetailPage() {
             // layout doesn't jump when the new submission lands.
             <div
               className="h-[480px] w-full rounded-md bg-muted animate-pulse"
-              aria-label="Загрузка кода"
+              aria-label={t('submission_detail.code_loading')}
             />
           ) : files.length === 0 ? (
-            <Empty>Файлов нет</Empty>
+            <Empty>{t('submission_detail.no_files')}</Empty>
           ) : files.length === 1 && selectedFile ? (
-            // Drop `compact` so the CodeViewer renders its own header
-            // (filename · language · size) right above the code block.
-            // That's where the language label belongs — next to what
-            // it describes — rather than as a pill in the meta line.
+            selectedIsPdf ? (
+              <PdfFileView submissionId={id ?? ''} file={selectedFile} />
+            ) : (
             <CodeViewer
               fileName={selectedFile.path}
               code={content ?? ''}
@@ -1190,6 +1332,7 @@ export default function SubmissionDetailPage() {
               }
               teacherNoteActionsBusyFor={busyFeedbackId}
             />
+            )
           ) : (
             <div className="grid gap-4 md:grid-cols-12">
               <Card data-testid="file-tree" className="md:col-span-4">
@@ -1203,6 +1346,9 @@ export default function SubmissionDetailPage() {
               </Card>
               <div className="md:col-span-8">
                 {selectedFile ? (
+                  selectedIsPdf ? (
+                    <PdfFileView submissionId={id ?? ''} file={selectedFile} />
+                  ) : (
                   <CodeViewer
                     fileName={selectedFile.path}
                     code={content ?? ''}
@@ -1260,8 +1406,9 @@ export default function SubmissionDetailPage() {
                     }
                     teacherNoteActionsBusyFor={busyFeedbackId}
                   />
+                  )
                 ) : (
-                  <Empty>Выберите файл слева</Empty>
+                  <Empty>{t('submission_detail.select_file')}</Empty>
                 )}
               </div>
             </div>
@@ -1275,23 +1422,28 @@ export default function SubmissionDetailPage() {
                 section label lives only inside the read-only view so
                 the form's own "Оценка" Label doesn't repeat it. */}
             {grade && !editingGrade ? (
-              <GradeDisplay
-                score={grade.score}
-                maxScore={assignment?.max_score ?? 10}
-                comment={grade.comment ?? null}
-                commentVisibleToStudent={grade.comment_visible_to_student}
-                deleting={deleteGrade.isPending}
-                onEdit={() => setEditingGrade(true)}
-                onDelete={async () => {
-                  try {
-                    await deleteGrade.mutateAsync();
-                    notify.success('Оценка снята');
-                    setEditingGrade(false);
-                  } catch (e) {
-                    setProblem(parseProblem(e));
-                  }
-                }}
-              />
+              <>
+                <GradeDisplay
+                  score={grade.score}
+                  maxScore={assignment?.max_score ?? 10}
+                  comment={grade.comment ?? null}
+                  commentVisibleToStudent={grade.comment_visible_to_student}
+                  deleting={deleteGrade.isPending}
+                  onEdit={() => setEditingGrade(true)}
+                  onDelete={async () => {
+                    try {
+                      await deleteGrade.mutateAsync();
+                      notify.success(t('submission_detail.notify.grade_cleared'));
+                      setEditingGrade(false);
+                    } catch (e) {
+                      setProblem(parseProblem(e));
+                    }
+                  }}
+                />
+                {flagControl && (
+                  <div className="flex justify-end">{flagControl}</div>
+                )}
+              </>
             ) : (
               // `key={id}` forces a fresh GradeForm whenever the
               // submission switches. Without it, the form's useState
@@ -1323,7 +1475,7 @@ export default function SubmissionDetailPage() {
                 onSubmit={async (input) => {
                   try {
                     await setGrade.mutateAsync(input);
-                    notify.success('Оценка сохранена');
+                    notify.success(t('submission_detail.notify.grade_saved'));
                     setEditingGrade(false);
                   } catch (e) {
                     setProblem(parseProblem(e));
@@ -1332,8 +1484,19 @@ export default function SubmissionDetailPage() {
                 onCancel={
                   grade ? () => setEditingGrade(false) : undefined
                 }
+                leftSlot={flagControl}
               />
             )}
+            <ConfirmDialog
+              opened={confirmFlagOpen}
+              title={t('submission_detail.flag_confirm.title')}
+              message={t('submission_detail.flag_confirm.message')}
+              confirmLabel={t('submission_detail.flag_confirm.confirm')}
+              destructive
+              loading={flagMut.isPending}
+              onConfirm={confirmFlag}
+              onClose={() => setConfirmFlagOpen(false)}
+            />
             {grade && (
               <Accordion
                 type="single"
@@ -1347,17 +1510,17 @@ export default function SubmissionDetailPage() {
               >
                 <AccordionItem value="history" className="border-b-0">
                   <AccordionTrigger className="text-xs uppercase tracking-wide text-muted-foreground hover:no-underline py-1">
-                    История
+                    {t('submission_detail.history')}
                   </AccordionTrigger>
                   <AccordionContent>
                     {gradeHistoryError ? (
-                      <Empty>История недоступна</Empty>
+                      <Empty>{t('submission_detail.history_unavailable')}</Empty>
                     ) : !gradeHistory ? (
                       <div className="text-xs text-muted-foreground">
-                        Загрузка…
+                        {t('submission_detail.loading')}
                       </div>
                     ) : (gradeHistory.data ?? []).length === 0 ? (
-                      <Empty>Изменений нет</Empty>
+                      <Empty>{t('submission_detail.history_empty')}</Empty>
                     ) : (
                       <ol className="space-y-2 text-sm">
                         {(gradeHistory?.data ?? []).map((h) => (
@@ -1412,7 +1575,7 @@ export default function SubmissionDetailPage() {
                         className="flex items-center gap-1 text-xs font-normal normal-case text-muted-foreground"
                       >
                         <Loader2 className="h-3 w-3 animate-spin" />
-                        Идёт анализ
+                        {t('submission_detail.analyzing')}
                       </span>
                     )}
                     {analysisList.length > 1 && (
@@ -1422,7 +1585,7 @@ export default function SubmissionDetailPage() {
                       >
                         <button
                           type="button"
-                          aria-label="Предыдущая версия"
+                          aria-label={t('submission_detail.prev_version')}
                           disabled={analysisIdx >= analysisList.length - 1}
                           onClick={() =>
                             setAnalysisIdx((i) =>
@@ -1439,7 +1602,7 @@ export default function SubmissionDetailPage() {
                         </span>
                         <button
                           type="button"
-                          aria-label="Следующая версия"
+                          aria-label={t('submission_detail.next_version')}
                           disabled={analysisIdx <= 0}
                           onClick={() =>
                             setAnalysisIdx((i) => Math.max(i - 1, 0))
@@ -1453,7 +1616,7 @@ export default function SubmissionDetailPage() {
                   </div>
                 }
               >
-                AI-анализ
+                {t('submission_detail.ai_analysis')}
               </SectionLabel>
               {isStaleSubmission ? (
                 // Skeleton while the new submission's analyses load.
@@ -1461,7 +1624,10 @@ export default function SubmissionDetailPage() {
                 // previous student's report (the queries that drive
                 // currentAnalysis haven't yet flipped to the new id's
                 // pending state).
-                <div className="space-y-2" aria-label="Загрузка AI-анализа">
+                <div
+                  className="space-y-2"
+                  aria-label={t('submission_detail.ai_loading')}
+                >
                   <div className="h-3 w-2/3 rounded-md bg-muted/40 animate-pulse" />
                   <div className="h-3 w-1/2 rounded-md bg-muted/30 animate-pulse" />
                   <div className="h-3 w-3/4 rounded-md bg-muted/30 animate-pulse" />
@@ -1496,13 +1662,18 @@ export default function SubmissionDetailPage() {
             className="min-w-[180px] justify-start"
           >
             <ChevronLeft className="mr-2 h-5 w-5" />
-            Предыдущая
+            {t('submission_detail.prev')}
           </Button>
           <span
             className="text-sm tabular-nums text-muted-foreground"
-            aria-label="Позиция текущей посылки"
+            aria-label={t('submission_detail.position')}
           >
-            {peerIndex >= 0 ? `${peerIndex + 1} из ${peerIds.length}` : null}
+            {peerIndex >= 0
+              ? t('submission_detail.position_counter', {
+                  current: peerIndex + 1,
+                  total: peerIds.length,
+                })
+              : null}
           </span>
           {nextPeerId ? (
             <Button
@@ -1511,7 +1682,7 @@ export default function SubmissionDetailPage() {
               data-testid="submission-peer-next"
               className="min-w-[180px] justify-end"
             >
-              Следующая
+              {t('submission_detail.next')}
               <ChevronRight className="ml-2 h-5 w-5" />
             </Button>
           ) : (
@@ -1521,7 +1692,7 @@ export default function SubmissionDetailPage() {
               data-testid="submission-peer-finish"
               className="min-w-[180px] justify-end"
             >
-              Завершить
+              {t('submission_detail.finish')}
               <Check className="ml-2 h-5 w-5" />
             </Button>
           )}
@@ -1573,12 +1744,14 @@ function Empty({
   );
 }
 
-const AI_STATUS_LABEL: Record<AIAnalysis['status'], string> = {
-  queued: 'В очереди',
-  running: 'Выполняется…',
-  completed: 'Готов',
-  failed: 'Ошибка',
-  cancelled: 'Отменён',
+// Maps an AI-analysis status to its i18n key suffix; resolved through
+// `t('submission_detail.ai_status.<suffix>')` inside the component.
+const AI_STATUS_KEY: Record<AIAnalysis['status'], string> = {
+  queued: 'queued',
+  running: 'running',
+  completed: 'completed',
+  failed: 'failed',
+  cancelled: 'cancelled',
 };
 
 /** Compact AI summary — replaces the full SubmissionAIReportView on the
@@ -1596,6 +1769,7 @@ function AISummary({
   analysis: AIAnalysis | null;
   pending?: boolean;
 }) {
+  const { t } = useTranslation();
   const showBusy =
     pending ||
     analysis?.status === 'queued' ||
@@ -1606,7 +1780,11 @@ function AISummary({
   // next to the section header (SectionLabel action), so the body just
   // needs to hint "content loading", not repeat the banner.
   const loadingSkeleton = (
-    <div className="space-y-2" aria-label="Идёт анализ" data-testid="ai-summary-busy">
+    <div
+      className="space-y-2"
+      aria-label={t('submission_detail.analyzing')}
+      data-testid="ai-summary-busy"
+    >
       <div className="h-3 w-2/3 rounded-md bg-muted/40 animate-pulse" />
       <div className="h-3 w-1/2 rounded-md bg-muted/30 animate-pulse" />
       <div className="h-3 w-3/4 rounded-md bg-muted/30 animate-pulse" />
@@ -1614,13 +1792,19 @@ function AISummary({
   );
 
   if (!analysis) {
-    return showBusy ? loadingSkeleton : <Empty>Не запускался</Empty>;
+    return showBusy ? (
+      loadingSkeleton
+    ) : (
+      <Empty>{t('submission_detail.ai_not_run')}</Empty>
+    );
   }
   if (analysis.status !== 'completed' || !analysis.report) {
     if (showBusy) return loadingSkeleton;
     return (
       <Empty>
-        {AI_STATUS_LABEL[analysis.status] ?? analysis.status}
+        {AI_STATUS_KEY[analysis.status]
+          ? t(`submission_detail.ai_status.${AI_STATUS_KEY[analysis.status]}`)
+          : analysis.status}
         {analysis.failure_reason && (
           <span className="block text-xs">{analysis.failure_reason}</span>
         )}
@@ -1669,7 +1853,7 @@ function AISummary({
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground">
             <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-            Вопросы
+            {t('submission_detail.questions')}
             <span className="tabular-nums">({questions.length})</span>
           </summary>
           <ol className="mt-1.5 list-decimal list-inside space-y-1 text-xs">
@@ -1683,7 +1867,7 @@ function AISummary({
         <details className="group">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground">
             <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" />
-            Рекомендации
+            {t('submission_detail.recommendations')}
             <span className="tabular-nums">({recommendations.length})</span>
           </summary>
           <ul className="mt-1.5 list-disc list-inside space-y-1 text-xs">
@@ -1722,6 +1906,7 @@ function PlagiarismMapDialog({
   onStart: () => void;
   starting: boolean;
 }) {
+  const { t } = useTranslation();
   const runId = latestRun?.id ?? null;
   const status = latestRun?.status;
   const isCompleted = status === 'completed';
@@ -1754,11 +1939,11 @@ function PlagiarismMapDialog({
     body = (
       <div className="py-8 text-center space-y-4">
         <p className="text-sm text-muted-foreground">
-          Эту посылку ещё не проверяли на плагиат. Запустить проверку?
+          {t('submission_detail.plag.unchecked_prompt')}
         </p>
         <Button onClick={onStart} disabled={starting}>
           {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Запустить проверку
+          {t('submission_detail.plag.run_check')}
         </Button>
       </div>
     );
@@ -1783,23 +1968,28 @@ function PlagiarismMapDialog({
     };
     const stages: Stage[] = [
       {
-        label: 'В очереди',
-        hint: 'Scheduler подхватывает run',
+        label: t('submission_detail.plag.stage_queued'),
+        hint: t('submission_detail.plag.stage_queued_hint'),
         active: status === 'queued',
         done: status === 'running',
       },
       {
-        label: 'Подготовка',
-        hint: 'Качаем файлы посылок из submission-service',
+        label: t('submission_detail.plag.stage_prepare'),
+        hint: t('submission_detail.plag.stage_prepare_hint'),
         active: status === 'running' && sc === 0,
         done: status === 'running' && sc > 0,
       },
       {
-        label: `JPlag сравнивает посылки${sc > 0 ? ` (${sc})` : ''}`,
+        label:
+          sc > 0
+            ? t('submission_detail.plag.stage_compare_count', { count: sc })
+            : t('submission_detail.plag.stage_compare'),
         hint:
           elapsedS != null
-            ? `Идёт ${elapsedS} с — обычно 10-30 с`
-            : 'Сравнивает пары студенческого кода',
+            ? t('submission_detail.plag.stage_compare_elapsed', {
+                seconds: elapsedS,
+              })
+            : t('submission_detail.plag.stage_compare_hint'),
         active: status === 'running' && sc > 0,
         done: false,
       },
@@ -1857,7 +2047,7 @@ function PlagiarismMapDialog({
     body = (
       <div className="py-6 space-y-4">
         <div className="text-sm text-destructive font-medium">
-          {err?.title ?? 'Ошибка проверки'}
+          {err?.title ?? t('submission_detail.plag.check_error')}
         </div>
         {err?.detail && (
           <pre className="text-xs text-muted-foreground whitespace-pre-wrap font-mono bg-muted/40 rounded-md p-3 max-h-40 overflow-y-auto">
@@ -1867,7 +2057,7 @@ function PlagiarismMapDialog({
         <div className="text-center">
           <Button onClick={onStart} disabled={starting}>
             {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Перезапустить проверку
+            {t('submission_detail.plag.rerun_check')}
           </Button>
         </div>
       </div>
@@ -1876,7 +2066,7 @@ function PlagiarismMapDialog({
     body = (
       <div className="py-10 text-center text-sm text-muted-foreground">
         <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-        Загрузка карты…
+        {t('submission_detail.plag.map_loading')}
       </div>
     );
   } else if (pairs.length === 0) {
@@ -1884,8 +2074,7 @@ function PlagiarismMapDialog({
     body = (
       <div className="py-8 text-center space-y-4">
         <p className="text-sm text-muted-foreground">
-          JPlag не нашёл совпадений выше порога. Сеть студентов рисовать
-          нечего.
+          {t('submission_detail.plag.clean')}
         </p>
         <Button
           variant="outline"
@@ -1894,7 +2083,7 @@ function PlagiarismMapDialog({
           size="sm"
         >
           {starting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Перепроверить
+          {t('submission_detail.plag.recheck')}
         </Button>
       </div>
     );
@@ -1923,7 +2112,7 @@ function PlagiarismMapDialog({
             to={`/plagiarism-runs/${runId}`}
             className="text-xs text-muted-foreground hover:text-foreground"
           >
-            Открыть полный отчёт →
+            {t('submission_detail.plag.open_full_report')}
           </Link>
         </div>
       </>
@@ -1953,10 +2142,10 @@ function PlagiarismMapDialog({
                 className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground"
               >
                 <ChevronLeft className="h-4 w-4" />
-                К карте
+                {t('submission_detail.plag.to_map')}
               </button>
             ) : (
-              'Плагиат'
+              t('submission_detail.plag.title')
             )}
           </DialogTitle>
         </DialogHeader>
@@ -1982,8 +2171,9 @@ function InlineCommentComposer({
   onSubmit: () => void;
   busy: boolean;
 }) {
+  const { t } = useTranslation();
   return (
-    <div className="max-w-[520px] space-y-1.5">
+    <div className="w-[420px] max-w-full space-y-1.5">
       <textarea
         autoFocus
         value={value}
@@ -2002,7 +2192,7 @@ function InlineCommentComposer({
             onSubmit();
           }
         }}
-        placeholder="Комментарий…"
+        placeholder={t('submission_detail.comment_placeholder')}
         rows={2}
         className="block w-full rounded-md border border-border/60 bg-background/80 px-2 py-1.5 text-sm leading-relaxed focus:border-foreground/30 focus:outline-none"
       />
@@ -2015,7 +2205,7 @@ function InlineCommentComposer({
           disabled={busy}
           className="h-7 px-2 text-xs"
         >
-          Отмена
+          {t('common.cancel')}
         </Button>
         <Button
           type="button"
@@ -2027,7 +2217,7 @@ function InlineCommentComposer({
           {busy ? (
             <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
           ) : null}
-          Сохранить
+          {t('common.save')}
         </Button>
       </div>
     </div>

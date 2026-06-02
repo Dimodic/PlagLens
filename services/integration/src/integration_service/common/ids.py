@@ -24,13 +24,5 @@ def new_webhook_event_id() -> str:
     return new_id("we")
 
 
-def new_binding_id() -> str:
-    return new_id("tb")
-
-
 def new_sheets_link_id() -> str:
     return new_id("gs")
-
-
-def new_token() -> str:
-    return secrets.token_urlsafe(24)

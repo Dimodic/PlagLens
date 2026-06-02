@@ -8,6 +8,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import dayjs from 'dayjs';
 import { ExternalLink as ExternalLinkIcon } from 'lucide-react';
+import { shortId } from '@/utils/formatters';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -28,9 +29,10 @@ import {
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import { useAuditEvents, useExportAuditCsv } from '@/hooks/api/useAudit';
 import type { AuditEvent, AuditFilters } from '@/api/endpoints/audit';
 import type { Problem } from '@/api/types';
@@ -47,7 +49,8 @@ function eventToneClass(e: AuditEvent): string {
 }
 
 export function AuditEventsPage() {
-  useDocumentTitle('Аудит');
+  const { t } = useTranslation();
+  useDocumentTitle(t('audit_events.title'));
   const notify = useNotifications();
   const [filters, setFilters] = useState<AuditFilters>({ limit: 50 });
   const [draft, setDraft] = useState<AuditFilters>({});
@@ -67,19 +70,19 @@ export function AuditEventsPage() {
       const { limit: _l, cursor: _c, ...rest } = filters;
       const handle = await exportCsv.mutateAsync(rest);
       notify.info(
-        `Экспорт запущен: ${handle.operation_id}. Файл будет доступен в Reporting Service.`,
-        'Экспорт CSV',
+        t('audit_events.export_started', { id: handle.operation_id }),
+        t('audit_events.export_csv'),
       );
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось запустить экспорт');
+      notify.error(p?.detail ?? p?.title ?? t('audit_events.export_failed'));
     }
   };
 
   return (
     <Page width="wide">
       <PageHeader
-        title="Аудит"
+        title={t('audit_events.title')}
         action={
           <Button
             variant="outline"
@@ -88,7 +91,9 @@ export function AuditEventsPage() {
             disabled={exportCsv.isPending}
           >
             <ExternalLinkIcon className="mr-2 h-4 w-4" />
-            {exportCsv.isPending ? 'Экспорт…' : 'Экспорт CSV'}
+            {exportCsv.isPending
+              ? t('audit_events.exporting')
+              : t('audit_events.export_csv')}
           </Button>
         }
       />
@@ -105,7 +110,7 @@ export function AuditEventsPage() {
           className="w-[180px]"
         />
         <Input
-          placeholder="action (например, submission.created)"
+          placeholder={t('audit_events.action_placeholder')}
           value={draft.action ?? ''}
           onChange={(e) =>
             setDraft({ ...draft, action: e.currentTarget.value || undefined })
@@ -144,7 +149,7 @@ export function AuditEventsPage() {
             <SelectValue placeholder="result" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все</SelectItem>
+            <SelectItem value="all">{t('audit_events.result_all')}</SelectItem>
             <SelectItem value="success">success</SelectItem>
             <SelectItem value="failure">failure</SelectItem>
           </SelectContent>
@@ -152,14 +157,14 @@ export function AuditEventsPage() {
 
         <div className="ml-auto flex items-center gap-2">
           <Button onClick={apply} data-testid="audit-apply-filters">
-            Применить
+            {t('audit_events.apply')}
           </Button>
           <Button
             variant="ghost"
             onClick={reset}
             data-testid="audit-reset-filters"
           >
-            Сброс
+            {t('audit_events.reset')}
           </Button>
         </div>
       </div>
@@ -167,19 +172,49 @@ export function AuditEventsPage() {
       {error && <ProblemAlert problem={error as unknown as Problem} />}
 
       {isPending && !data ? (
-        <SkeletonList rows={5} rowHeight={48} />
+        <div
+          role="status"
+          aria-live="polite"
+          aria-label={t('skeleton.aria_label')}
+          className="border-y"
+        >
+          {/* Header bar — mirrors the 4-column TableHeader (h-10). */}
+          <div className="flex h-10 items-center gap-4 border-b px-2">
+            <Skeleton className="h-3 w-[120px] rounded bg-muted/40" />
+            <Skeleton className="h-3 w-24 rounded bg-muted/40" />
+            <Skeleton className="ml-auto h-3 w-20 rounded bg-muted/40" />
+            <Skeleton className="h-3 w-[100px] rounded bg-muted/40" />
+          </div>
+          {/* Rows — narrow «when», 2-line action, actor, right-aligned result. */}
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex items-center gap-4 border-b px-2 py-3 last:border-0"
+            >
+              <Skeleton className="h-3 w-[120px] rounded bg-muted/40" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-1/2 rounded bg-muted/40" />
+                <Skeleton className="h-3 w-1/3 rounded bg-muted/30" />
+              </div>
+              <Skeleton className="h-3 w-24 rounded bg-muted/30" />
+              <Skeleton className="h-3 w-[60px] rounded bg-muted/40" />
+            </div>
+          ))}
+        </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Событий нет" />
+        <EmptyState title={t('audit_events.empty')} />
       ) : (
         <div className="border-y">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px]">Когда</TableHead>
-                  <TableHead>Действие</TableHead>
-                  <TableHead>Актор</TableHead>
+                  <TableHead className="w-[120px]">
+                    {t('audit_events.col_when')}
+                  </TableHead>
+                  <TableHead>{t('audit_events.col_action')}</TableHead>
+                  <TableHead>{t('audit_events.col_actor')}</TableHead>
                   <TableHead className="w-[100px] text-right">
-                    Результат
+                    {t('audit_events.col_result')}
                   </TableHead>
                 </TableRow>
               </TableHeader>
@@ -190,6 +225,7 @@ export function AuditEventsPage() {
                     <TableRow
                       key={e.id}
                       data-testid={`audit-row-${e.id}`}
+                      className="border-b-0 transition-colors hover:bg-muted/40"
                     >
                       <TableCell>
                         <span className="font-mono text-xs text-muted-foreground tabular-nums">
@@ -208,7 +244,7 @@ export function AuditEventsPage() {
                               className="hover:text-foreground hover:underline"
                               onClick={(ev) => ev.stopPropagation()}
                             >
-                              {e.resource.type} · {e.resource.id}
+                              {e.resource.type} · {shortId(e.resource.id)}
                             </Link>
                           ) : (
                             e.resource.type
@@ -224,7 +260,7 @@ export function AuditEventsPage() {
                               className="hover:text-foreground hover:underline"
                               onClick={(ev) => ev.stopPropagation()}
                             >
-                              {e.actor.display_name ?? e.actor.id}
+                              {e.actor.display_name ?? shortId(e.actor.id)}
                             </Link>
                           ) : (
                             e.actor.display_name ?? e.actor.type

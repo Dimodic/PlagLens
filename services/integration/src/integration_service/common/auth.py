@@ -18,10 +18,6 @@ class Principal:
     is_internal: bool = False
 
     @property
-    def is_super_admin(self) -> bool:
-        return self.global_role == "admin"
-
-    @property
     def is_admin(self) -> bool:
         return self.global_role in ("admin",)
 
@@ -34,7 +30,7 @@ class Principal:
         return self.course_roles.get(course_id)
 
     def has_course(self, course_id: Optional[str], *roles: str) -> bool:
-        if self.is_super_admin or self.is_admin:
+        if self.is_admin:
             return True
         return self.course_role(course_id) in roles
 
@@ -71,7 +67,7 @@ async def require_admin(p: Principal) -> Principal:
 
 
 def ensure_role(p: Principal, *roles: str) -> None:
-    if p.is_super_admin:
+    if p.is_admin:
         return
     if p.global_role not in roles:
         raise ProblemException(
@@ -83,7 +79,7 @@ def ensure_role(p: Principal, *roles: str) -> None:
 
 
 def ensure_course_role(p: Principal, course_id: Optional[str], *roles: str) -> None:
-    if p.is_super_admin or p.is_admin:
+    if p.is_admin:
         return
     cr = p.course_role(course_id)
     if cr not in roles:

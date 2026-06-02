@@ -20,12 +20,13 @@ import { useQueries } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useMyAssignments } from '@/hooks/api/useAssignments';
 import { homeworksApi } from '@/api/endpoints/homeworks';
 import { homeworkKeys } from '@/hooks/api/useHomeworks';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { RedeemInvitePanel } from '@/components/common/RedeemInvitePanel';
@@ -56,27 +57,29 @@ const toneDot: Record<Tone, string> = {
 };
 
 function deadlineState(
+  t: (key: string, params?: Record<string, string | number>) => string,
   softAt?: string | null,
   hardAt?: string | null,
 ): { label: string; tone: Tone } {
   const now = Date.now();
   if (hardAt && new Date(hardAt).getTime() < now) {
-    return { label: 'Дедлайн прошёл', tone: 'muted' };
+    return { label: t('my_asg.deadline_passed'), tone: 'muted' };
   }
   if (softAt && new Date(softAt).getTime() < now) {
-    return { label: 'После soft', tone: 'mid' };
+    return { label: t('my_asg.after_soft'), tone: 'mid' };
   }
   if (hardAt) {
     const ms = new Date(hardAt).getTime() - now;
     const days = Math.max(0, Math.round(ms / 86400000));
     if (days === 0) {
       const hours = Math.max(1, Math.round(ms / 3600000));
-      return { label: `Через ${hours} ч.`, tone: 'high' };
+      return { label: t('my_asg.deadline_in_hours', { hours }), tone: 'high' };
     }
-    if (days <= 2) return { label: `Через ${days} дн.`, tone: 'mid' };
-    return { label: `Через ${days} дн.`, tone: 'low' };
+    if (days <= 2)
+      return { label: t('my_asg.deadline_in_days', { days }), tone: 'mid' };
+    return { label: t('my_asg.deadline_in_days', { days }), tone: 'low' };
   }
-  return { label: 'Без дедлайна', tone: 'low' };
+  return { label: t('my_asg.no_deadline'), tone: 'low' };
 }
 
 type Tab = 'active' | 'overdue' | 'all';
@@ -92,7 +95,8 @@ const deadlineMs = (a: any): number => {
 };
 
 export default function MyAssignmentsPage() {
-  useDocumentTitle('Мои курсы');
+  const { t } = useTranslation();
+  useDocumentTitle(t('my_asg.title'));
   const { user } = useAuth();
   const myCoursesQ = useMyCourses();
   const allAssignmentsQ = useMyAssignments();
@@ -211,10 +215,10 @@ export default function MyAssignmentsPage() {
 
   const emptyForTab =
     tab === 'active'
-      ? 'Активных заданий нет — все дедлайны позади или ещё ничего не назначено.'
+      ? t('my_asg.empty_active')
       : tab === 'overdue'
-      ? 'Просроченных заданий нет 👌'
-      : 'Пока нет назначенных заданий — как только преподаватель опубликует, оно появится здесь.';
+      ? t('my_asg.empty_overdue')
+      : t('my_asg.empty_all');
 
   const toggleExpand = (key: string) => {
     setExpanded((prev) => {
@@ -227,10 +231,10 @@ export default function MyAssignmentsPage() {
 
   return (
     <Page>
-      <PageHeader title="Мои курсы" />
+      <PageHeader title={t('my_asg.title')} />
 
       {hasNothingYet ? (
-        <SkeletonList rows={4} rowHeight={64} />
+        <MyAssignmentsSkeleton />
       ) : courses.length === 0 ? (
         // Neutral empty state — same view for student / teacher / assistant
         // before they're attached to any course. No 'попросите преподавателя'
@@ -238,8 +242,8 @@ export default function MyAssignmentsPage() {
         <div className="space-y-4 border-t border-border/50 py-6">
           <p className="text-sm text-muted-foreground">
             {user
-              ? 'Здесь будут ваши курсы. Чтобы начать — введите код приглашения.'
-              : 'Войдите, чтобы увидеть свои курсы.'}
+              ? t('my_asg.empty_courses_user')
+              : t('my_asg.empty_courses_guest')}
           </p>
           {user && (
             redeemOpen ? (
@@ -250,7 +254,7 @@ export default function MyAssignmentsPage() {
                   onClick={() => setRedeemOpen(false)}
                   className="mt-3 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Скрыть
+                  {t('my_asg.hide')}
                 </button>
               </div>
             ) : (
@@ -260,7 +264,7 @@ export default function MyAssignmentsPage() {
                 data-testid="my-courses-redeem-open"
                 className="text-sm font-medium text-foreground hover:underline"
               >
-                Вступить по коду →
+                {t('my_asg.join_by_code')}
               </button>
             )
           )}
@@ -270,19 +274,19 @@ export default function MyAssignmentsPage() {
           <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)}>
             <TabsList>
               <TabsTrigger value="active" data-testid="my-assignments-tab-active">
-                Активные
+                {t('my_asg.tab_active')}
                 <span className="ml-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                   {counts.active}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="overdue" data-testid="my-assignments-tab-overdue">
-                Просроченные
+                {t('my_asg.tab_overdue')}
                 <span className="ml-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                   {counts.overdue}
                 </span>
               </TabsTrigger>
               <TabsTrigger value="all" data-testid="my-assignments-tab-all">
-                Все
+                {t('my_asg.tab_all')}
                 <span className="ml-2 rounded-full bg-muted px-1.5 text-xs tabular-nums text-muted-foreground">
                   {counts.all}
                 </span>
@@ -381,7 +385,7 @@ export default function MyAssignmentsPage() {
 
                     {rows.length === 0 ? (
                       <p className="py-6 text-center text-sm text-muted-foreground">
-                        В этом курсе нет заданий по выбранному фильтру.
+                        {t('my_asg.course_empty_filter')}
                       </p>
                     ) : (
                       <div className="border-y border-border/50">
@@ -415,9 +419,57 @@ export default function MyAssignmentsPage() {
   );
 }
 
+/** Loading skeleton that mirrors the loaded layout: tabs row → a course
+ *  section (bold title + bottom rule) → a bordered list of rows, each row
+ *  shaped like `AssignmentRow` (leading dot · two text lines · trailing pill).
+ *  Lives inside the same `<Page>` so width/padding already match. */
+function MyAssignmentsSkeleton() {
+  const { t } = useTranslation();
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={t('skeleton.aria_label')}
+      className="space-y-8"
+    >
+      {/* Tabs row — 3 trigger-shaped pills */}
+      <div className="flex gap-2">
+        <Skeleton className="h-8 w-24 rounded-md bg-muted/40" />
+        <Skeleton className="h-8 w-28 rounded-md bg-muted/40" />
+        <Skeleton className="h-8 w-20 rounded-md bg-muted/40" />
+      </div>
+
+      {/* One course section: title bar + bordered rows */}
+      <section className="space-y-3">
+        <div className="border-b border-border/70 pb-2">
+          <Skeleton className="h-6 w-48 rounded-md bg-muted/40" />
+        </div>
+        <div className="border-y border-border/50">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div
+              key={i}
+              className={`flex items-center gap-4 px-5 py-4 ${
+                i > 0 ? 'border-t border-border/50' : ''
+              }`}
+            >
+              <Skeleton className="h-2 w-2 flex-none rounded-full bg-muted/40" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3.5 w-2/5 rounded-md bg-muted/40" />
+                <Skeleton className="h-3 w-3/5 rounded-md bg-muted/30" />
+              </div>
+              <Skeleton className="h-6 w-24 flex-none rounded-full bg-muted/30" />
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AssignmentRow({ item: a }: { item: any }) {
-  const ds = deadlineState(a.deadline_soft_at, a.deadline_hard_at);
+  const { t } = useTranslation();
+  const ds = deadlineState(t, a.deadline_soft_at, a.deadline_hard_at);
   return (
     <Link
       to={`/me/assignments/${a.id}`}
@@ -430,8 +482,11 @@ function AssignmentRow({ item: a }: { item: any }) {
           {a.title}
         </div>
         <div className="mt-0.5 text-xs text-muted-foreground">
-          {a.language_hint ?? 'без языка'} · до {fmt(a.deadline_hard_at)} · max{' '}
-          <span className="tabular-nums">{a.max_score ?? '—'}</span>
+          {(a.language_hint === 'pdf' ? 'PDF' : a.language_hint) ??
+            t('my_asg.no_language')}{' '}
+          ·{' '}
+          {t('my_asg.due_at', { date: fmt(a.deadline_hard_at) })} ·{' '}
+          {t('my_asg.max')} <span className="tabular-nums">{a.max_score ?? '—'}</span>
         </div>
       </div>
       <span
@@ -456,6 +511,7 @@ function HomeworkRow({
   isOpen: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
   // Aggregate state across all tasks in this homework.
   const activeCount = items.filter((a) => !isOverdue(a)).length;
   const overdueCount = items.length - activeCount;
@@ -483,10 +539,16 @@ function HomeworkRow({
       : null;
   })();
 
-  const ds = deadlineState(hw.due_at ?? null, aggDeadline);
-  const titleSummary = `${items.length} задач${
-    items.length === 1 ? 'а' : items.length < 5 ? 'и' : ''
-  }`;
+  const ds = deadlineState(t, hw.due_at ?? null, aggDeadline);
+  // Select the grammatically-correct plural form by count; each form is a
+  // full phrase key so RU declensions and EN plural stay correct.
+  const taskCountKey =
+    items.length === 1
+      ? 'my_asg.tasks_one'
+      : items.length < 5
+      ? 'my_asg.tasks_few'
+      : 'my_asg.tasks_many';
+  const titleSummary = t(taskCountKey, { count: items.length });
 
   return (
     <>
@@ -501,7 +563,7 @@ function HomeworkRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              ДЗ
+              {t('my_asg.hw_badge')}
             </span>
             <span className="truncate text-sm font-medium text-foreground">
               {hw.title}
@@ -510,9 +572,11 @@ function HomeworkRow({
           <div className="mt-0.5 text-xs text-muted-foreground">
             {titleSummary}
             {!allOverdue && overdueCount > 0 && (
-              <> · {overdueCount} просрочено</>
+              <> · {t('my_asg.overdue_count', { count: overdueCount })}</>
             )}
-            {aggDeadline && <> · до {fmt(aggDeadline)}</>}
+            {aggDeadline && (
+              <> · {t('my_asg.due_at', { date: fmt(aggDeadline) })}</>
+            )}
           </div>
         </div>
         <span
@@ -548,10 +612,10 @@ function HomeworkRow({
                   {a.title}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  до {fmt(a.deadline_hard_at)}
+                  {t('my_asg.due_at', { date: fmt(a.deadline_hard_at) })}
                 </span>
                 <span className="w-20 text-right text-xs tabular-nums text-muted-foreground">
-                  max {a.max_score ?? '—'}
+                  {t('my_asg.max')} {a.max_score ?? '—'}
                 </span>
               </Link>
             </div>

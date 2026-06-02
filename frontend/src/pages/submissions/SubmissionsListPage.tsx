@@ -10,7 +10,7 @@
  *
  * Backed by GET /users/me/submissions via useMySubmissions.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Check,
@@ -19,8 +19,9 @@ import {
   Loader2,
   Users,
 } from 'lucide-react';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
+import { ExpandableSearch } from '@/components/common/ExpandableSearch';
 import {
   Popover,
   PopoverContent,
@@ -57,6 +58,7 @@ import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/auth/useAuth';
 import { cn } from '@/components/ui/utils';
@@ -87,6 +89,23 @@ function MiniAvatar({ name }: { name: string }) {
     <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
       {initials}
     </span>
+  );
+}
+
+/** Loading row that mirrors a real list row: round avatar + name on the
+ *  left, a faint task column, and a small trailing block — laid out at
+ *  the same `px-3 py-3` rhythm and `h-7` avatar size as the live row so
+ *  nothing jumps when data lands. Quiet muted tones throughout. */
+function RowSkeleton() {
+  return (
+    <div className="flex items-center gap-x-4 px-3 py-3">
+      <div className="flex min-w-0 flex-[1.6] items-center gap-3">
+        <Skeleton className="h-7 w-7 shrink-0 rounded-full bg-muted/40" />
+        <Skeleton className="h-3.5 w-32 max-w-[60%] rounded-md bg-muted/40" />
+      </div>
+      <Skeleton className="h-3 w-28 max-w-[40%] flex-[1.9] rounded-md bg-muted/30" />
+      <Skeleton className="h-3 w-10 shrink-0 rounded-md bg-muted/30" />
+    </div>
   );
 }
 
@@ -141,6 +160,7 @@ function FilterGroup({
 }
 
 export default function SubmissionsListPage() {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const notify = useNotifications();
   const isStaff =
@@ -148,7 +168,9 @@ export default function SubmissionsListPage() {
   // Assistants triage all submissions in their courses but don't
   // distribute — handing out work is an owner/teacher action.
   const isAssistant = user?.global_role === 'assistant';
-  const title = isStaff ? 'Посылки на проверку' : 'Мои посылки';
+  const title = isStaff
+    ? t('submissions_list.title_staff')
+    : t('submissions_list.title_mine');
   useDocumentTitle(title);
   const [course, setCourse] = useState<string>('all');
   // ДЗ + task scope. '' = «все ДЗ курса» / «все задачи ДЗ». Picking a
@@ -161,8 +183,22 @@ export default function SubmissionsListPage() {
   // Staff-only: "все" vs "только мои" (this assistant's distributed pile).
   const [assignedFilter, setAssignedFilter] = useState<'all' | 'mine'>('all');
   const [coursePickerOpen, setCoursePickerOpen] = useState(false);
+  // Free-text search (debounced) — author / ДЗ / задание / вердикт / язык.
+  const [qInput, setQInput] = useState('');
+  const [q, setQ] = useState('');
+  useEffect(() => {
+    const id = setTimeout(() => setQ(qInput.trim()), 300);
+    return () => clearTimeout(id);
+  }, [qInput]);
   const PAGE_SIZE = 50;
   const [page, setPage] = useState(1);
+  // Sentinel at the top of the list — scrolled into view on every page /
+  // tab / filter change so the user isn't left parked at the pager.
+  const topRef = useRef<HTMLDivElement>(null);
+  // Reset to page 1 whenever the search changes.
+  useEffect(() => {
+    setPage(1);
+  }, [q]);
 
   // Reset to page 1 whenever filters change so the user doesn't end up on
   // an empty page if the filtered total is smaller than their current
@@ -181,6 +217,12 @@ export default function SubmissionsListPage() {
   useEffect(() => {
     setAssignment('');
   }, [homework]);
+
+  // Scroll to the top on tab / filter / search changes. (Page changes are
+  // handled globally by the shared Pagination component.)
+  useEffect(() => {
+    topRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [filter, assignedFilter, course, homework, assignment, q]);
 
   // Fetch all active courses for the picker — backend returns them in
   // a single request, no need to derive them from the submissions list
@@ -325,11 +367,17 @@ export default function SubmissionsListPage() {
         const skipped = results.reduce((a, r) => a + r.skipped, 0);
         const gradersCount = results[0]?.graders ?? graders.length;
         const scopeLabel = assignment
-          ? asgTitleById.get(assignment) ?? 'задача'
-          : hwTitleById.get(homework) ?? 'ДЗ';
+          ? asgTitleById.get(assignment) ?? t('submissions_list.scope_task')
+          : hwTitleById.get(homework) ?? t('submissions_list.scope_homework');
         notify.success(
-          `«${scopeLabel}»: распределено ${assigned} посылок между ${gradersCount} грейдерами` +
-            (skipped > 0 ? ` (${skipped} уже были назначены)` : ''),
+          t('submissions_list.distributed_scoped', {
+            scope: scopeLabel,
+            assigned,
+            graders: gradersCount,
+          }) +
+            (skipped > 0
+              ? t('submissions_list.distributed_skipped_suffix', { skipped })
+              : ''),
         );
       } else {
         const res = await distribute.mutateAsync({
@@ -337,8 +385,15 @@ export default function SubmissionsListPage() {
           graders,
         });
         notify.success(
-          `Распределено ${res.assigned} посылок между ${res.graders} грейдерами` +
-            (res.skipped > 0 ? ` (${res.skipped} уже были назначены)` : ''),
+          t('submissions_list.distributed', {
+            assigned: res.assigned,
+            graders: res.graders,
+          }) +
+            (res.skipped > 0
+              ? t('submissions_list.distributed_skipped_suffix', {
+                  skipped: res.skipped,
+                })
+              : ''),
         );
       }
       setDistributeOpen(false);
@@ -356,8 +411,8 @@ export default function SubmissionsListPage() {
           : data?.detail;
       notify.error(
         fieldMsg
-          ? `Не удалось распределить: ${fieldMsg}`
-          : 'Не удалось распределить посылки',
+          ? t('submissions_list.distribute_failed_reason', { reason: fieldMsg })
+          : t('submissions_list.distribute_failed'),
       );
       setDistributeOpen(false);
     }
@@ -375,9 +430,10 @@ export default function SubmissionsListPage() {
           ? 'graded'
           : undefined;
 
-  const { data, isPending } = useMySubmissions({
+  const { data, isPending, isPlaceholderData } = useMySubmissions({
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
+    ...(q ? { q } : {}),
     ...(course !== 'all' ? { course_id: course } : {}),
     ...(effectiveAsgIds.length > 0
       ? { assignment_ids: effectiveAsgIds }
@@ -426,14 +482,15 @@ export default function SubmissionsListPage() {
     .join(' ');
 
   const statusItems: { id: StatusFilter; label: string }[] = [
-    { id: 'all', label: 'Все' },
-    { id: 'flagged', label: 'Помечено' },
-    { id: 'running', label: 'Не проверено' },
-    { id: 'checked', label: 'Проверено' },
+    { id: 'all', label: t('submissions_list.status_all') },
+    { id: 'flagged', label: t('submissions_list.status_flagged') },
+    { id: 'running', label: t('submissions_list.status_running') },
+    { id: 'checked', label: t('submissions_list.status_checked') },
   ];
 
   return (
     <Page width="wide" data-testid="my-submissions-list">
+      <div ref={topRef} aria-hidden className="scroll-mt-20" />
       <PageHeader title={title} />
 
       {/* Controls row 1 — course picker + distribute action + count.
@@ -451,8 +508,8 @@ export default function SubmissionsListPage() {
             >
               <span className="truncate">
                 {course === 'all'
-                  ? 'Все курсы'
-                  : selectedCourse?.name ?? 'Курс'}
+                  ? t('submissions_list.all_courses')
+                  : selectedCourse?.name ?? t('submissions_list.course')}
               </span>
               <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
             </Button>
@@ -463,9 +520,9 @@ export default function SubmissionsListPage() {
             data-testid="my-submissions-course-picker-content"
           >
             <Command>
-              <CommandInput placeholder="Найти курс…" />
+              <CommandInput placeholder={t('submissions_list.find_course')} />
               <CommandList>
-                <CommandEmpty>Курсов нет.</CommandEmpty>
+                <CommandEmpty>{t('submissions_list.no_courses')}</CommandEmpty>
                 <CommandGroup>
                   <CommandItem
                     value="all"
@@ -480,7 +537,7 @@ export default function SubmissionsListPage() {
                         course === 'all' ? 'opacity-100' : 'opacity-0',
                       )}
                     />
-                    Все курсы
+                    {t('submissions_list.all_courses')}
                   </CommandItem>
                   {courseOptions.map((c) => (
                     <CommandItem
@@ -514,8 +571,8 @@ export default function SubmissionsListPage() {
           <FilterCombo
             value={homework}
             onChange={setHomework}
-            allLabel="Все ДЗ курса"
-            searchPlaceholder="Найти ДЗ…"
+            allLabel={t('submissions_list.all_homeworks')}
+            searchPlaceholder={t('submissions_list.find_homework')}
             testId="my-submissions-hw-picker"
             options={courseHomeworks.map((hw) => ({
               value: String(hw.id),
@@ -530,8 +587,8 @@ export default function SubmissionsListPage() {
           <FilterCombo
             value={assignment}
             onChange={setAssignment}
-            allLabel="Все задачи ДЗ"
-            searchPlaceholder="Найти задачу…"
+            allLabel={t('submissions_list.all_tasks')}
+            searchPlaceholder={t('submissions_list.find_task')}
             testId="my-submissions-task-picker"
             options={homeworkAssignments.map((a) => ({
               value: String(a.id),
@@ -553,10 +610,10 @@ export default function SubmissionsListPage() {
             disabled={distribute.isPending || assistants.length === 0}
             title={
               assistants.length === 0
-                ? 'В курсе нет грейдеров (преподавателей / ассистентов)'
+                ? t('submissions_list.distribute_no_graders')
                 : effectiveAsgIds.length > 0
                   ? undefined
-                  : 'Распределит все посылки курса. Выберите ДЗ выше, чтобы сузить.'
+                  : t('submissions_list.distribute_whole_course_hint')
             }
             data-testid="submissions-distribute"
           >
@@ -565,9 +622,19 @@ export default function SubmissionsListPage() {
             ) : (
               <Users className="mr-2 h-4 w-4" />
             )}
-            Распределить
+            {t('submissions_list.distribute')}
           </Button>
         )}
+
+        {/* Collapsible magnifier on the right — same quiet pattern as the
+            Courses list and course-detail toolbars (a lupa that expands to
+            an input), instead of a permanent full-width search box. */}
+        <ExpandableSearch
+          value={qInput}
+          onChange={setQInput}
+          placeholder={t('submissions_list.search_placeholder')}
+          data-testid="my-submissions-search"
+        />
 
         <span className="text-xs text-muted-foreground">
           {data?.pagination.total != null ? (
@@ -575,14 +642,16 @@ export default function SubmissionsListPage() {
               <span className="font-medium text-foreground">
                 {filtered.length}
               </span>{' '}
-              из <span className="font-medium">{data.pagination.total}</span>
+              {t('submissions_list.of')}{' '}
+              <span className="font-medium">{data.pagination.total}</span>
             </>
           ) : (
             <>
               <span className="font-medium text-foreground">
                 {filtered.length}
               </span>{' '}
-              из <span className="font-medium">{all.length}</span>
+              {t('submissions_list.of')}{' '}
+              <span className="font-medium">{all.length}</span>
             </>
           )}
         </span>
@@ -593,7 +662,7 @@ export default function SubmissionsListPage() {
           font-medium foreground.  No underline-tab chrome. */}
       <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
         <FilterGroup
-          label="Статус"
+          label={t('submissions_list.filter_status')}
           value={filter}
           onChange={(v) => setFilter(v as StatusFilter)}
           options={statusItems.map((s) => ({
@@ -603,25 +672,34 @@ export default function SubmissionsListPage() {
         />
         {isStaff && (
           <FilterGroup
-            label="Исполнитель"
+            label={t('submissions_list.filter_assignee')}
             value={assignedFilter}
             onChange={(v) => setAssignedFilter(v as 'all' | 'mine')}
             options={[
-              { value: 'all', label: 'все' },
-              { value: 'mine', label: 'только мои' },
+              { value: 'all', label: t('submissions_list.assignee_all') },
+              { value: 'mine', label: t('submissions_list.assignee_mine') },
             ]}
           />
         )}
       </div>
 
       <div>
-        {isPending && all.length === 0 ? (
-          <SkeletonList rows={4} rowHeight={56} />
+        {isPending || isPlaceholderData ? (
+          <div
+            role="status"
+            aria-live="polite"
+            aria-label={t('skeleton.aria_label')}
+            className="divide-y divide-border/60"
+          >
+            {Array.from({ length: 6 }).map((_, i) => (
+              <RowSkeleton key={i} />
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
             {assignedFilter === 'mine'
-              ? 'На вас пока ничего не распределено.'
-              : 'Посылок нет.'}
+              ? t('submissions_list.empty_mine')
+              : t('submissions_list.empty')}
           </div>
         ) : (
           <div
@@ -683,34 +761,46 @@ export default function SubmissionsListPage() {
                   )}
                   {/* col: trailing — version + status badges + grader */}
                   <div className="flex items-center justify-end gap-2.5 whitespace-nowrap text-xs text-muted-foreground">
-                    <span>v{s.version}</span>
-                    {typeof s.score === 'number' ? (
-                      // Grade as a distinct neutral chip — a bordered tag
-                      // reads as «a score», not as part of the «v3» token,
-                      // and drops the shouty green.
-                      <span
-                        className="rounded-md border border-border px-1.5 py-0.5 font-medium tabular-nums text-foreground"
-                        title="Оценка"
-                      >
-                        {formatScore(s.score, s.max_score)}
-                      </span>
-                    ) : s.is_graded ? (
-                      // Graded but no score exposed (student list) — keep
-                      // a neutral indicator.
-                      <span>проверено</span>
-                    ) : null}
-                    {flagged && <span className="text-sev-high">помечено</span>}
-                    {s.is_late && (
-                      <span className="text-sev-mid">
-                        опоздание{s.late_kind === 'hard' ? ' (hard)' : ''}
-                      </span>
-                    )}
+                    {/* Reviewer first (leftmost of the group); it can vary in
+                        width but no longer pushes the version, which is pinned
+                        last with a fixed width below. */}
                     {isStaff && s.assigned_grader_name && (
-                      <span className="hidden items-center gap-1 sm:inline-flex">
+                      <span
+                        className="hidden items-center gap-1 text-muted-foreground/75 sm:inline-flex"
+                        title={t('submissions_list.assigned_grader')}
+                      >
                         <Users className="h-3 w-3" />
                         {s.assigned_grader_name}
                       </span>
                     )}
+                    {flagged && (
+                      <span className="text-sev-high">
+                        {t('submissions_list.badge_flagged')}
+                      </span>
+                    )}
+                    {s.is_late && (
+                      <span className="text-sev-mid">
+                        {t('submissions_list.badge_late')}
+                        {s.late_kind === 'hard' ? ' (hard)' : ''}
+                      </span>
+                    )}
+                    {typeof s.score === 'number' ? (
+                      // Grade as a distinct neutral chip — a bordered tag
+                      // reads as «a score», not as part of the «v3» token.
+                      <span
+                        className="rounded-md border border-border px-1.5 py-0.5 font-medium tabular-nums text-foreground"
+                        title={t('submissions_list.score')}
+                      >
+                        {formatScore(s.score, s.max_score)}
+                      </span>
+                    ) : s.is_graded ? (
+                      <span>{t('submissions_list.badge_graded')}</span>
+                    ) : null}
+                    {/* Version pinned last + fixed width → its position never
+                        shifts with the reviewer / score / flags to its left. */}
+                    <span className="w-8 shrink-0 text-right tabular-nums">
+                      v{s.version}
+                    </span>
                   </div>
                   {/* col: chevron */}
                   <ChevronRight className="h-4 w-4 flex-none text-muted-foreground/40 transition-colors group-hover:text-muted-foreground" />
@@ -777,6 +867,7 @@ function DistributeDialog({
   onClose,
   onSubmit,
 }: DistributeDialogProps) {
+  const { t } = useTranslation();
   // SHARES, not independent weights — pulling one slider rebalances
   // the rest so the column always sums to 1 (or 0 if everyone is set
   // to «не берёт»). Mental model: a pie chart of work, drag a slice
@@ -853,7 +944,7 @@ function DistributeDialog({
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
       <DialogContent className="sm:max-w-xl" data-testid="distribute-dialog">
         <DialogHeader>
-          <DialogTitle>Распределить между ассистентами</DialogTitle>
+          <DialogTitle>{t('submissions_list.distribute_dialog_title')}</DialogTitle>
           {courseName && (
             <p className="text-sm text-muted-foreground truncate">
               {courseName}
@@ -862,7 +953,7 @@ function DistributeDialog({
         </DialogHeader>
         {assistants.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            В курсе нет ассистентов.
+            {t('submissions_list.no_assistants')}
           </p>
         ) : (
           <div className="space-y-1" data-testid="distribute-rows">
@@ -886,7 +977,7 @@ function DistributeDialog({
                       </div>
                       <span className="flex-none text-xs tabular-nums text-muted-foreground">
                         {skipped
-                          ? 'не берёт'
+                          ? t('submissions_list.share_none')
                           : pendingCount > 0
                             ? `${count} · ${formatPct(share)}`
                             : formatPct(share)}
@@ -910,16 +1001,16 @@ function DistributeDialog({
         )}
         {assistants.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            Всего к распределению:{' '}
+            {t('submissions_list.total_to_distribute')}{' '}
             <span className="font-medium text-foreground tabular-nums">
               {pendingCount}
             </span>{' '}
-            · уже распределённые посылки не затрагиваются.
+            {t('submissions_list.total_to_distribute_suffix')}
           </p>
         )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose} disabled={busy}>
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={() =>
@@ -939,7 +1030,7 @@ function DistributeDialog({
             data-testid="distribute-submit"
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Распределить
+            {t('submissions_list.distribute')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -965,6 +1056,7 @@ function ShareSlider({
   skipped: boolean;
   testId?: string;
 }) {
+  const { t } = useTranslation();
   const frac = Number.isFinite(value) ? Math.max(0, Math.min(value, 1)) : 0;
   const pct = Math.round(frac * 100);
   return (
@@ -989,7 +1081,7 @@ function ShareSlider({
         step={1}
         value={pct}
         onChange={(e) => onChange(Number(e.currentTarget.value) / 100)}
-        aria-label="Доля"
+        aria-label={t('submissions_list.share_aria')}
         aria-valuetext={`${pct}%`}
         className={cn(
           'absolute inset-0 h-4 w-full cursor-pointer appearance-none bg-transparent focus:outline-none',

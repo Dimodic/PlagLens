@@ -23,6 +23,7 @@ import { useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Info, KeyRound, Loader2 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
@@ -45,7 +46,8 @@ import {
 } from '@/lib/studentTaskStatus';
 
 export default function MyDashboardPage() {
-  useDocumentTitle('Главная');
+  const { t } = useTranslation();
+  useDocumentTitle(t('dash.title'));
   const { user } = useAuth();
   const myCoursesQ = useMyCourses();
   const mySubsQ = useMySubmissions({ limit: 500 });
@@ -70,8 +72,8 @@ export default function MyDashboardPage() {
   }, [mySubs]);
 
   const greeting = user?.display_name
-    ? `Привет, ${user.display_name.split(' ')[0]}`
-    : 'Главная';
+    ? t('dash.greeting', { name: user.display_name.split(' ')[0] })
+    : t('dash.title');
 
   const joinAction = (
     <Button
@@ -81,7 +83,7 @@ export default function MyDashboardPage() {
       data-testid="dashboard-join-by-code"
     >
       <KeyRound className="mr-2 h-4 w-4" />
-      По коду
+      {t('dash.join_by_code')}
     </Button>
   );
 
@@ -102,12 +104,12 @@ export default function MyDashboardPage() {
         <PageHeader title={<span data-testid="my-dashboard-title">{greeting}</span>} />
         <EmptyState
           data-testid="my-dashboard-empty"
-          title="У вас пока нет курсов"
-          description="Преподаватель выдаст вам код приглашения — введите его, чтобы попасть в курс."
+          title={t('dash.empty.title')}
+          description={t('dash.empty.description')}
           action={
             <Button onClick={() => setJoinOpen(true)} data-testid="dashboard-empty-cta">
               <KeyRound className="mr-2 h-4 w-4" />
-              Ввести код
+              {t('dash.empty.cta')}
             </Button>
           }
         />
@@ -160,6 +162,7 @@ function CourseSection({
   subsByAsgId: Map<string, MySub[]>;
   onOpenCondition: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const hwQ = useHomeworksForCourse(course.id, { limit: 100 });
   const asgQ = useAssignmentsByCourse(course.id, {
     limit: 500,
@@ -235,13 +238,11 @@ function CourseSection({
             {course.name}
           </div>
           <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-            <span>
-              {gradedCount} из {total} сдано
-            </span>
+            <span>{t('dash.submitted_count', { graded: gradedCount, total })}</span>
             {mean != null && (
               <>
                 <span aria-hidden>·</span>
-                <span className="tabular-nums">средний балл {mean}</span>
+                <span className="tabular-nums">{t('dash.mean_score', { mean })}</span>
               </>
             )}
           </div>
@@ -250,16 +251,15 @@ function CourseSection({
 
       <div className="mt-5 pl-3">
         {hwQ.isLoading ? (
-          <div className="py-3 text-sm text-muted-foreground">Загружаем…</div>
+          <div className="py-3 text-sm text-muted-foreground">{t('dash.loading')}</div>
         ) : homeworks.length === 0 ? (
-          <div className="py-2 text-sm text-muted-foreground">Нет ДЗ</div>
+          <div className="py-2 text-sm text-muted-foreground">{t('dash.no_homeworks')}</div>
         ) : (
           <div className="divide-y divide-border/30">
             {homeworks.map((hw) => (
               <HomeworkSubrow
                 key={hw.id}
                 hw={hw}
-                courseSlug={course.slug}
                 assignments={asgByHwId.get(String(hw.id)) ?? []}
                 subsByAsgId={subsByAsgId}
                 onOpenCondition={onOpenCondition}
@@ -277,21 +277,19 @@ function CourseSection({
 
 function HomeworkSubrow({
   hw,
-  courseSlug,
   assignments,
   subsByAsgId,
   onOpenCondition,
   loadingAsg,
 }: {
   hw: Homework;
-  courseSlug: string;
   assignments: AssignmentBrief[];
   subsByAsgId: Map<string, MySub[]>;
   onOpenCondition: (id: string) => void;
   loadingAsg: boolean;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const hwHref = `/courses/${courseSlug}/homeworks/${hw.slug}`;
 
   // «Сдано» = teacher has released a score for the assignment; «OK
   // ещё не оценено» falls into «на проверке», not «сдано». The course-
@@ -301,6 +299,53 @@ function HomeworkSubrow({
     return subs.some((s) => s.score != null);
   }).length;
   const totalCount = assignments.length;
+
+  // «Простое ДЗ» (kind==='single') — само ДЗ и есть задание. Render ONE
+  // openable row (title + status + condition «i»), no expand chevron, no
+  // nested self-duplicate. Backend flag, not a title heuristic.
+  if (hw.kind === 'single' && assignments.length === 1) {
+    const asg = assignments[0];
+    const status = statusForAssignment(subsByAsgId.get(String(asg.id)) ?? []);
+    const target = taskLinkTarget(asg.id, status);
+    const tone =
+      status.tone === 'graded'
+        ? 'text-foreground font-medium'
+        : status.tone === 'pending'
+          ? 'text-muted-foreground'
+          : status.tone === 'failed'
+            ? 'text-sev-high'
+            : 'text-muted-foreground/40';
+    return (
+      <div data-testid={`my-hw-${hw.id}`}>
+        <div className="group/row flex items-center gap-3 -mx-2 px-2 py-3.5 rounded hover:bg-muted/20">
+          {/* spacer where the expand chevron sits on collection ДЗ */}
+          <span className="h-5 w-5 flex-none" aria-hidden />
+          <Link
+            to={target}
+            data-testid={`my-hw-toggle-${hw.id}`}
+            className="flex-1 min-w-0 flex items-center justify-between gap-4 text-left"
+          >
+            <span className="text-base font-medium truncate">{hw.title}</span>
+            {status.label && (
+              <span className={cn('text-xs shrink-0 tabular-nums', tone)}>
+                {status.label}
+              </span>
+            )}
+          </Link>
+          <button
+            type="button"
+            onClick={() => onOpenCondition(String(asg.id))}
+            title={t('dash.condition')}
+            aria-label={t('dash.condition')}
+            data-testid={`my-task-condition-${asg.id}`}
+            className="shrink-0 p-1 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+          >
+            <Info className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div data-testid={`my-hw-${hw.id}`}>
@@ -330,12 +375,10 @@ function HomeworkSubrow({
       {open && (
         <div className="pl-9 pb-3">
           {loadingAsg ? (
-            <div className="py-3 text-sm text-muted-foreground">Загружаем…</div>
+            <div className="py-3 text-sm text-muted-foreground">{t('dash.loading')}</div>
           ) : assignments.length === 0 ? (
             <div className="py-2 text-sm text-muted-foreground">
-              <Link to={hwHref} className="hover:underline">
-                Открыть ДЗ →
-              </Link>
+              {t('dash.no_tasks')}
             </div>
           ) : (
             <ul className="divide-y divide-border/20">
@@ -366,6 +409,7 @@ function TaskRow({
   subs: MySub[];
   onOpenCondition: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const status = useMemo(() => statusForAssignment(subs), [subs]);
 
@@ -407,8 +451,8 @@ function TaskRow({
       <button
         type="button"
         onClick={() => onOpenCondition(String(assignment.id))}
-        title="Условие задания"
-        aria-label="Условие задания"
+        title={t('dash.condition')}
+        aria-label={t('dash.condition')}
         data-testid={`my-task-condition-${assignment.id}`}
         className="shrink-0 p-1 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
       >

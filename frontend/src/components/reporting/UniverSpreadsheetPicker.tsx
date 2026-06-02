@@ -23,7 +23,9 @@
  */
 import { useEffect, useRef, useState } from 'react';
 import { Loader2 } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import type {
+  PreviewCell,
   PreviewSpreadsheet,
   PreviewWorksheet,
 } from '@/api/endpoints/reporting';
@@ -64,43 +66,48 @@ export function selectionAnchor(s: SheetSelection): string {
   return `${colLabel(s.start_col)}${s.start_row + 1}`;
 }
 
-/** A "paint" request asks the picker to write a backend grade matrix
- *  into the named sheet, **matching by student name** against an
- *  existing names column (default A). For every matrix row the
- *  picker looks up the row in the sheet whose names-column value
- *  equals `row[0]` (the student name from the matrix) and writes the
- *  grade columns (`row[1..]`) starting at `anchorCol` on that row.
- *  Rows without a match are reported back via `onApplied` so the
- *  parent can surface a "matched N of M" toast.
- *
- *  Pass a new object (different reference) every time you want a
- *  re-paint; the picker ignores prop updates whose reference is
- *  unchanged. */
-export interface PaintRequest {
-  sheet: string;
-  /** Column index where grade values should land (0-based). For
-   *  multi-ДЗ matrices the picker writes successive grade columns to
-   *  `anchorCol`, `anchorCol + 1`, … */
-  anchorCol: number;
-  /** 2D matrix produced by the backend grade builder.
-   *  `matrix[0]` = header row (`[студентCol, ...gradeCols]`).
-   *  `matrix[1..]` = one row per student. */
-  matrix: (string | number | null)[][];
-  /** Column to look up student names in (default 0 = column A). */
-  namesCol?: number;
-  /** How many rows to scan for names (default 500). Cheap upper bound
-   *  on real-world class sizes. */
-  scanRows?: number;
-  /** Fires after the paint with the matching outcome. */
-  onApplied?: (result: { matched: number; skipped: number }) => void;
+/** One pre-write cell: the backend already matched every student → row
+ *  (by ФИО then login) and every ДЗ → column, so the picker just paints
+ *  the value at the exact coordinate and highlights it. Nothing is
+ *  written to the real Google sheet — this is a "посмотреть глазками"
+ *  overlay on the on-page preview only. */
+export interface PaintCell {
+  /** 0-based row in the preview grid. */
+  row: number;
+  /** 0-based column in the preview grid. */
+  col: number;
+  /** Value to drop into the cell. */
+  value: string | number;
 }
+
+// Highlight for painted (pre-written) cells so they pop against the
+// existing values. A warm amber that reads on both light and dark.
+const PAINT_BG = '#FDE68A'; // amber-200
+const PAINT_FG = '#7c2d12'; // amber-900 — legible on the amber fill
+
+// Minimal shape of a Univer Facade sheet handle we touch when scrolling
+// the painted cell into view.
+type SheetHandle = {
+  getRange: (r: number, c: number, nr: number, nc: number) => unknown;
+  setActiveRange?: (range: unknown) => unknown;
+};
+
+// Fixed gutter sizes so the dark-mode dimming overlay (below) lines up
+// exactly with Univer's row-number / column-letter strips.
+const GUTTER_W = 46;
+const GUTTER_H = 24;
 
 interface UniverSpreadsheetPickerProps {
   preview: PreviewSpreadsheet;
   selection: SheetSelection | null;
   onSelectionChange: (s: SheetSelection | null) => void;
-  /** Optional preview-paint instruction (see {@link PaintRequest}). */
-  paint?: PaintRequest | null;
+  /** Pre-write overlay: highlighted grade cells the teacher reviews
+   *  before committing. Painted into the preview only (see
+   *  {@link PaintCell}). Pass a new array reference to repaint. */
+  paintCells?: PaintCell[] | null;
+  /** Tab the paint cells belong to (the bound sheet). When omitted the
+   *  overlay lands on the first worksheet. */
+  paintSheet?: string | null;
   /** CSS height for the embedded grid; defaults to ``420px``. */
   height?: number | string;
 }
@@ -113,9 +120,11 @@ export function UniverSpreadsheetPicker({
   preview,
   selection,
   onSelectionChange,
-  paint,
+  paintCells,
+  paintSheet,
   height = 420,
 }: UniverSpreadsheetPickerProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement | null>(null);
   // The instance state holds the Univer disposable + the active API
   // handle so we can re-render the workbook when `preview` changes
@@ -123,8 +132,14 @@ export function UniverSpreadsheetPicker({
   const instanceRef = useRef<{
     dispose: () => void;
     loadPreview: (p: PreviewSpreadsheet) => void;
-    applyPaint: (req: PaintRequest) => void;
   } | null>(null);
+  // Latest paint overlay, read by loadPreview (which bakes the painted
+  // cells into the workbook). Kept in a ref so a fresh mount — e.g. the
+  // theme-flip remount — picks up the current overlay synchronously.
+  const paintRef = useRef<PaintCell[] | null | undefined>(paintCells);
+  paintRef.current = paintCells;
+  const paintSheetRef = useRef<string | null | undefined>(paintSheet);
+  paintSheetRef.current = paintSheet;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -242,176 +257,70 @@ export function UniverSpreadsheetPicker({
               // Best-effort: ignore disposal failures.
             }
           }
+          // Bake the pre-write overlay straight into the workbook
+          // snapshot: per-cell inline styles are the reliable way to
+          // paint colour in Univer (the Facade styling API is flaky
+          // across versions), and they survive the theme-flip remount.
+          const overlay = paintRef.current ?? null;
+          const overlaySheet = paintSheetRef.current ?? null;
           const workbook = univerAPI.createWorkbook(
-            previewToWorkbook(p, palette),
+            previewToWorkbook(p, palette, overlay, overlaySheet),
           );
-          // Dark-theme the canvas-rendered row/column header gutters.
-          // These live outside `IWorkbookData` — sheets-ui paints them
-          // with its own white-on-black defaults. The FWorkbook facade
-          // exposes `customizeRow/ColumnHeader` that propagates the
-          // style into the canvas renderer.
-          //
-          // Timing: calling them synchronously right after createWorkbook
-          // is a no-op — the render component for the unit hasn't been
-          // attached yet, so `setCustomHeader` resolves against a null
-          // renderer and silently drops on the floor. We defer through
-          // `requestAnimationFrame` (one frame is enough in practice)
-          // so the render manager has had a tick to register the unit.
-          const styleHeaders = () => {
-            const wb = workbook as unknown as {
-              customizeColumnHeader?: (cfg: {
-                headerStyle: {
-                  fontColor?: string;
-                  backgroundColor?: string;
-                };
-              }) => void;
-              customizeRowHeader?: (cfg: {
-                headerStyle: {
-                  fontColor?: string;
-                  backgroundColor?: string;
-                };
-              }) => void;
-            };
-            const headerStyle = {
-              fontColor: palette.headerFg,
-              backgroundColor: palette.headerBg,
-            };
+          // Dark-theme the gutter background + text (the only public knob;
+          // Univer paints gutters on canvas). The bright divider LINES it
+          // draws have no API — they're dimmed by a DOM overlay in render().
+          // Deferred a frame so the render unit is attached before we style.
+          const applyHeader = () => {
             try {
+              const wb = workbook as unknown as {
+                customizeColumnHeader?: (c: unknown) => void;
+                customizeRowHeader?: (c: unknown) => void;
+              };
+              const headerStyle = {
+                fontColor: palette.headerFg,
+                backgroundColor: palette.headerBg,
+              };
               wb.customizeColumnHeader?.({ headerStyle });
               wb.customizeRowHeader?.({ headerStyle });
             } catch {
               /* best-effort */
             }
           };
+          // Scroll the first painted cell into view so the teacher SEES
+          // where the grades landed without hunting for them.
+          const focusPaint = () => {
+            const cells = overlay;
+            if (!cells || cells.length === 0) return;
+            const first = cells.reduce((a, b) => (b.row < a.row ? b : a));
+            try {
+              const wb = univerAPI.getActiveWorkbook?.() as unknown as {
+                getActiveSheet?: () => SheetHandle | null;
+                getSheetByName?: (n: string) => SheetHandle | null;
+                setActiveSheet?: (s: unknown) => void;
+              } | null;
+              const sheet =
+                (overlaySheet && wb?.getSheetByName?.(overlaySheet)) ||
+                wb?.getActiveSheet?.();
+              if (!sheet) return;
+              try {
+                wb?.setActiveSheet?.(sheet);
+              } catch {
+                /* best-effort */
+              }
+              sheet.setActiveRange?.(sheet.getRange(first.row, first.col, 1, 1));
+            } catch {
+              /* best-effort */
+            }
+          };
           requestAnimationFrame(() => {
-            // One frame is usually enough, but on slower hosts the
-            // render manager can still be mid-mount. Run again on the
-            // next tick as a cheap retry — both calls are idempotent.
-            styleHeaders();
-            setTimeout(styleHeaders, 200);
+            applyHeader();
+            focusPaint();
+            setTimeout(applyHeader, 200);
           });
         };
         loadPreview(preview);
 
-        /** Name-match an incoming grade matrix against the existing
-         *  names column of `req.sheet` and write each row's grade
-         *  values into the matched row, starting at `req.anchorCol`.
-         *
-         *  Why name-matching: the user's sheet already has students in
-         *  whatever order they chose (alphabetical, group, custom).
-         *  Dumping the backend matrix top-down from an arbitrary
-         *  anchor would mis-align all grades. Looking up by name puts
-         *  each grade next to the student it belongs to, regardless
-         *  of where in the sheet that student lives.
-         *
-         *  Matching is case-insensitive on the trimmed string. Names
-         *  the backend has that don't exist in the sheet are skipped
-         *  silently and reported through `onApplied({matched, skipped})`
-         *  so the parent can surface a "matched N of M" toast. */
-        const applyPaint = (req: PaintRequest) => {
-          if (req.matrix.length < 2) {
-            req.onApplied?.({ matched: 0, skipped: 0 });
-            return;
-          }
-          try {
-            const wb = univerAPI.getActiveWorkbook() as unknown as {
-              getSheetByName?: (n: string) =>
-                | {
-                    getRange: (
-                      r: number,
-                      c: number,
-                      nr: number,
-                      nc: number,
-                    ) => {
-                      setValues: (m: unknown) => void;
-                      getValues: () => Array<Array<unknown>>;
-                    };
-                    setActiveRange?: (range: unknown) => unknown;
-                  }
-                | null;
-              setActiveSheet?: (s: unknown) => void;
-            } | null;
-            if (!wb || !wb.getSheetByName) return;
-            const sheet = wb.getSheetByName(req.sheet);
-            if (!sheet) return;
-            if (wb.setActiveSheet) {
-              try {
-                wb.setActiveSheet(sheet);
-              } catch {
-                /* best-effort */
-              }
-            }
-            const namesCol = req.namesCol ?? 0;
-            const scanRows = req.scanRows ?? 500;
-            // Read the existing names column once and build a
-            // lower-cased → row-index map.
-            const existingNames = sheet
-              .getRange(0, namesCol, scanRows, 1)
-              .getValues();
-            const rowByName = new Map<string, number>();
-            existingNames.forEach((cells, rowIdx) => {
-              const raw = cells[0];
-              if (raw == null) return;
-              const key = String(raw).trim().toLowerCase();
-              if (key) rowByName.set(key, rowIdx);
-            });
-            // First row of the matrix is the header (column titles);
-            // the remaining rows are student data. We skip the
-            // student-name column itself when writing — the sheet
-            // already has its own.
-            const dataRows = req.matrix.slice(1);
-            let matched = 0;
-            let skipped = 0;
-            let firstMatchedRow: number | null = null;
-            for (const row of dataRows) {
-              const key = String(row[0] ?? '')
-                .trim()
-                .toLowerCase();
-              if (!key) {
-                skipped += 1;
-                continue;
-              }
-              const target = rowByName.get(key);
-              if (target === undefined) {
-                skipped += 1;
-                continue;
-              }
-              const grades = row.slice(1);
-              if (grades.length === 0) continue;
-              sheet
-                .getRange(target, req.anchorCol, 1, grades.length)
-                .setValues([grades] as unknown as Array<Array<unknown>>);
-              matched += 1;
-              if (firstMatchedRow === null) firstMatchedRow = target;
-            }
-            // Scroll to the first matched row + anchor column so the
-            // teacher SEES the freshly placed grades.
-            if (firstMatchedRow !== null) {
-              try {
-                const previewCols = Math.max(
-                  1,
-                  (req.matrix[0]?.length ?? 1) - 1,
-                );
-                sheet.setActiveRange?.(
-                  sheet.getRange(
-                    firstMatchedRow,
-                    req.anchorCol,
-                    1,
-                    previewCols,
-                  ),
-                );
-              } catch {
-                /* best-effort */
-              }
-            }
-            req.onApplied?.({ matched, skipped });
-          } catch {
-            req.onApplied?.({ matched: 0, skipped: 0 });
-          }
-        };
-
         instanceRef.current = {
-          applyPaint,
           dispose: () => {
             try {
               selDisposable?.dispose?.();
@@ -432,7 +341,7 @@ export function UniverSpreadsheetPicker({
         setError(
           e instanceof Error
             ? e.message
-            : 'Не удалось загрузить Univer',
+            : t('univer_picker.load_error'),
         );
         setLoading(false);
       }
@@ -455,14 +364,18 @@ export function UniverSpreadsheetPicker({
     }
   }, [preview]);
 
-  // Apply a paint request when the parent hands us a new one.  Each
-  // distinct `paint` object reference fires once; identity-stable
-  // updates (e.g. memoised inputs) won't repaint.
-  useEffect(() => {
-    if (instanceRef.current && paint) {
-      instanceRef.current.applyPaint(paint);
-    }
-  }, [paint]);
+  // Theme changes are handled by the parent remounting this component
+  // (``key={theme}``) — Univer bakes palette colours into the workbook
+  // snapshot and doesn't reliably swap them in place, so a clean
+  // re-mount with a fresh palette read is the robust path.
+
+  // NOTE: the pre-write overlay is baked at mount (loadPreview reads the
+  // current `paintRef`). We deliberately do NOT re-feed the workbook in
+  // place on paint changes — Univer keeps the unit keyed by id and a
+  // second createWorkbook with the same id throws ("cannot create a unit
+  // with the same unit id"). Instead the parent remounts this component
+  // (a paint nonce in its `key`, same trick as the theme flip), which
+  // disposes the whole Univer instance and re-bakes cleanly.
 
   // Acknowledge external `selection` resets so the linter is happy —
   // Univer drives its own selection state, we just listen.
@@ -485,29 +398,10 @@ export function UniverSpreadsheetPicker({
         style={{ height: typeof height === 'number' ? `${height}px` : height }}
         className="w-full"
       />
-      {/* Mask for the top-left corner cell. It's `SHEET_VIEW_KEY.
-          LEFT_TOP` — a separate canvas component that
-          customizeRow/ColumnHeader can't touch and that ships white
-          in dark mode. Default header sizes are ~46×20 px; we cover
-          a slightly larger area to swallow the 1-px gridline that
-          sheets-ui draws under the corner. `z-10` keeps the mask
-          above the canvas; `pointer-events-none` lets cell clicks
-          fall through to Univer (they start past this area anyway).
-          Inline `var(--muted)` so theme switches are picked up
-          without remount. */}
-      <span
-        aria-hidden
-        className="pointer-events-none absolute left-0 top-0 z-10"
-        style={{
-          width: 48,
-          height: 22,
-          background: 'var(--muted)',
-        }}
-      />
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-background/60 text-sm text-muted-foreground">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          Загружаем таблицу…
+          {t('univer_picker.loading')}
         </div>
       )}
       {error && (
@@ -566,18 +460,45 @@ const UNIVER_DARK_CSS = `
 //
 // (The probe approach also sidesteps building our own oklch→sRGB
 // converter — the browser's CSS engine already has one.)
+/** Normalise any CSS colour string into ``#rrggbb``. We can't assume
+ *  ``getComputedStyle().color`` is ``rgb()`` anymore — modern Chrome
+ *  preserves the authored colour space, and our theme tokens are
+ *  ``oklch(...)``, so the old ``rgba?\(`` regex silently missed and we
+ *  fell back to a hard-coded *dark* palette in EVERY theme (looked fine
+ *  in dark, wrong in light). A 1×1 canvas converts anything the CSS
+ *  engine accepts (incl. CSS Color 4 / oklch) into concrete sRGB. */
+function cssColorToHex(input: string): string | null {
+  if (typeof document === 'undefined' || !input) return null;
+  const ctx = document.createElement('canvas').getContext('2d');
+  if (!ctx) return null;
+  const SENTINEL = '#010203';
+  ctx.fillStyle = SENTINEL;
+  try {
+    ctx.fillStyle = input;
+  } catch {
+    return null;
+  }
+  const out = ctx.fillStyle;
+  if (typeof out !== 'string') return null;
+  // Unchanged sentinel → canvas rejected the value as unparseable.
+  if (out === SENTINEL && input.replace(/\s+/g, '').toLowerCase() !== SENTINEL) {
+    return null;
+  }
+  if (out.startsWith('#')) return out;
+  const m = out.match(/rgba?\(([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/);
+  if (!m) return null;
+  const h = (n: string) => Math.round(Number(n)).toString(16).padStart(2, '0');
+  return `#${h(m[1])}${h(m[2])}${h(m[3])}`;
+}
+
 function readThemeColor(varName: string, fallback: string): string {
   if (typeof document === 'undefined') return fallback;
   const probe = document.createElement('div');
   probe.style.cssText = `position:absolute;visibility:hidden;color:var(${varName})`;
   document.body.appendChild(probe);
-  const rgb = getComputedStyle(probe).color;
+  const computed = getComputedStyle(probe).color;
   document.body.removeChild(probe);
-  const m = rgb.match(/rgba?\((\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)[,\s]+(\d+(?:\.\d+)?)/);
-  if (!m) return fallback;
-  const toHex = (n: string) =>
-    Math.round(Number(n)).toString(16).padStart(2, '0');
-  return `#${toHex(m[1])}${toHex(m[2])}${toHex(m[3])}`;
+  return cssColorToHex(computed) ?? fallback;
 }
 
 interface DarkPalette {
@@ -610,13 +531,14 @@ function readPalette(): DarkPalette {
   return {
     cellBg,
     cellFg: readThemeColor('--muted-foreground', '#b4b5b8'),
-    gridline: lerpHex(cellFg, cellBg, 0.7), // ≈ 30 % fg / 70 % bg
+    gridline: lerpHex(cellFg, cellBg, 0.86), // ≈ 14 % fg — subtle, not glary
     headerBg: readThemeColor('--muted', '#1d1f24'),
     headerFg: readThemeColor('--muted-foreground', '#9a9b9f'),
   };
 }
 
 const DARK_STYLE_ID = 'plaglens-cell';
+const PAINT_STYLE_ID = 'plaglens-paint';
 
 /** Convert backend's compact `PreviewSpreadsheet` into Univer's
  *  workbook snapshot. Univer indexes cells by `[row][col]` with a
@@ -626,30 +548,95 @@ const DARK_STYLE_ID = 'plaglens-cell';
  *  text is readable on whichever theme is active. Workbook-level
  *  `defaultStyle` alone isn't reliably applied by sheets-ui's
  *  renderer — explicit per-cell `s` is what actually paints text. */
+/** Pick a readable text colour (near-black / near-white) for a given
+ *  background hex — used when the source cell has a fill but no explicit
+ *  text colour, so coloured grade cells stay legible in either theme. */
+function contrastText(hex: string): string {
+  const m = hex.replace('#', '').match(/.{2}/g);
+  if (!m || m.length < 3) return '#111827';
+  const [r, g, b] = m.map((h) => parseInt(h, 16));
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? '#111827' : '#f9fafb';
+}
+
 function previewToWorkbook(
   preview: PreviewSpreadsheet,
   palette: DarkPalette,
+  paintCells?: PaintCell[] | null,
+  paintSheet?: string | null,
 ): Record<string, unknown> {
   const sheets: Record<string, unknown> = {};
   const sheetOrder: string[] = [];
   preview.worksheets.forEach((ws: PreviewWorksheet, idx: number) => {
     const id = `sheet_${ws.sheet_id ?? idx}`;
-    const cellData: Record<number, Record<number, { v: unknown; s: string }>> =
+    const cellData: Record<number, Record<number, { v: unknown; s: unknown }>> =
       {};
-    const rowCount = Math.max(ws.row_count ?? ws.rows.length, ws.rows.length);
-    const colCount = Math.max(
-      ws.col_count ?? (ws.rows[0]?.length ?? 0),
-      ws.rows[0]?.length ?? 0,
-    );
+    // Does the pre-write overlay belong to this tab? When no sheet is
+    // named, the first worksheet takes it.
+    const isPaintTarget =
+      !!paintCells &&
+      paintCells.length > 0 &&
+      (paintSheet ? ws.title === paintSheet : idx === 0);
+    const overlay = isPaintTarget ? paintCells! : [];
+    // Size the grid to the data we actually LOADED, not the sheet's full
+    // allocation (``col_count`` is often far larger — a gradebook may
+    // reserve 200 columns) — otherwise Univer paints a sea of empty cells
+    // past the fetched edge. Paint cells below extend it if needed.
+    let rowCount = ws.rows.length || 1;
+    let colCount = ws.rows.reduce((m, r) => Math.max(m, r.length), 0) || 1;
+    for (const pc of overlay) {
+      if (pc.row + 1 > rowCount) rowCount = pc.row + 1;
+      if (pc.col + 1 > colCount) colCount = pc.col + 1;
+    }
     ws.rows.forEach((row, r) => {
-      const cols: Record<number, { v: unknown; s: string }> = {};
-      row.forEach((cell, c) => {
-        // PreviewCell schema: `{ v: string | number | boolean | null, note? }`
-        const value = (cell as { v?: unknown; value?: unknown }).v;
-        cols[c] = { v: value ?? '', s: DARK_STYLE_ID };
+      const cols: Record<number, { v: unknown; s: unknown }> = {};
+      row.forEach((cell: PreviewCell, c) => {
+        const value = cell?.v;
+        // Mirror source formatting: a non-default fill (conditional
+        // formats, header bands) or bold becomes an inline style; plain
+        // cells ride the shared theme style so empty area still follows
+        // the app's light/dark theme.
+        let s: unknown = DARK_STYLE_ID;
+        if (cell?.bg) {
+          s = {
+            bg: { rgb: cell.bg },
+            cl: { rgb: cell.fg ?? contrastText(cell.bg) },
+            bl: cell.bold ? 1 : 0,
+          };
+        } else if (cell?.bold) {
+          s = {
+            bg: { rgb: palette.cellBg },
+            cl: { rgb: cell.fg ?? palette.cellFg },
+            bl: 1,
+          };
+        }
+        cols[c] = { v: value ?? '', s };
       });
       cellData[r] = cols;
     });
+
+    // Bake the pre-write overlay: drop each matched grade at its exact
+    // (row, col) with the amber highlight so the teacher sees precisely
+    // where «Записать в таблицу» will land — nothing leaves the page.
+    for (const pc of overlay) {
+      const rowCols = cellData[pc.row] ?? {};
+      rowCols[pc.col] = { v: pc.value, s: PAINT_STYLE_ID };
+      cellData[pc.row] = rowCols;
+    }
+
+    // Column widths straight from the source sheet (clamped so a stray
+    // giant column can't blow out the embed). Fall back to a comfortable
+    // name column when the sheet didn't report widths.
+    const columnData: Record<number, { w: number }> = {};
+    const widths = ws.col_widths ?? [];
+    if (widths.length) {
+      widths.forEach((w, i) => {
+        if (w && w > 0) columnData[i] = { w: Math.min(Math.max(w, 32), 480) };
+      });
+    } else {
+      columnData[0] = { w: 220 };
+    }
+
     sheets[id] = {
       id,
       name: ws.title,
@@ -658,13 +645,10 @@ function previewToWorkbook(
       columnCount: colCount,
       gridlinesColor: palette.gridline,
       defaultStyle: DARK_STYLE_ID,
-      // The first column on a grade sheet is the student name and
-      // routinely runs 30+ chars; the default ~88 px column width
-      // makes it spill over into the empty number columns. Give
-      // column 0 a comfortable width and leave the rest at default.
-      columnData: {
-        0: { w: 220 },
-      },
+      columnData,
+      // Pin gutter sizes so the dark-mode dimming overlay aligns exactly.
+      rowHeader: { width: GUTTER_W },
+      columnHeader: { height: GUTTER_H },
     };
     sheetOrder.push(id);
   });
@@ -674,12 +658,18 @@ function previewToWorkbook(
     appVersion: '1.0.0',
     locale: 'ru-RU',
     styles: {
-      // Shared style every cell references via `s`. `cl` = foreground
-      // (text), `bg` = background. Univer pairs both with the IRgbColor
-      // shape `{ rgb }` (rather than `{ th: themeColor }`).
+      // Shared style every plain cell references via `s`. `cl` =
+      // foreground (text), `bg` = background.
       [DARK_STYLE_ID]: {
         cl: { rgb: palette.cellFg },
         bg: { rgb: palette.cellBg },
+      },
+      // Pre-write highlight — amber fill + dark amber text, bold so the
+      // freshly placed grades read as "not yet committed".
+      [PAINT_STYLE_ID]: {
+        cl: { rgb: PAINT_FG },
+        bg: { rgb: PAINT_BG },
+        bl: 1,
       },
     },
     defaultStyle: DARK_STYLE_ID,

@@ -12,6 +12,7 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Page, PageHeader } from '@/components/layout/Page';
 
 export default function JoinByCodePage() {
-  useDocumentTitle('Присоединиться к курсу');
+  const { t } = useTranslation();
+  useDocumentTitle(t('join_code_page.title'));
   const { code: codeParam } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -37,13 +39,13 @@ export default function JoinByCodePage() {
     e.preventDefault();
     setProblem(null);
     if (code.trim().length < 4) {
-      setCodeError('Слишком короткий код');
+      setCodeError(t('join_code_page.code_too_short'));
       return;
     }
     setCodeError(null);
     try {
       const res = await join.mutateAsync(code.trim());
-      notify.success('Вы присоединились к курсу');
+      notify.success(t('join_code_page.join_success'));
       // Course route is /courses/:slug — the join endpoint currently returns
       // only { course_id }, so when no slug is included we fetch it.
       // TODO(backend): include `course_slug` (or full course brief) in the
@@ -69,13 +71,13 @@ export default function JoinByCodePage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title="Присоединиться к курсу" />
+      <PageHeader title={t('join_code_page.title')} />
 
       <Card>
         <CardContent className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             <div className="space-y-1.5">
-              <Label htmlFor="join-code">Код приглашения</Label>
+              <Label htmlFor="join-code">{t('join_code_page.code_label')}</Label>
               <Input
                 id="join-code"
                 value={code}
@@ -104,7 +106,7 @@ export default function JoinByCodePage() {
                 {join.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Присоединиться
+                {t('join_code_page.submit')}
               </Button>
             </div>
           </form>

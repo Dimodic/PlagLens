@@ -17,12 +17,14 @@ import {
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { useNotifications } from '@/hooks/useNotifications';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 
 export default function EjudgeSetupPage() {
+  const { t } = useTranslation();
   useDocumentTitle('eJudge');
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -50,7 +52,7 @@ export default function EjudgeSetupPage() {
     setProblem(null);
     if (!courseId || !baseUrl || !apiKey) {
       setProblem({
-        title: 'Заполните все поля',
+        title: t('ejudge_setup.fill_all_fields'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -74,7 +76,7 @@ export default function EjudgeSetupPage() {
         },
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
       })) as any;
-      notify.success('Интеграция сохранена');
+      notify.success(t('ejudge_setup.saved'));
       navigate(`/integrations`);
       void created;
     } catch (raw) {
@@ -89,7 +91,7 @@ export default function EjudgeSetupPage() {
         to="/integrations"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Интеграции
+        ← {t('ejudge_setup.back_to_integrations')}
       </Link>
       <PageHeader title="eJudge" />
 
@@ -97,10 +99,10 @@ export default function EjudgeSetupPage() {
         {problem && <ProblemAlert problem={problem} />}
 
         <div className="space-y-1.5">
-          <Label htmlFor="ejudge-course">Курс</Label>
+          <Label htmlFor="ejudge-course">{t('ejudge_setup.course')}</Label>
           <Select value={courseId} onValueChange={setCourseId}>
             <SelectTrigger id="ejudge-course">
-              <SelectValue placeholder="Выберите курс" />
+              <SelectValue placeholder={t('ejudge_setup.select_course')} />
             </SelectTrigger>
             <SelectContent>
               {courses.map((c) => (
@@ -148,7 +150,7 @@ export default function EjudgeSetupPage() {
         <div className="pt-2">
           <Button type="submit" disabled={submitting}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Сохранить
+            {t('common.save')}
           </Button>
         </div>
       </form>

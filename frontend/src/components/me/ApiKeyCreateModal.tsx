@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/i18n';
 import type { ApiKeyCreated } from '@/api/endpoints/users';
 
 const SCOPES = [
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [scopes, setScopes] = useState<string[]>([]);
   const [created, setCreated] = useState<ApiKeyCreated | null>(null);
@@ -57,7 +59,7 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
   const handleSubmit = async () => {
     setErr(null);
     if (!name.trim()) {
-      setErr('Название обязательно');
+      setErr(t('api_key_create.name_required'));
       return;
     }
     setLoading(true);
@@ -66,7 +68,7 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
       setCreated(result);
     } catch (e) {
       const p = e as { detail?: string; title?: string };
-      setErr(p?.detail ?? p?.title ?? 'Не удалось создать');
+      setErr(p?.detail ?? p?.title ?? t('api_key_create.create_failed'));
     } finally {
       setLoading(false);
     }
@@ -93,13 +95,13 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
     <Dialog open={opened} onOpenChange={(o) => { if (!o) handleClose(); }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Создать API-ключ</DialogTitle>
+          <DialogTitle>{t('api_key_create.title')}</DialogTitle>
         </DialogHeader>
         {!created ? (
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="api-key-name">
-                Название <span className="text-destructive">*</span>
+                {t('api_key_create.name_label')} <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="api-key-name"
@@ -133,7 +135,7 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
             )}
             <DialogFooter>
               <Button variant="ghost" onClick={handleClose}>
-                Отмена
+                {t('common.cancel')}
               </Button>
               <Button
                 onClick={handleSubmit}
@@ -141,7 +143,7 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
                 data-testid="api-key-create-submit"
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Создать
+                {t('common.create')}
               </Button>
             </DialogFooter>
           </div>
@@ -149,10 +151,9 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
           <div className="space-y-4">
             <Alert data-testid="api-key-once-warning">
               <AlertTriangle className="h-4 w-4" />
-              <AlertTitle>Скопируйте ключ сейчас</AlertTitle>
+              <AlertTitle>{t('api_key_create.once_title')}</AlertTitle>
               <AlertDescription>
-                Ключ показывается ОДИН раз и больше не будет доступен. Сохраните его в
-                безопасное место (Vault, password manager).
+                {t('api_key_create.once_body')}
               </AlertDescription>
             </Alert>
             <div className="space-y-1.5">
@@ -174,13 +175,13 @@ export function ApiKeyCreateModal({ opened, onClose, onCreate }: Props) {
                   ) : (
                     <Copy className="mr-2 h-3.5 w-3.5" />
                   )}
-                  {copied ? 'Скопировано' : 'Копировать'}
+                  {copied ? t('api_key_create.copied') : t('api_key_create.copy')}
                 </Button>
               </div>
             </div>
             <DialogFooter>
               <Button onClick={handleClose} data-testid="api-key-modal-done">
-                Готово
+                {t('api_key_create.done')}
               </Button>
             </DialogFooter>
           </div>

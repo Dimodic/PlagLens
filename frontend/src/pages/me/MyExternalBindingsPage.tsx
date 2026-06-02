@@ -10,6 +10,7 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useAddMyExternalBinding,
   useMyExternalBindings,
@@ -38,7 +39,8 @@ import {
 } from '@/components/ui/table';
 
 export function MyExternalBindingsPage() {
-  useDocumentTitle('Внешние привязки');
+  const { t } = useTranslation();
+  useDocumentTitle(t('my_external_bindings.document_title'));
   const notify = useNotifications();
   const { data, isLoading, error, refetch } = useMyExternalBindings();
   const addM = useAddMyExternalBinding();
@@ -53,7 +55,7 @@ export function MyExternalBindingsPage() {
     setProblem(null);
     if (!externalId.trim()) {
       setProblem({
-        title: 'external_id обязателен',
+        title: t('my_external_bindings.validation_external_id_required'),
         status: 400,
         code: 'REQUIRED',
       });
@@ -65,7 +67,7 @@ export function MyExternalBindingsPage() {
         external_id: externalId.trim(),
         display_name: displayName.trim() || undefined,
       });
-      notify.success('Привязка добавлена');
+      notify.success(t('my_external_bindings.notify_added'));
       setExternalId('');
       setDisplayName('');
       refetch();
@@ -77,26 +79,26 @@ export function MyExternalBindingsPage() {
   const handleRemove = async (id: string) => {
     try {
       await removeM.mutateAsync(id);
-      notify.success('Удалено');
+      notify.success(t('my_external_bindings.notify_removed'));
       refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('my_external_bindings.error_generic'));
     }
   };
 
   return (
     <Page>
       <Breadcrumbs />
-      <PageHeader title="Внешние привязки" />
+      <PageHeader title={t('my_external_bindings.page_title')} />
 
         <Card>
           <CardContent className="p-6">
             <div className="space-y-4">
-              <h2 className="text-xl font-bold">Добавить привязку</h2>
+              <h2 className="text-xl font-bold">{t('my_external_bindings.add_heading')}</h2>
               {problem && <ProblemAlert problem={problem} />}
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="space-y-1.5" data-testid="bindings-add-system">
-                  <Label htmlFor="bindings-system">Система</Label>
+                  <Label htmlFor="bindings-system">{t('my_external_bindings.label_system')}</Label>
                   <Select
                     value={system}
                     onValueChange={(v) =>
@@ -108,7 +110,9 @@ export function MyExternalBindingsPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="stepik">Stepik</SelectItem>
-                      <SelectItem value="yandex_contest">Я.Контест</SelectItem>
+                      <SelectItem value="yandex_contest">
+                        {t('my_external_bindings.option_yandex_contest')}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -142,7 +146,7 @@ export function MyExternalBindingsPage() {
                   ) : (
                     <Plus className="mr-2 h-4 w-4" />
                   )}
-                  Добавить
+                  {t('my_external_bindings.add_submit')}
                 </Button>
               </div>
             </div>
@@ -156,16 +160,16 @@ export function MyExternalBindingsPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : data && data.length === 0 ? (
-          <EmptyState title="Привязок нет" />
+          <EmptyState title={t('my_external_bindings.empty_title')} />
         ) : (
           <Card className="overflow-hidden p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Система</TableHead>
+                  <TableHead>{t('my_external_bindings.th_system')}</TableHead>
                   <TableHead>External ID</TableHead>
-                  <TableHead>Имя</TableHead>
-                  <TableHead>Привязано</TableHead>
+                  <TableHead>{t('my_external_bindings.th_name')}</TableHead>
+                  <TableHead>{t('my_external_bindings.th_linked_at')}</TableHead>
                   <TableHead />
                 </TableRow>
               </TableHeader>
@@ -200,7 +204,7 @@ export function MyExternalBindingsPage() {
                         ) : (
                           <Trash2 className="mr-2 h-3.5 w-3.5" />
                         )}
-                        Удалить
+                        {t('my_external_bindings.remove')}
                       </Button>
                     </TableCell>
                   </TableRow>

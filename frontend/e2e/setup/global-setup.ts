@@ -112,7 +112,7 @@ async function globalSetup(_config: FullConfig): Promise<void> {
 
   // 4. Pre-fetch tokens for each role (best-effort).
   // Spacing logins to avoid the gateway's per-IP rate limit on /auth/login.
-  const roles: DemoRole[] = ['super_admin', 'admin', 'teacher', 'assistant', 'student1', 'student2', 'student3', 'student4'];
+  const roles: DemoRole[] = ['admin', 'teacher', 'assistant', 'student1', 'student2', 'student3', 'student4'];
   for (const role of roles) {
     const r = await tryLogin(role);
     if (r) {

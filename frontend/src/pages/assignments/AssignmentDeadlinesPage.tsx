@@ -38,6 +38,7 @@ import { formatDateTime } from '@/utils/formatters';
 import type { Problem } from '@/api/types';
 import type { DeadlineExtension } from '@/api/endpoints/assignments';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
 function toLocalInput(iso: string | null): string {
   if (!iso) return '';
@@ -54,7 +55,8 @@ function fromLocalInput(value: string): string | null {
 }
 
 export default function AssignmentDeadlinesPage() {
-  useDocumentTitle('Продления дедлайна');
+  const { t } = useTranslation();
+  useDocumentTitle(t('assignment_deadlines.title'));
   const { id } = useParams<{ id: string }>();
   const notify = useNotifications();
   const { data: assignment } = useAssignment(id);
@@ -83,7 +85,7 @@ export default function AssignmentDeadlinesPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!userId) {
-      setUserIdError('Введите ID пользователя');
+      setUserIdError(t('assignment_deadlines.user_id_required'));
       return;
     }
     setUserIdError(null);
@@ -94,7 +96,7 @@ export default function AssignmentDeadlinesPage() {
         deadline_hard_at: hardAt,
         reason: reason || undefined,
       });
-      notify.success('Продление создано');
+      notify.success(t('assignment_deadlines.created'));
       setOpen(false);
       resetForm();
     } catch (err) {
@@ -107,7 +109,7 @@ export default function AssignmentDeadlinesPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Продления дедлайна
+            {t('assignment_deadlines.title')}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {assignment?.title ?? '—'}
@@ -118,7 +120,7 @@ export default function AssignmentDeadlinesPage() {
           data-testid="deadline-extension-add"
         >
           <Plus className="mr-2 h-4 w-4" />
-          Продлить дедлайн
+          {t('assignment_deadlines.extend')}
         </Button>
       </div>
 
@@ -126,18 +128,18 @@ export default function AssignmentDeadlinesPage() {
 
       {isLoading ? null : (extensions?.data.length ?? 0) === 0 ? (
         <EmptyState
-          title="Нет продлений"
-          message="Здесь появятся индивидуальные продления дедлайна студентам."
+          title={t('assignment_deadlines.empty_title')}
+          message={t('assignment_deadlines.empty_message')}
         />
       ) : (
         <div className="rounded-md border">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Студент</TableHead>
+                <TableHead>{t('assignment_deadlines.col_student')}</TableHead>
                 <TableHead>Soft</TableHead>
                 <TableHead>Hard</TableHead>
-                <TableHead>Причина</TableHead>
+                <TableHead>{t('assignment_deadlines.col_reason')}</TableHead>
                 <TableHead className="w-14" />
               </TableRow>
             </TableHeader>
@@ -173,7 +175,7 @@ export default function AssignmentDeadlinesPage() {
                       variant="ghost"
                       size="icon"
                       onClick={() => setConfirm(ext)}
-                      aria-label="Отменить"
+                      aria-label={t('assignment_deadlines.cancel_action')}
                       className="text-destructive hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -195,12 +197,12 @@ export default function AssignmentDeadlinesPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Продлить дедлайн</DialogTitle>
+            <DialogTitle>{t('assignment_deadlines.dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="deadline-extension-user_id-input">
-                ID пользователя *
+                {t('assignment_deadlines.user_id_label')} *
               </Label>
               <Input
                 id="deadline-extension-user_id-input"
@@ -215,7 +217,7 @@ export default function AssignmentDeadlinesPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deadline-extension-soft_at-input">
-                Новый soft-дедлайн
+                {t('assignment_deadlines.soft_label')}
               </Label>
               <Input
                 id="deadline-extension-soft_at-input"
@@ -227,7 +229,7 @@ export default function AssignmentDeadlinesPage() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="deadline-extension-hard_at-input">
-                Новый hard-дедлайн
+                {t('assignment_deadlines.hard_label')}
               </Label>
               <Input
                 id="deadline-extension-hard_at-input"
@@ -238,7 +240,9 @@ export default function AssignmentDeadlinesPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="deadline-extension-reason-input">Причина</Label>
+              <Label htmlFor="deadline-extension-reason-input">
+                {t('assignment_deadlines.reason_label')}
+              </Label>
               <Textarea
                 id="deadline-extension-reason-input"
                 rows={2}
@@ -254,7 +258,7 @@ export default function AssignmentDeadlinesPage() {
                 onClick={() => setOpen(false)}
                 data-testid="deadline-extension-cancel"
               >
-                Отмена
+                {t('assignment_deadlines.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -264,7 +268,7 @@ export default function AssignmentDeadlinesPage() {
                 {create.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Создать
+                {t('assignment_deadlines.submit')}
               </Button>
             </DialogFooter>
           </form>
@@ -273,15 +277,15 @@ export default function AssignmentDeadlinesPage() {
 
       <ConfirmDialog
         opened={!!confirm}
-        title="Отменить продление?"
+        title={t('assignment_deadlines.confirm_cancel_title')}
         destructive
-        confirmLabel="Отменить"
+        confirmLabel={t('assignment_deadlines.cancel_action')}
         loading={remove.isPending}
         onConfirm={async () => {
           if (!confirm) return;
           try {
             await remove.mutateAsync(confirm.id);
-            notify.success('Продление отменено');
+            notify.success(t('assignment_deadlines.cancelled'));
           } catch (err) {
             setProblem(parseProblem(err));
           }

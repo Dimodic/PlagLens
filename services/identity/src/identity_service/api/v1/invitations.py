@@ -403,13 +403,33 @@ async def redeem_invitation(
     # few lines below — we either migrate the user or reject with 403.
     inv = await repo.get_by_code_global(code)
     if inv is None:
-        raise ProblemException(status=404, code="NOT_FOUND", title="Code not found")
+        raise ProblemException(
+            status=404,
+            code="NOT_FOUND",
+            title="Код не найден",
+            detail="Проверьте, правильно ли введён код приглашения.",
+        )
     if inv.revoked_at is not None:
-        raise ProblemException(status=410, code="GONE", title="Invitation revoked")
+        raise ProblemException(
+            status=410,
+            code="GONE",
+            title="Код отозван",
+            detail="Этот код больше не действует — запросите новый у преподавателя.",
+        )
     if inv.accepted_at is not None:
-        raise ProblemException(status=409, code="CONFLICT", title="Code already used")
+        raise ProblemException(
+            status=409,
+            code="CONFLICT",
+            title="Код уже использован",
+            detail="По этому коду уже присоединились — запросите новый, если нужно ещё раз.",
+        )
     if inv.expires_at <= datetime.now(timezone.utc).replace(tzinfo=inv.expires_at.tzinfo):
-        raise ProblemException(status=410, code="GONE", title="Invitation expired")
+        raise ProblemException(
+            status=410,
+            code="GONE",
+            title="Срок действия кода истёк",
+            detail="Запросите новый код у преподавателя.",
+        )
 
     target_user = await users.get(me.id)
     if target_user is None:

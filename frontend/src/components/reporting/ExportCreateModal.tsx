@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
+import { useTranslation } from '@/i18n';
 import type {
   CreateExportInput,
   ExportFormat,
@@ -36,12 +37,12 @@ export interface ExportCreateModalProps {
   busy?: boolean;
 }
 
-const KINDS: { value: ExportKind; label: string }[] = [
-  { value: 'assignment_grades', label: 'Оценки задания' },
-  { value: 'course_summary', label: 'Сводка по курсу' },
-  { value: 'plagiarism_report', label: 'Отчёт по плагиату' },
-  { value: 'ai_analysis_summary', label: 'Сводка AI-анализов' },
-  { value: 'audit_log', label: 'Журнал аудита' },
+const KINDS: { value: ExportKind; labelKey: string }[] = [
+  { value: 'assignment_grades', labelKey: 'export_create.kind_assignment_grades' },
+  { value: 'course_summary', labelKey: 'export_create.kind_course_summary' },
+  { value: 'plagiarism_report', labelKey: 'export_create.kind_plagiarism_report' },
+  { value: 'ai_analysis_summary', labelKey: 'export_create.kind_ai_analysis_summary' },
+  { value: 'audit_log', labelKey: 'export_create.kind_audit_log' },
 ];
 
 const FORMATS: { value: ExportFormat; label: string }[] = [
@@ -60,6 +61,7 @@ export function ExportCreateModal({
   defaultScope,
   busy,
 }: ExportCreateModalProps) {
+  const { t } = useTranslation();
   const [kind, setKind] = useState<ExportKind>(defaultKind);
   const [format, setFormat] = useState<ExportFormat>('xlsx');
   const [anonymize, setAnonymize] = useState(false);
@@ -95,11 +97,11 @@ export function ExportCreateModal({
     >
       <DialogContent data-testid="export-create-modal">
         <DialogHeader>
-          <DialogTitle>Создать экспорт</DialogTitle>
+          <DialogTitle>{t('export_create.title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4" data-testid="export-create-form">
           <div className="space-y-1.5">
-            <Label htmlFor="export-kind">Тип отчёта</Label>
+            <Label htmlFor="export-kind">{t('export_create.kind_label')}</Label>
             <Select
               value={kind}
               onValueChange={(v) => setKind(v as ExportKind)}
@@ -110,14 +112,14 @@ export function ExportCreateModal({
               <SelectContent>
                 {KINDS.map((k) => (
                   <SelectItem key={k.value} value={k.value}>
-                    {k.label}
+                    {t(k.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="export-format">Формат</Label>
+            <Label htmlFor="export-format">{t('export_create.format_label')}</Label>
             <Select
               value={format}
               onValueChange={(v) => setFormat(v as ExportFormat)}
@@ -144,10 +146,10 @@ export function ExportCreateModal({
               onCheckedChange={setAnonymize}
               data-testid="export-anonymize-toggle"
             />
-            <Label htmlFor="export-anonymize">Анонимизировать</Label>
+            <Label htmlFor="export-anonymize">{t('export_create.anonymize')}</Label>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="export-scope">Scope (JSON, опционально)</Label>
+            <Label htmlFor="export-scope">{t('export_create.scope_label')}</Label>
             <Textarea
               id="export-scope"
               placeholder='{"course_id":"...","assignment_id":"..."}'
@@ -166,7 +168,7 @@ export function ExportCreateModal({
             disabled={busy}
             data-testid="export-cancel-btn"
           >
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handle}
@@ -174,7 +176,7 @@ export function ExportCreateModal({
             data-testid="export-submit-btn"
           >
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Создать
+            {t('common.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

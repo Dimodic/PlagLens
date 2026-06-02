@@ -29,12 +29,12 @@ def test_require_global_role_allows_match() -> None:
     assert handler(user=_user(global_role="admin")) == "ok"
 
 
-def test_require_global_role_super_admin_always_allowed() -> None:
-    @require_global_role("admin")
+def test_require_global_role_admin_always_allowed() -> None:
+    @require_global_role("teacher")
     def handler(user: CurrentUser) -> str:
         return "ok"
 
-    assert handler(user=_user(global_role="super_admin")) == "ok"
+    assert handler(user=_user(global_role="admin")) == "ok"
 
 
 def test_require_global_role_denies_others() -> None:
@@ -65,12 +65,12 @@ def test_require_course_role_denies_wrong_role() -> None:
     assert ei.value.status == 403
 
 
-def test_require_course_role_super_admin_override() -> None:
+def test_require_course_role_admin_override() -> None:
     @require_course_role("owner")
     def handler(course_id: str, user: CurrentUser) -> str:
         return "ok"
 
-    assert handler("crs_42", user=_user(global_role="super_admin")) == "ok"
+    assert handler("crs_42", user=_user(global_role="admin")) == "ok"
 
 
 def test_require_course_role_tenant_mismatch() -> None:

@@ -23,7 +23,7 @@ router = APIRouter(prefix="/admin/integrations", tags=["admin"])
 
 
 def _ensure_admin(p: Principal) -> None:
-    if not p.is_admin and not p.is_super_admin:
+    if not p.is_admin:
         raise ProblemException(403, "FORBIDDEN", "Forbidden", "admin required")
 
 
@@ -66,6 +66,39 @@ async def list_dlq(
     repo = ImportJobRepo(session)
     rows = await repo.list_failed_for_tenant(p.tenant_id, limit=limit)
     return {"data": [ImportJobOut.model_validate(r).model_dump() for r in rows]}
+
+
+# -------- Telegram bot settings (admin) --------
+# Read-only view of the deployment's Telegram bot config. Distinct from the
+# per-user Telegram account binding (that lives in the identity service); this
+# only exposes the bot username + whether a token is configured.
+
+
+@router.get("/telegram/bot-settings")
+async def get_telegram_bot_settings(
+    p: Principal = Depends(principal_dep),
+) -> dict[str, Any]:
+    _ensure_admin(p)
+    s = get_settings()
+    return {
+        "username": s.telegram_bot_username,
+        "token_configured": bool(s.telegram_bot_token),
+        "long_polling": s.telegram_use_long_polling,
+    }
+
+
+@router.patch("/telegram/bot-settings")
+async def patch_telegram_bot_settings(
+    payload: dict[str, Any],
+    p: Principal = Depends(principal_dep),
+) -> dict[str, Any]:
+    # Bot-settings (incl. ``bot_token``) are admin-only — enforced below.
+    _ensure_admin(p)
+    # In production: write to Vault. Here: report success but persist nothing.
+    return {
+        "ok": True,
+        "echo": {k: ("***" if "token" in k else v) for k, v in payload.items()},
+    }
 
 
 # -------- OAuth app credentials (admin) --------

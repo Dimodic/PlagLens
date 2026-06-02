@@ -25,6 +25,7 @@ import type {
   PlagiarismCluster,
   PlagiarismPair,
 } from '@/api/endpoints/plagiarism';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/components/ui/utils';
 
 interface ClusterMapViewProps {
@@ -124,17 +125,8 @@ export function ClusterMapView({
   onNodeClick,
   totalSubmissions,
 }: ClusterMapViewProps) {
+  const { t } = useTranslation();
   const layout = useMemo(() => buildLayout(pairs, clusters), [pairs, clusters]);
-
-  if (layout.nodes.length === 0) {
-    return (
-      <div className="py-16 text-center text-sm text-muted-foreground">
-        {totalSubmissions != null && totalSubmissions > 0
-          ? `Проверено ${totalSubmissions} посылок — совпадений не найдено.`
-          : 'Совпадений не найдено — рисовать нечего.'}
-      </div>
-    );
-  }
 
   const { nodes, edges, width, height } = layout;
   const focusNode = focusSubmissionId
@@ -265,6 +257,19 @@ export function ClusterMapView({
     });
   };
 
+  // Empty state — kept AFTER every hook above so the hook count is identical
+  // whether or not there are matches. A return before the hooks changes the
+  // hook order between renders → React error #310 (white-screen crash).
+  if (nodes.length === 0) {
+    return (
+      <div className="py-16 text-center text-sm text-muted-foreground">
+        {totalSubmissions != null && totalSubmissions > 0
+          ? t('cluster_map.empty_checked', { count: totalSubmissions })
+          : t('cluster_map.empty')}
+      </div>
+    );
+  }
+
   return (
     <div
       data-testid="plagiarism-cluster-map"
@@ -287,8 +292,10 @@ export function ClusterMapView({
           data-testid="plagiarism-cluster-map-caption"
           className="mb-3 pr-16 text-xs text-muted-foreground"
         >
-          На карте — {nodes.length} из {totalSubmissions} посылок с
-          совпадениями. У остальных пересечений не найдено.
+          {t('cluster_map.caption', {
+            matched: nodes.length,
+            total: totalSubmissions,
+          })}
         </p>
       )}
       {/* Zoom controls — small, top-right, over the canvas. Native
@@ -299,7 +306,7 @@ export function ClusterMapView({
           type="button"
           onClick={() => zoomBy(1.25)}
           className="h-7 w-7 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          aria-label="Увеличить"
+          aria-label={t('cluster_map.zoom_in')}
         >
           +
         </button>
@@ -307,7 +314,7 @@ export function ClusterMapView({
           type="button"
           onClick={() => zoomBy(1 / 1.25)}
           className="h-7 w-7 rounded text-sm text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          aria-label="Уменьшить"
+          aria-label={t('cluster_map.zoom_out')}
         >
           −
         </button>
@@ -315,8 +322,8 @@ export function ClusterMapView({
           type="button"
           onClick={resetView}
           className="h-7 w-7 rounded text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/60"
-          aria-label="Сбросить вид"
-          title="Сбросить вид"
+          aria-label={t('cluster_map.reset_view')}
+          title={t('cluster_map.reset_view')}
         >
           ⤾
         </button>
@@ -338,7 +345,7 @@ export function ClusterMapView({
         )}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-label="Кластерная карта совпадений (колесо — зум, тяни — pan)"
+        aria-label={t('cluster_map.aria_label')}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -471,7 +478,7 @@ export function ClusterMapView({
               >
                 <title>
                   {onNodeClick
-                    ? `${n.label} — нажмите, чтобы посмотреть код`
+                    ? t('cluster_map.node_view_code', { name: n.label })
                     : n.label}
                 </title>
               </circle>

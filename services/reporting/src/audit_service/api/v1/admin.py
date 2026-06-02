@@ -12,8 +12,8 @@ from ...db import get_engine
 from ...deps import (
     CurrentUser,
     get_session,
+    require_admin,
     require_global_role,
-    require_super_admin,
     tenant_scope,
 )
 from ...repositories.events import AuditEventRepository
@@ -83,7 +83,7 @@ async def retention_status(
 
 @router.post("/retention:run-now", response_model=RetentionRunResponse)
 async def retention_run_now(
-    user: CurrentUser = Depends(require_super_admin()),
+    user: CurrentUser = Depends(require_admin()),
     session: AsyncSession = Depends(get_session),
 ):
     hold_repo = LegalHoldRepository(session)

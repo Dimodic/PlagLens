@@ -5,6 +5,7 @@ import { ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { displayAuthor } from '@/api/endpoints/submissions';
 import type { SubmissionBrief } from '@/api/endpoints/submissions';
+import { useTranslation } from '@/i18n';
 import { formatDateTime } from '@/utils/formatters';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Badge } from '@/components/ui/badge';
@@ -23,15 +24,14 @@ interface SubmissionsTableProps {
   showAuthor?: boolean;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  received: 'Получено',
-  processing: 'Обработка',
-  ready: 'Готово',
-  error: 'Ошибка',
+const STATUS_LABEL_KEY: Record<string, string> = {
+  received: 'submissions_table.status_received',
+  processing: 'submissions_table.status_processing',
+  ready: 'submissions_table.status_ready',
+  error: 'submissions_table.status_error',
 };
 
-function statusBadge(status: string) {
-  const label = STATUS_LABEL[status] ?? status;
+function statusBadge(status: string, label: string) {
   if (status === 'error')
     return (
       <Badge variant="destructive" className="font-normal">
@@ -61,8 +61,9 @@ export function SubmissionsTable({
   submissions,
   showAuthor = true,
 }: SubmissionsTableProps) {
+  const { t } = useTranslation();
   if (submissions.length === 0) {
-    return <EmptyState title="Нет посылок" />;
+    return <EmptyState title={t('submissions_table.empty')} />;
   }
 
   return (
@@ -70,13 +71,13 @@ export function SubmissionsTable({
       <Table>
         <TableHeader>
           <TableRow>
-            {showAuthor && <TableHead>Автор</TableHead>}
-            <TableHead>Версия</TableHead>
-            <TableHead>Отправлено</TableHead>
-            <TableHead>Язык</TableHead>
-            <TableHead>Статус</TableHead>
-            <TableHead>Флаги</TableHead>
-            <TableHead>Оценка</TableHead>
+            {showAuthor && <TableHead>{t('submissions_table.col_author')}</TableHead>}
+            <TableHead>{t('submissions_table.col_version')}</TableHead>
+            <TableHead>{t('submissions_table.col_submitted')}</TableHead>
+            <TableHead>{t('submissions_table.col_language')}</TableHead>
+            <TableHead>{t('submissions_table.col_status')}</TableHead>
+            <TableHead>{t('submissions_table.col_flags')}</TableHead>
+            <TableHead>{t('submissions_table.col_score')}</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
@@ -123,12 +124,17 @@ export function SubmissionsTable({
               <TableCell>
                 <span className="text-sm">{s.language}</span>
               </TableCell>
-              <TableCell>{statusBadge(s.status)}</TableCell>
+              <TableCell>
+                {statusBadge(
+                  s.status,
+                  t(STATUS_LABEL_KEY[s.status] ?? '') || s.status,
+                )}
+              </TableCell>
               <TableCell>
                 <div className="flex items-center gap-1">
                   {s.flags?.suspicious && (
                     <Badge className="bg-sev-high-bg text-sev-high font-normal text-xs">
-                      подозрит.
+                      {t('submissions_table.flag_suspicious')}
                     </Badge>
                   )}
                   {s.flags?.llm_attention && (
@@ -138,7 +144,7 @@ export function SubmissionsTable({
                   )}
                   {s.flags?.manually_flagged && (
                     <Badge variant="outline" className="font-normal text-xs">
-                      флаг
+                      {t('submissions_table.flag_manual')}
                     </Badge>
                   )}
                 </div>
@@ -153,7 +159,7 @@ export function SubmissionsTable({
                   asChild
                   variant="ghost"
                   size="icon"
-                  aria-label="Открыть"
+                  aria-label={t('submissions_table.open')}
                 >
                   <Link to={`/submissions/${s.id}`}>
                     <ExternalLink className="h-4 w-4" />

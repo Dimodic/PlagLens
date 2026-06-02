@@ -11,6 +11,7 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useCreateCourse } from '@/hooks/api/useCourses';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import { Link } from 'react-router-dom';
@@ -21,7 +22,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Page, PageHeader } from '@/components/layout/Page';
 
 export default function CourseCreatePage() {
-  useDocumentTitle('Создание курса');
+  const { t } = useTranslation();
+  useDocumentTitle(t('course_create.title'));
   const navigate = useNavigate();
   const notify = useNotifications();
   const create = useCreateCourse();
@@ -36,7 +38,7 @@ export default function CourseCreatePage() {
 
   const validate = (): boolean => {
     if (name.trim().length < 2) {
-      setNameError('Не короче 2 символов');
+      setNameError(t('course_create.name_min'));
       return false;
     }
     setNameError(null);
@@ -54,7 +56,7 @@ export default function CourseCreatePage() {
         start_date: startDate || null,
         end_date: endDate || null,
       });
-      notify.success('Курс создан');
+      notify.success(t('course_create.created'));
       navigate(`/courses/${created.slug}`);
     } catch (e) {
       setProblem(parseProblem(e));
@@ -67,9 +69,9 @@ export default function CourseCreatePage() {
         to="/courses"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Курсы
+        ← {t('course_create.back_to_courses')}
       </Link>
-      <PageHeader title="Создание курса" />
+      <PageHeader title={t('course_create.title')} />
 
       <form
         data-testid="course-create-form"
@@ -77,7 +79,7 @@ export default function CourseCreatePage() {
         className="space-y-4"
       >
         <div className="space-y-1.5">
-          <Label htmlFor="course-create-name">Название</Label>
+          <Label htmlFor="course-create-name">{t('course_create.name')}</Label>
           <Input
             id="course-create-name"
             value={name}
@@ -94,7 +96,9 @@ export default function CourseCreatePage() {
         </div>
 
         <div className="space-y-1.5" data-testid="course-create-description">
-          <Label htmlFor="course-create-description-field">Описание</Label>
+          <Label htmlFor="course-create-description-field">
+            {t('course_create.description')}
+          </Label>
           <Textarea
             id="course-create-description-field"
             rows={6}
@@ -106,7 +110,9 @@ export default function CourseCreatePage() {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="course-create-start-date">Дата начала</Label>
+            <Label htmlFor="course-create-start-date">
+              {t('course_create.start_date')}
+            </Label>
             <Input
               id="course-create-start-date"
               type="date"
@@ -116,7 +122,9 @@ export default function CourseCreatePage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="course-create-end-date">Дата окончания</Label>
+            <Label htmlFor="course-create-end-date">
+              {t('course_create.end_date')}
+            </Label>
             <Input
               id="course-create-end-date"
               type="date"
@@ -136,7 +144,7 @@ export default function CourseCreatePage() {
             data-testid="course-create-submit"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Создать
+            {t('course_create.submit')}
           </Button>
         </div>
       </form>

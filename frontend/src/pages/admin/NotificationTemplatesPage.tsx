@@ -35,6 +35,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { StatusPill } from '@/components/common/StatusPill';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useNotificationTemplates,
@@ -57,6 +58,7 @@ function EditTemplateModal({
   opened,
   onClose,
 }: EditTemplateModalProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const updateM = useUpdateTemplate();
   const [subject, setSubject] = useState('');
@@ -79,10 +81,10 @@ function EditTemplateModal({
         id: template.id,
         body: { subject: subject || null, body, active },
       });
-      notify.success('Сохранено');
+      notify.success(t('notif_templates.saved'));
       onClose();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('notif_templates.save_failed'));
     }
   };
 
@@ -127,7 +129,7 @@ function EditTemplateModal({
           <div className="flex items-center justify-end">
             <Button onClick={handleSave} disabled={updateM.isPending}>
               {updateM.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Сохранить
+              {t('common.save')}
             </Button>
           </div>
         </div>
@@ -137,7 +139,8 @@ function EditTemplateModal({
 }
 
 export function NotificationTemplatesPage() {
-  useDocumentTitle('Шаблоны уведомлений');
+  const { t } = useTranslation();
+  useDocumentTitle(t('notif_templates.title'));
   const [eventType, setEventType] = useState('');
   const [channel, setChannel] = useState<DeliveryChannel | null>(null);
   const [editing, setEditing] = useState<NotificationTemplate | null>(null);
@@ -150,7 +153,7 @@ export function NotificationTemplatesPage() {
 
   return (
     <Page width="wide">
-      <PageHeader title="Шаблоны уведомлений" />
+      <PageHeader title={t('notif_templates.title')} />
 
       <div className="flex items-center gap-3">
         <Input
@@ -169,7 +172,7 @@ export function NotificationTemplatesPage() {
             <SelectValue placeholder="channel" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все channels</SelectItem>
+            <SelectItem value="all">{t('notif_templates.all_channels')}</SelectItem>
             <SelectItem value="email">email</SelectItem>
             <SelectItem value="telegram">telegram</SelectItem>
             <SelectItem value="in_app">in_app</SelectItem>
@@ -184,7 +187,7 @@ export function NotificationTemplatesPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Шаблонов нет" />
+        <EmptyState title={t('notif_templates.empty')} />
       ) : (
         <Card>
           <CardContent className="p-0">

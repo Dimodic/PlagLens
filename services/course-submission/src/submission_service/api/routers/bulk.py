@@ -39,6 +39,8 @@ from submission_service.schemas.submission import (
     ClaimExternalResult,
     DistributeRequest,
     DistributeResult,
+    MigrateExternalAuthorsRequest,
+    MigrateExternalAuthorsResult,
     SelectionRule,
 )
 from submission_service.services.submission_service import UploadFile as SvcUploadFile
@@ -188,10 +190,10 @@ async def batch_import_submissions(
     ensure_course_staff(user, payload.course_id)
     tenant_slug = tenant_slug_from_request(request, user)
 
-    # super_admin / admin can act cross-tenant (e.g. background importers
+    # admin can act cross-tenant (e.g. background importers
     # using a service token). Resolve the target tenant from the assignment
     # itself so submissions don't end up in the system tenant when an
-    # integration service authenticates as super_admin.
+    # integration service authenticates as admin.
     target_tenant_id = user.tenant_id
     if user.is_admin:
         # Forward the caller's bearer so course-service authorises the read.
@@ -613,6 +615,45 @@ async def claim_external_submissions(
     return ClaimExternalResult(claimed=claimed)
 
 
+@router.post(
+    "/submissions:migrate-external-authors",
+    response_model=MigrateExternalAuthorsResult,
+)
+async def migrate_external_authors(
+    payload: MigrateExternalAuthorsRequest,
+    user: CurrentUser,
+    session: SessionDep,
+) -> MigrateExternalAuthorsResult:
+    """Bulk-reconcile Yandex.Contest author ids on imported submissions.
+
+    Called service-to-service by integration-service's one-shot author-id
+    migration with an **admin** service JWT (same auth as
+    ``:claim-external``). The tenant comes from the token — never the body —
+    and scopes both passes, so the importer can only ever rewrite rows in its
+    own tenant.
+
+      * ``remaps`` — rename each ``yc:<participantId>`` author_id to the
+        stable ``yc:<login>`` form.
+      * ``claims`` — reattribute each now-stable ``yc:<login>`` (or any
+        external key) to the bound PlagLens ``user_id``; ``claims`` is the
+        binding list identity-service returned for this tenant.
+
+    Synchronous bulk UPDATE → returns the counts directly. Idempotent.
+    """
+    if not user.is_admin:
+        raise forbidden("Admin role required")
+    repo = SubmissionRepository(session)
+    submissions_updated, claimed = await repo.migrate_external_authors(
+        tenant_id=user.tenant_id,
+        remaps=[(r.from_, r.to) for r in payload.remaps],
+        claims=[(c.external_id, c.user_id) for c in payload.claims],
+    )
+    await session.commit()
+    return MigrateExternalAuthorsResult(
+        submissions_updated=submissions_updated, claimed=claimed
+    )
+
+
 # ---- read-side: GET /operations/{id} for clients to poll ----
 
 
@@ -624,7 +665,7 @@ async def get_operation(
     op = await repo.get(op_id)
     if op is None:
         raise not_found("Operation not found")
-    if op.tenant_id != user.tenant_id and not user.is_super_admin:
+    if op.tenant_id != user.tenant_id and not user.is_admin:
         raise forbidden("Cross-tenant access denied")
     return {
         "id": op.id,

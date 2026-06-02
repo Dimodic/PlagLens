@@ -23,6 +23,7 @@ import {
 } from '@/hooks/api/useHomeworks';
 import { useSubmission } from '@/hooks/api/useSubmissions';
 import { usePlagiarismRun } from '@/hooks/api/usePlagiarism';
+import { useProfile } from '@/hooks/api/useSearch';
 import { displayAuthor } from '@/api/endpoints/submissions';
 import { useUser } from '@/hooks/api/useUsers';
 import { useAuth } from '@/auth/useAuth';
@@ -188,6 +189,15 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
       ? teacherSubAsgQ.data?.homework_id ?? undefined
       : undefined,
   );
+  // Resolve the author's real name (public profile) so the terminal crumb
+  // reads "Иванов Иван" instead of the opaque `usr_…` id that
+  // ``displayAuthor`` falls back to for manually-uploaded submissions.
+  const teacherSubAuthorId = teacherSubQ.data?.author_id ?? undefined;
+  const teacherSubProfileQ = useProfile(
+    isTeacherSubmission && teacherSubAuthorId?.startsWith('usr_')
+      ? teacherSubAuthorId
+      : undefined,
+  );
 
   // /plagiarism-runs/:runId(/pairs/:pairId) — climb via run → assignment
   // → course/hw so the crumb traces back to the assignment the teacher
@@ -319,7 +329,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     // Hide the homework crumb for the legacy "default" placeholder: backend
     // backfills missing homework_ids with a synthetic `default`-slug HW that
     // shouldn't surface in navigation.
-    if (course && hw && hw.slug !== 'default') {
+    if (course && hw && hw.slug !== 'default' && hw.kind !== 'single') {
       items.push({
         label: hw.title,
         to: `/courses/${course.slug}/homeworks/${hw.slug}`,
@@ -356,7 +366,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     if (course) {
       items.push({ label: course.name, to: `/courses/${course.slug}` });
     }
-    if (course && hw && hw.slug !== 'default') {
+    if (course && hw && hw.slug !== 'default' && hw.kind !== 'single') {
       items.push({
         label: hw.title,
         to: `/courses/${course.slug}/homeworks/${hw.slug}`,
@@ -369,11 +379,11 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
       });
     }
     items.push({
-      // Author shown as the terminal crumb — same display rule used in
-      // the submission row & header (`displayAuthor`).
-      label: sub
-        ? displayAuthor(sub)
-        : `Посылка #${params.id}`,
+      // Author shown as the terminal crumb — prefer the resolved profile
+      // name, fall back to `displayAuthor` (label / id) while it loads.
+      label:
+        teacherSubProfileQ.data?.card.display_name ??
+        (sub ? displayAuthor(sub) : `Посылка #${params.id}`),
       current: true,
     });
     return items;
@@ -410,7 +420,7 @@ export function useBreadcrumbs(): BreadcrumbItem[] {
     if (course) {
       items.push({ label: course.name, to: `/courses/${course.slug}` });
     }
-    if (course && hw && hw.slug !== 'default') {
+    if (course && hw && hw.slug !== 'default' && hw.kind !== 'single') {
       items.push({
         label: hw.title,
         to: `/courses/${course.slug}/homeworks/${hw.slug}`,

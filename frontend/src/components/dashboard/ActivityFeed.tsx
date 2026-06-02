@@ -6,20 +6,22 @@ import dayjs from 'dayjs';
 import type { ActivityEvent } from '@/api/endpoints/reporting';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
+import { useTranslation } from '@/i18n';
 
 interface ActivityFeedProps {
   events: ActivityEvent[] | undefined;
 }
 
 export function ActivityFeed({ events }: ActivityFeedProps) {
+  const { t } = useTranslation();
   if (!events || events.length === 0) {
-    return <EmptyState title="Пока нет событий" />;
+    return <EmptyState title={t('activity_feed.empty')} />;
   }
   return (
     <Card data-testid="activity-feed">
       <CardContent className="p-4">
         <div className="flex flex-col gap-3">
-          <span className="font-medium">Последние события</span>
+          <span className="font-medium">{t('activity_feed.title')}</span>
           <ul className="flex flex-col gap-2">
             {events.map((e) => (
               <li

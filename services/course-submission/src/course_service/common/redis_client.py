@@ -42,6 +42,9 @@ class _MemoryRedis:
             self._counters[key] = self._counters.get(key, 0) + 1
             return self._counters[key]
 
+    async def ping(self) -> bool:
+        return True
+
     async def aclose(self) -> None:
         return
 
@@ -88,6 +91,12 @@ class RedisClient:
     async def incr(self, key: str) -> int:
         backend = await self._get_backend()
         return int(await backend.incr(key))
+
+    async def ping(self) -> bool:
+        """Liveness probe for /readyz. Delegates to the backend; the in-process
+        fallback always answers True (the Redis layer is functioning)."""
+        backend = await self._get_backend()
+        return bool(await backend.ping())
 
     async def aclose(self) -> None:
         if self._backend is not None and hasattr(self._backend, "aclose"):

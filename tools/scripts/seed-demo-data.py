@@ -30,7 +30,7 @@ Environment variables (read from ``infra/.env.local`` if not exported):
     SEED_TEACHER_EMAIL      default "teacher@demo.local"
     SEED_TEACHER_PASSWORD   default "teacher"
     SEED_STUDENT_PASSWORD   default "student"
-    BOOTSTRAP_SUPER_ADMIN_TOKEN  optional X-Bootstrap-Token header for
+    BOOTSTRAP_ADMIN_TOKEN        optional X-Bootstrap-Token header for
                                  tenant create / privileged calls
 
 Exit codes:
@@ -67,7 +67,7 @@ DEFAULT_TEACHER_EMAIL = os.environ.get("SEED_TEACHER_EMAIL", "teacher@demo.local
 DEFAULT_TEACHER_PASSWORD = os.environ.get("SEED_TEACHER_PASSWORD", "teacher")
 DEFAULT_STUDENT_PASSWORD = os.environ.get("SEED_STUDENT_PASSWORD", "student")
 
-BOOTSTRAP_TOKEN = os.environ.get("BOOTSTRAP_SUPER_ADMIN_TOKEN")
+BOOTSTRAP_TOKEN = os.environ.get("BOOTSTRAP_ADMIN_TOKEN")
 
 UI_LOGIN_URL = os.environ.get("DEMO_UI_URL", "http://localhost:5173")
 
@@ -582,16 +582,16 @@ async def _login(ctx: SeedContext, email: str, password: str) -> str:
 async def _ensure_tenant(ctx: SeedContext) -> None:
     """Create the demo tenant; tolerate 409 (already exists).
 
-    First authenticate as the bootstrap super_admin so we can call /tenants.
+    First authenticate as the bootstrap admin so we can call /tenants.
     """
     ctx.console.step(f"ensuring tenant '{ctx.tenant_slug}' exists")
     # Use the direct identity port — auth_sensitive endpoints have a 5/min
     # gateway limit that we'd hit immediately on a multi-step seed.
     headers: dict[str, str] = {"Content-Type": "application/json"}
-    # Attempt super_admin login (idempotent — bootstrap user always exists when stack starts)
-    sa_email = os.environ.get("BOOTSTRAP_SUPER_ADMIN_EMAIL", "admin@plaglens.local")
-    sa_password = os.environ.get("BOOTSTRAP_SUPER_ADMIN_PASSWORD", "changeme")
-    sa_tenant = os.environ.get("BOOTSTRAP_SUPER_ADMIN_TENANT_SLUG", "system")
+    # Attempt admin login (idempotent — bootstrap user always exists when stack starts)
+    sa_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "admin@plaglens.local")
+    sa_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "changeme")
+    sa_tenant = os.environ.get("BOOTSTRAP_ADMIN_TENANT_SLUG", "system")
     sa_token: str | None = None
     try:
         login_resp = await _request_with_fallback(
@@ -603,9 +603,9 @@ async def _ensure_tenant(ctx: SeedContext) -> None:
         )
         if login_resp.status_code == 200:
             sa_token = login_resp.json().get("access_token")
-            ctx.console.ok(f"authenticated as bootstrap super_admin {sa_email}")
+            ctx.console.ok(f"authenticated as bootstrap admin {sa_email}")
     except Exception as e:
-        ctx.console.warn(f"super_admin login failed: {e!r}")
+        ctx.console.warn(f"admin login failed: {e!r}")
     if sa_token:
         headers["Authorization"] = f"Bearer {sa_token}"
     if BOOTSTRAP_TOKEN:
@@ -678,10 +678,10 @@ async def _ensure_users(ctx: SeedContext) -> None:
         if uid:
             ctx.user_ids[spec.email] = uid
 
-    # Authenticate as bootstrap super_admin so we can assign global_roles.
-    sa_email = os.environ.get("BOOTSTRAP_SUPER_ADMIN_EMAIL", "admin@plaglens.local")
-    sa_password = os.environ.get("BOOTSTRAP_SUPER_ADMIN_PASSWORD", "changeme")
-    sa_tenant = os.environ.get("BOOTSTRAP_SUPER_ADMIN_TENANT_SLUG", "system")
+    # Authenticate as bootstrap admin so we can assign global_roles.
+    sa_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "admin@plaglens.local")
+    sa_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "changeme")
+    sa_tenant = os.environ.get("BOOTSTRAP_ADMIN_TENANT_SLUG", "system")
     sa_token: str | None = None
     try:
         login_resp = await _request_with_fallback(
@@ -696,7 +696,7 @@ async def _ensure_users(ctx: SeedContext) -> None:
     except Exception:  # noqa: BLE001
         pass
 
-    # Backfill user_ids using super_admin token (sees cross-tenant)
+    # Backfill user_ids using admin token (sees cross-tenant)
     sa_headers = {"Authorization": f"Bearer {sa_token}"} if sa_token else {}
     if any(spec.email not in ctx.user_ids for spec in _users()):
         resp = await _request_with_fallback(
@@ -711,7 +711,7 @@ async def _ensure_users(ctx: SeedContext) -> None:
                 if email and uid:
                     ctx.user_ids.setdefault(email, str(uid))
 
-    # Promote roles via /users/{id}/role using super_admin token.
+    # Promote roles via /users/{id}/role using admin token.
     if sa_token:
         for spec in _users():
             if spec.global_role == "student":
@@ -1247,7 +1247,7 @@ async def _seed_providers(ctx: SeedContext) -> None:
 async def _reset_demo(ctx: SeedContext) -> None:
     """Wipe the demo tenant. Best-effort: tolerates missing endpoints.
 
-    Tries to log in as the bootstrap super_admin so we can hit the
+    Tries to log in as the bootstrap admin so we can hit the
     privileged DELETE /tenants/{slug} endpoint. If that fails, falls back
     to ``X-Bootstrap-Token`` (rarely set in dev) and finally just continues
     without resetting.
@@ -1255,9 +1255,9 @@ async def _reset_demo(ctx: SeedContext) -> None:
     ctx.console.header("RESET")
     ctx.console.step(f"deleting tenant '{ctx.tenant_slug}'")
 
-    sa_email = os.environ.get("BOOTSTRAP_SUPER_ADMIN_EMAIL", "admin@plaglens.local")
-    sa_password = os.environ.get("BOOTSTRAP_SUPER_ADMIN_PASSWORD", "changeme")
-    sa_tenant = os.environ.get("BOOTSTRAP_SUPER_ADMIN_TENANT_SLUG", "system")
+    sa_email = os.environ.get("BOOTSTRAP_ADMIN_EMAIL", "admin@plaglens.local")
+    sa_password = os.environ.get("BOOTSTRAP_ADMIN_PASSWORD", "changeme")
+    sa_tenant = os.environ.get("BOOTSTRAP_ADMIN_TENANT_SLUG", "system")
     sa_token: str | None = None
     try:
         login_resp = await _request_with_fallback(

@@ -12,6 +12,7 @@
 import { useMemo, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import {
+  ChevronDown,
   Copy,
   Download,
   KeyRound,
@@ -24,6 +25,7 @@ import {
 import {
   useAddMember,
   useBulkInvite,
+  useChangeMemberRole,
   useCourseMembers,
   useRemoveMember,
 } from '@/hooks/api/useCourses';
@@ -33,12 +35,15 @@ import { useBulkBindings } from '@/hooks/api/useInvitations';
 import { useExternalParticipants } from '@/hooks/api/useSubmissions';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
+import { t, useTranslation } from '@/i18n';
 import { parseProblem } from '@/api/problem';
 import { cn } from '@/components/ui/utils';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { AsyncOperationStatus } from '@/components/common/AsyncOperationStatus';
 import { EmptyState } from '@/components/common/EmptyState';
+import { RoleBadge } from '@/components/common/RoleBadge';
+import { ExpandableSearch } from '@/components/common/ExpandableSearch';
 import type { Problem } from '@/api/types';
 import type { CourseMember } from '@/api/endpoints/courses';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -73,22 +78,6 @@ interface MembersPanelProps {
   canManage: boolean;
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  owner: 'владелец',
-  co_owner: 'совладелец',
-  assistant: 'ассистент',
-  student: 'студент',
-};
-
-// Role tone — colours the role label same way as severity. Owner is
-// emphasised, co-owner/assistant get a subtle accent, student stays
-// muted (it's the default — no need to attract eyes).
-const ROLE_TONE: Record<string, string> = {
-  owner: 'text-primary',
-  co_owner: 'text-primary/80',
-  assistant: 'text-primary/80',
-  student: 'text-muted-foreground',
-};
 
 type RoleFilter = 'all' | 'staff' | 'student';
 
@@ -98,7 +87,7 @@ type RoleFilter = 'all' | 'staff' | 'student';
 function downloadCodesCsv(items: BulkBindingItem[]): void {
   const esc = (v: string) => `"${v.replace(/"/g, '""')}"`;
   const rows = [
-    'ФИО,Код',
+    t('members_panel.csv_header'),
     ...items.map((it) => `${esc(it.display_name ?? it.external_id)},${esc(it.code)}`),
   ];
   // Prepend a BOM so Excel reads the Cyrillic as UTF-8.
@@ -116,6 +105,7 @@ function downloadCodesCsv(items: BulkBindingItem[]): void {
 }
 
 export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const { data: members, isLoading } = useCourseMembers(courseId);
   // Only staff can list users; gate via the `enabled` opt so a
@@ -126,6 +116,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
   const addMember = useAddMember(courseId);
   const bulkInvite = useBulkInvite(courseId);
   const remove = useRemoveMember(courseId);
+  const changeRole = useChangeMemberRole(courseId);
 
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -153,7 +144,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       invitationsApi.create({ role: codeRole, course_id: courseId }),
     onSuccess: (inv) => setGeneratedCode(inv.code ?? null),
     onError: (e) =>
-      notify.error(parseProblem(e).detail || 'Не удалось создать код'),
+      notify.error(parseProblem(e).detail || t('members_panel.code_create_error')),
   });
 
   // ---- Я.Контест codes: one claim code per imported participant. The
@@ -177,7 +168,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       },
       {
         onError: (e) =>
-          notify.error(parseProblem(e).detail || 'Не удалось создать коды'),
+          notify.error(parseProblem(e).detail || t('members_panel.codes_create_error')),
       },
     );
   };
@@ -234,13 +225,13 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!addUserId.trim()) {
-      setAddUserIdError('Введите идентификатор пользователя');
+      setAddUserIdError(t('members_panel.add_user_id_required'));
       return;
     }
     setAddUserIdError(null);
     try {
       await addMember.mutateAsync({ user_id: addUserId, role: addRole });
-      notify.success('Участник добавлен');
+      notify.success(t('members_panel.member_added'));
       setAddOpen(false);
       resetAddForm();
     } catch (err) {
@@ -255,7 +246,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       .map((s) => s.trim())
       .filter(Boolean);
     if (emails.length === 0) {
-      setBulkEmailsError('Введите хотя бы один email');
+      setBulkEmailsError(t('members_panel.bulk_emails_required'));
       return;
     }
     setBulkEmailsError(null);
@@ -266,9 +257,26 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
         message: bulkMessage || undefined,
       });
       setOpId(op.id);
-      notify.info(`Приглашаем ${emails.length} человек…`);
+      notify.info(t('members_panel.inviting_count', { count: emails.length }));
       setBulkOpen(false);
       resetBulkForm();
+    } catch (err) {
+      setProblem(parseProblem(err));
+    }
+  };
+
+  // Promote/demote an existing member between student and assistant. The
+  // distribute («Распределить между ассистентами») pool keys off the *course*
+  // role, so this is how a student becomes a grader for THIS course — adding
+  // them via the dialog 409s ("already a member") and the global role doesn't
+  // affect the per-course grader pool.
+  const handleSetRole = async (
+    m: CourseMember,
+    role: 'student' | 'assistant',
+  ) => {
+    try {
+      await changeRole.mutateAsync({ user_id: m.user_id, role });
+      notify.success(t('members_panel.role_changed'));
     } catch (err) {
       setProblem(parseProblem(err));
     }
@@ -280,66 +288,70 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
               management actions on the right. No header rule, just a
               normal flex row that sits above the list. ----- */}
       <div className="flex flex-wrap items-center gap-3">
-        <Input
-          type="search"
-          placeholder="Поиск по имени / email / id"
+        <ExpandableSearch
           value={query}
-          onChange={(e) => setQuery(e.currentTarget.value)}
-          className="h-9 max-w-sm flex-1"
+          onChange={setQuery}
+          placeholder={t('members_panel.search_placeholder')}
           data-testid="course-members-search"
         />
         <FilterChips
           value={roleFilter}
           onChange={setRoleFilter}
           options={[
-            { value: 'all', label: 'все' },
-            { value: 'staff', label: 'преподаватели' },
-            { value: 'student', label: 'студенты' },
+            { value: 'all', label: t('members_panel.filter_all') },
+            { value: 'staff', label: t('members_panel.filter_staff') },
+            { value: 'student', label: t('members_panel.filter_student') },
           ]}
         />
         {canManage && (
-          <div className="ml-auto flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setAddOpen(true)}
-              data-testid="course-members-add-button"
-            >
-              <UserPlus className="mr-2 h-3.5 w-3.5" />
-              Добавить
-            </Button>
-            <Button
-              size="sm"
-              onClick={() => setBulkOpen(true)}
-              data-testid="course-members-bulk-button"
-            >
-              <Users className="mr-2 h-3.5 w-3.5" />
-              Пригласить
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setGeneratedCode(null);
-                setCodeOpen(true);
-              }}
-              data-testid="course-members-code-button"
-            >
-              <KeyRound className="mr-2 h-3.5 w-3.5" />
-              Код
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                bulkBindings.reset();
-                setYcOpen(true);
-              }}
-              data-testid="course-members-yc-button"
-            >
-              <Ticket className="mr-2 h-3.5 w-3.5" />
-              Коды Я.Контеста
-            </Button>
+          <div className="ml-auto">
+            {/* One primary action with a menu of the four ways to add people —
+                keeps the toolbar light (was four side-by-side buttons). */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="sm" data-testid="course-members-add-menu">
+                  <UserPlus className="mr-2 h-3.5 w-3.5" />
+                  {t('members_panel.add')}
+                  <ChevronDown className="ml-1.5 h-3.5 w-3.5 opacity-70" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem
+                  onClick={() => setAddOpen(true)}
+                  data-testid="course-members-add-button"
+                >
+                  <UserPlus className="mr-2 h-4 w-4" />
+                  {t('members_panel.add_manual')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => setBulkOpen(true)}
+                  data-testid="course-members-bulk-button"
+                >
+                  <Users className="mr-2 h-4 w-4" />
+                  {t('members_panel.invite_list')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    setGeneratedCode(null);
+                    setCodeOpen(true);
+                  }}
+                  data-testid="course-members-code-button"
+                >
+                  <KeyRound className="mr-2 h-4 w-4" />
+                  {t('members_panel.invite_code')}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => {
+                    bulkBindings.reset();
+                    setYcOpen(true);
+                  }}
+                  data-testid="course-members-yc-button"
+                >
+                  <Ticket className="mr-2 h-4 w-4" />
+                  {t('members_panel.yc_codes')}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         )}
       </div>
@@ -360,8 +372,8 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
         <EmptyState
           title={
             enrichedMembers.length === 0
-              ? 'Нет участников'
-              : 'Никто не подходит под фильтр'
+              ? t('members_panel.empty')
+              : t('members_panel.empty_filtered')
           }
         />
       ) : (
@@ -397,14 +409,9 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                     </div>
                   )}
                 </div>
-                <span
-                  className={cn(
-                    'flex-none text-xs uppercase tracking-wider w-24 text-right',
-                    ROLE_TONE[m.role] ?? 'text-muted-foreground',
-                  )}
-                >
-                  {ROLE_LABEL[m.role] ?? m.role}
-                </span>
+                <div className="flex w-24 flex-none justify-end">
+                  <RoleBadge role={m.role} />
+                </div>
                 <span className="hidden md:inline flex-none text-xs tabular-nums text-muted-foreground w-24 text-right">
                   {formatDate(m.joined_at)}
                 </span>
@@ -413,18 +420,34 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                     <DropdownMenuTrigger asChild>
                       <button
                         type="button"
-                        aria-label="Действия"
+                        aria-label={t('members_panel.actions')}
                         className="text-muted-foreground hover:text-foreground p-1 -m-1 rounded opacity-60 group-hover:opacity-100 transition-opacity"
                       >
                         <MoreHorizontal className="h-4 w-4" />
                       </button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
+                      {m.role === 'student' && (
+                        <DropdownMenuItem
+                          onClick={() => handleSetRole(m, 'assistant')}
+                          data-testid={`member-make-assistant-${m.user_id}`}
+                        >
+                          {t('members_panel.make_assistant')}
+                        </DropdownMenuItem>
+                      )}
+                      {m.role === 'assistant' && (
+                        <DropdownMenuItem
+                          onClick={() => handleSetRole(m, 'student')}
+                          data-testid={`member-make-student-${m.user_id}`}
+                        >
+                          {t('members_panel.make_student')}
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuItem
                         onClick={() => setConfirm(m)}
                         className="text-destructive focus:text-destructive"
                       >
-                        Удалить из курса
+                        {t('members_panel.remove_from_course')}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -447,11 +470,11 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Добавить участника</DialogTitle>
+            <DialogTitle>{t('members_panel.add_dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleAddSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="course-members-add-user-id">ID пользователя</Label>
+              <Label htmlFor="course-members-add-user-id">{t('members_panel.user_id_label')}</Label>
               <Input
                 id="course-members-add-user-id"
                 placeholder="usr_..."
@@ -466,7 +489,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="course-members-add-role">Роль</Label>
+              <Label htmlFor="course-members-add-role">{t('members_panel.role_label')}</Label>
               <Select
                 value={addRole}
                 onValueChange={(v) =>
@@ -480,8 +503,8 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">Студент</SelectItem>
-                  <SelectItem value="assistant">Ассистент</SelectItem>
+                  <SelectItem value="student">{t('members_panel.role_student')}</SelectItem>
+                  <SelectItem value="assistant">{t('members_panel.role_assistant')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -494,7 +517,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   resetAddForm();
                 }}
               >
-                Отмена
+                {t('members_panel.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -504,7 +527,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                 {addMember.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Добавить
+                {t('members_panel.add')}
               </Button>
             </DialogFooter>
           </form>
@@ -523,11 +546,11 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Массовое приглашение</DialogTitle>
+            <DialogTitle>{t('members_panel.bulk_dialog_title')}</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleBulkSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="course-members-bulk-emails">Email-адреса</Label>
+              <Label htmlFor="course-members-bulk-emails">{t('members_panel.emails_label')}</Label>
               <Textarea
                 id="course-members-bulk-emails"
                 rows={5}
@@ -537,7 +560,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                 aria-invalid={!!bulkEmailsError}
               />
               <p className="text-xs text-muted-foreground">
-                По одному в строке или через запятую
+                {t('members_panel.emails_hint')}
               </p>
               {bulkEmailsError && (
                 <p className="text-sm text-destructive">{bulkEmailsError}</p>
@@ -545,7 +568,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="course-members-bulk-role">
-                Роль для приглашённых
+                {t('members_panel.bulk_role_label')}
               </Label>
               <Select
                 value={bulkRole}
@@ -560,14 +583,14 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="student">Студент</SelectItem>
-                  <SelectItem value="assistant">Ассистент</SelectItem>
+                  <SelectItem value="student">{t('members_panel.role_student')}</SelectItem>
+                  <SelectItem value="assistant">{t('members_panel.role_assistant')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="course-members-bulk-message">
-                Сообщение (опционально)
+                {t('members_panel.message_label')}
               </Label>
               <Textarea
                 id="course-members-bulk-message"
@@ -585,7 +608,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   resetBulkForm();
                 }}
               >
-                Отмена
+                {t('members_panel.cancel')}
               </Button>
               <Button
                 type="submit"
@@ -595,7 +618,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                 {bulkInvite.isPending && (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 )}
-                Отправить
+                {t('members_panel.send')}
               </Button>
             </DialogFooter>
           </form>
@@ -615,13 +638,12 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Пригласить по коду</DialogTitle>
+            <DialogTitle>{t('members_panel.code_dialog_title')}</DialogTitle>
           </DialogHeader>
           {generatedCode ? (
             <div className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                Передайте этот код — человек введёт его в профиле
-                («Активировать код») и попадёт в этот курс.
+                {t('members_panel.code_share_hint')}
               </p>
               <div className="flex items-center gap-2">
                 <code
@@ -634,10 +656,10 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   type="button"
                   variant="outline"
                   size="icon"
-                  title="Скопировать"
+                  title={t('members_panel.copy')}
                   onClick={() => {
                     void navigator.clipboard?.writeText(generatedCode);
-                    notify.info('Скопировано');
+                    notify.info(t('members_panel.copied'));
                   }}
                 >
                   <Copy className="h-4 w-4" />
@@ -649,17 +671,17 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   variant="ghost"
                   onClick={() => setGeneratedCode(null)}
                 >
-                  Создать ещё
+                  {t('members_panel.create_more')}
                 </Button>
                 <Button type="button" onClick={() => setCodeOpen(false)}>
-                  Готово
+                  {t('members_panel.done')}
                 </Button>
               </DialogFooter>
             </div>
           ) : (
             <div className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="course-members-code-role">Роль</Label>
+                <Label htmlFor="course-members-code-role">{t('members_panel.role_label')}</Label>
                 <Select
                   value={codeRole}
                   onValueChange={(v) =>
@@ -673,14 +695,13 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="student">Студент</SelectItem>
-                    <SelectItem value="assistant">Ассистент</SelectItem>
+                    <SelectItem value="student">{t('members_panel.role_student')}</SelectItem>
+                    <SelectItem value="assistant">{t('members_panel.role_assistant')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <p className="text-xs text-muted-foreground">
-                Одноразовый код привязан к этому курсу — в отличие от
-                приглашения из админки.
+                {t('members_panel.code_one_time_hint')}
               </p>
               <DialogFooter>
                 <Button
@@ -688,7 +709,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   variant="ghost"
                   onClick={() => setCodeOpen(false)}
                 >
-                  Отмена
+                  {t('members_panel.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -699,7 +720,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   {createCode.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Создать код
+                  {t('members_panel.code_create')}
                 </Button>
               </DialogFooter>
             </div>
@@ -720,12 +741,10 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
       >
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Привязка участников Яндекс.Контеста</DialogTitle>
+            <DialogTitle>{t('members_panel.yc_dialog_title')}</DialogTitle>
           </DialogHeader>
           <p className="text-xs text-muted-foreground">
-            Сгенерируйте код для каждого импортированного участника и раздайте
-            студентам. Студент введёт код в профиле → «Активировать код», и его
-            посылки из контеста привяжутся к аккаунту.
+            {t('members_panel.yc_instructions')}
           </p>
 
           {participants.isLoading ? (
@@ -739,7 +758,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
             <div className="space-y-3" data-testid="course-members-yc-result">
               <div className="flex items-center justify-between gap-2">
                 <span className="text-sm text-muted-foreground">
-                  Готово · {ycItems.length}
+                  {t('members_panel.yc_ready_count', { count: ycItems.length })}
                 </span>
                 <div className="flex items-center gap-2">
                   <Button
@@ -751,11 +770,11 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                         .map((it) => `${it.display_name ?? it.external_id}\t${it.code}`)
                         .join('\n');
                       void navigator.clipboard?.writeText(blob);
-                      notify.info('Скопировано');
+                      notify.info(t('members_panel.copied'));
                     }}
                   >
                     <Copy className="mr-2 h-3.5 w-3.5" />
-                    Скопировать всё
+                    {t('members_panel.copy_all')}
                   </Button>
                   <Button
                     type="button"
@@ -764,7 +783,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                     onClick={() => downloadCodesCsv(ycItems)}
                   >
                     <Download className="mr-2 h-3.5 w-3.5" />
-                    Скачать CSV
+                    {t('members_panel.download_csv')}
                   </Button>
                 </div>
               </div>
@@ -785,10 +804,10 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                       variant="ghost"
                       size="icon"
                       className="h-7 w-7 flex-none"
-                      title="Скопировать"
+                      title={t('members_panel.copy')}
                       onClick={() => {
                         void navigator.clipboard?.writeText(it.code);
-                        notify.info('Скопировано');
+                        notify.info(t('members_panel.copied'));
                       }}
                     >
                       <Copy className="h-3.5 w-3.5" />
@@ -798,16 +817,16 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
               </div>
               <DialogFooter>
                 <Button type="button" onClick={() => setYcOpen(false)}>
-                  Готово
+                  {t('members_panel.done')}
                 </Button>
               </DialogFooter>
             </div>
           ) : (participants.data?.length ?? 0) === 0 ? (
-            <EmptyState title="Непривязанных участников нет." />
+            <EmptyState title={t('members_panel.yc_empty')} />
           ) : (
             <div className="space-y-4">
               <p className="text-sm text-foreground">
-                {participants.data?.length} непривязанных участников
+                {t('members_panel.yc_unbound_count', { count: participants.data?.length ?? 0 })}
               </p>
               <DialogFooter>
                 <Button
@@ -815,7 +834,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   variant="ghost"
                   onClick={() => setYcOpen(false)}
                 >
-                  Отмена
+                  {t('members_panel.cancel')}
                 </Button>
                 <Button
                   type="button"
@@ -826,7 +845,7 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
                   {bulkBindings.isPending && (
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
-                  Создать коды
+                  {t('members_panel.yc_create')}
                 </Button>
               </DialogFooter>
             </div>
@@ -836,20 +855,22 @@ export function MembersPanel({ courseId, canManage }: MembersPanelProps) {
 
       <ConfirmDialog
         opened={!!confirm}
-        title="Удалить участника?"
+        title={t('members_panel.remove_confirm_title')}
         message={
           confirm
-            ? `Пользователь ${confirm.user?.display_name ?? confirm.user_id} будет удалён из курса.`
+            ? t('members_panel.remove_confirm_message', {
+                name: confirm.user?.display_name ?? confirm.user_id,
+              })
             : ''
         }
         destructive
-        confirmLabel="Удалить"
+        confirmLabel={t('members_panel.remove')}
         loading={remove.isPending}
         onConfirm={async () => {
           if (!confirm) return;
           try {
             await remove.mutateAsync(confirm.user_id);
-            notify.success('Участник удалён');
+            notify.success(t('members_panel.member_removed'));
           } catch (err) {
             setProblem(parseProblem(err));
           }

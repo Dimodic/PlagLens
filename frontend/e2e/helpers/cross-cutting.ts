@@ -176,7 +176,7 @@ async function loginWithBackoff(role: DemoRole): Promise<string> {
       continue;
     }
     // 401 + TWO_FACTOR_REQUIRED — another test left 2FA on this account.
-    // Try /auth/2fa/disable via super_admin if we can; else clearly skip.
+    // Try /auth/2fa/disable via admin if we can; else clearly skip.
     lastBody = await r.text().catch(() => '');
     if (r.status() === 401 && lastBody.includes('TWO_FACTOR_REQUIRED')) {
       await ctx.dispose();

@@ -93,7 +93,6 @@ async def receive_webhook(
         signature = _signature_from_headers(headers) or ""
         sig_valid = verify_signature(secret, payload, signature)
 
-    s3_uri = f"s3://plaglens-webhooks/{kind}/{body_hash}.json"
     raw_text: Optional[str] = None
     try:
         raw_text = payload.decode("utf-8")
@@ -109,7 +108,9 @@ async def receive_webhook(
         payload_hash=body_hash,
         signature_valid=sig_valid,
         raw_payload=raw_text,
-        raw_payload_uri=s3_uri,
+        # Raw payload is stored inline (raw_payload); no object-store URI is
+        # produced until/unless external blob storage is wired up.
+        raw_payload_uri=None,
         status="received" if sig_valid else "ignored",
     )
     await repo.add(evt)

@@ -6,7 +6,7 @@
  *   test('teacher can do X', async ({ teacherPage }) => { ... });
  *
  * Fixtures provided:
- *   apiClient    — pre-authed ApiClient (super_admin)
+ *   apiClient    — pre-authed ApiClient (admin)
  *   adminPage    — Page logged in as admin@demo.local
  *   teacherPage  — Page logged in as teacher@demo.local
  *   studentPage  — Page logged in as student1@demo.local
@@ -65,7 +65,7 @@ async function loginPageAs(page: Page, role: DemoRole): Promise<void> {
 export const test = base.extend<CustomFixtures>({
   apiClient: async ({}, use) => {
     const c = await ApiClient.create();
-    await c.loginAs('super_admin');
+    await c.loginAs('admin');
     await use(c);
     await c.dispose();
   },

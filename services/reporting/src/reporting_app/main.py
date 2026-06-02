@@ -23,6 +23,7 @@ live on as importable libraries.
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import AsyncExitStack, asynccontextmanager
 
 from fastapi import APIRouter, FastAPI
@@ -30,6 +31,7 @@ from plaglens_common.health import health_router
 from plaglens_common.observability import install_observability
 from plaglens_common.problem import make_handlers
 from pydantic import ValidationError
+from sqlalchemy import text
 
 from audit_service.api.v1.admin import router as _audit_admin_router
 from audit_service.api.v1.events import router as _audit_events_router
@@ -135,7 +137,45 @@ def create_app() -> FastAPI:
     app.include_router(_notification_v1_router)
 
     # --- Single shared health/metrics/version surface -----------------------
-    app.include_router(health_router(service_name="reporting", version="0.1.0"))
+    # Real readiness probes for the gateway's /readyz. The reporting sub-service
+    # populates ``app.state.session_maker`` / ``app.state.redis`` during its
+    # lifespan (which runs LAST in ``lifespan`` above), so both closures read
+    # state at call time. Each owns its try/except and returns a bool — never
+    # raises — so a single failing dependency yields a 503 with that check
+    # marked "fail", not a 500. (Postgres reachable via one ``SELECT 1`` — the
+    # audit/notification/reporting schemas share one server.)
+    async def _check_db() -> bool:
+        try:
+            session_maker = getattr(app.state, "session_maker", None)
+            if session_maker is None:
+                return False
+
+            async def _probe() -> None:
+                async with session_maker() as session:
+                    await session.execute(text("SELECT 1"))
+
+            await asyncio.wait_for(_probe(), timeout=2.0)
+            return True
+        except Exception:
+            return False
+
+    async def _check_redis() -> bool:
+        try:
+            redis = getattr(app.state, "redis", None)
+            if redis is None:
+                return False
+            await asyncio.wait_for(redis.ping(), timeout=1.0)
+            return True
+        except Exception:
+            return False
+
+    app.include_router(
+        health_router(
+            service_name="reporting",
+            version="0.1.0",
+            checks={"db": _check_db, "redis": _check_redis},
+        )
+    )
 
     # Real app metrics (Prometheus) + traces (OpenTelemetry -> Jaeger).
     install_observability(app, service_name="reporting")

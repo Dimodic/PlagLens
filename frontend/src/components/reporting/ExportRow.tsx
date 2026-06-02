@@ -12,6 +12,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type { ExportJob, ExportStatus } from '@/api/endpoints/reporting';
 
 const STATUS_CLASS: Record<ExportStatus, string> = {
@@ -22,12 +23,12 @@ const STATUS_CLASS: Record<ExportStatus, string> = {
   cancelled: 'bg-sev-mid-bg text-sev-mid hover:bg-sev-mid-bg',
 };
 
-const STATUS_LABEL: Record<ExportStatus, string> = {
-  queued: 'В очереди',
-  running: 'Выполняется',
-  completed: 'Готово',
-  failed: 'Ошибка',
-  cancelled: 'Отменено',
+const STATUS_LABEL_KEY: Record<ExportStatus, string> = {
+  queued: 'export_row.status_queued',
+  running: 'export_row.status_running',
+  completed: 'export_row.status_completed',
+  failed: 'export_row.status_failed',
+  cancelled: 'export_row.status_cancelled',
 };
 
 export interface ExportRowProps {
@@ -57,6 +58,7 @@ export function ExportRow({
   onCancel,
   onDelete,
 }: ExportRowProps) {
+  const { t } = useTranslation();
   const isTerminal =
     job.status === 'completed' ||
     job.status === 'failed' ||
@@ -78,7 +80,7 @@ export function ExportRow({
           variant="secondary"
           className={cn('font-normal', STATUS_CLASS[job.status])}
         >
-          {STATUS_LABEL[job.status]}
+          {t(STATUS_LABEL_KEY[job.status])}
         </Badge>
         {job.error?.title && (
           <p className="mt-0.5 text-xs text-destructive">{job.error.title}</p>
@@ -98,14 +100,14 @@ export function ExportRow({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Скачать"
+                  aria-label={t('export_row.download')}
                   onClick={() => onDownload(job.id)}
                   data-testid={`download-${job.id}`}
                 >
                   <Download className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Скачать</TooltipContent>
+              <TooltipContent>{t('export_row.download')}</TooltipContent>
             </Tooltip>
           )}
           {job.status === 'failed' && onRetry && (
@@ -114,14 +116,14 @@ export function ExportRow({
                 <Button
                   variant="ghost"
                   size="icon"
-                  aria-label="Повторить"
+                  aria-label={t('export_row.retry')}
                   onClick={() => onRetry(job.id)}
                   data-testid={`retry-${job.id}`}
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Повторить</TooltipContent>
+              <TooltipContent>{t('export_row.retry')}</TooltipContent>
             </Tooltip>
           )}
           {isActive && onCancel && (
@@ -131,14 +133,14 @@ export function ExportRow({
                   variant="ghost"
                   size="icon"
                   className="text-sev-mid hover:text-sev-mid"
-                  aria-label="Отменить"
+                  aria-label={t('export_row.cancel')}
                   onClick={() => onCancel(job.id)}
                   data-testid={`cancel-${job.id}`}
                 >
                   <X className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Отменить</TooltipContent>
+              <TooltipContent>{t('export_row.cancel')}</TooltipContent>
             </Tooltip>
           )}
           {isTerminal && onDelete && (
@@ -148,14 +150,14 @@ export function ExportRow({
                   variant="ghost"
                   size="icon"
                   className="text-destructive hover:text-destructive"
-                  aria-label="Удалить"
+                  aria-label={t('common.delete')}
                   onClick={() => onDelete(job.id)}
                   data-testid={`delete-${job.id}`}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Удалить</TooltipContent>
+              <TooltipContent>{t('common.delete')}</TooltipContent>
             </Tooltip>
           )}
         </div>

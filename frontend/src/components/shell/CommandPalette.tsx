@@ -2,19 +2,15 @@
  * ⌘K command palette.
  *
  * Two modes:
- *   1. Empty query → "Quick actions" — role-aware shortcuts to the
- *      common landing pages (Dashboard / My courses / Profile / etc).
- *      Beats showing a sad "type at least 2 characters" stub.
- *   2. Query ≥ 2 chars → federated search via GET /api/v1/search;
- *      groups (Courses / Assignments / People) come back from the
- *      gateway and we render them with hairline-separated items.
+ *   1. Empty query → "Quick actions" — role-aware shortcuts.
+ *   2. Query ≥ 2 chars → federated search via GET /api/v1/search; groups
+ *      (Люди / Посылки / Курсы / Задания) come back from the gateway and we
+ *      render them hairline-separated. A pinned «Все результаты» item is
+ *      first, so Enter opens the full results page (/search?q=…).
  *
- * RBAC quirks worth remembering:
- *   - `_search_users` on the gateway short-circuits for non-admins, so
- *     students will never see a People group. That's fine; the empty
- *     state explains it.
- *   - Students with zero courses get an empty Courses group too. The
- *     'no results' fallback nudges them toward Профиль → Код приглашения.
+ * Everyone (incl. students, cross-tenant) can search people and open the
+ * public profile; submissions are pre-scoped server-side to the viewer's
+ * courses.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -22,6 +18,7 @@ import {
   Bell,
   BookOpen,
   Building2,
+  FileCode2,
   FileText,
   Home,
   Search as SearchIcon,
@@ -41,6 +38,7 @@ import {
 import { useTranslation } from '@/i18n';
 import { useAuth } from '@/auth/useAuth';
 import { useGlobalSearch } from '@/hooks/api/useSearch';
+import { RoleBadge } from '@/components/common/RoleBadge';
 import type { SearchGroup, SearchType } from '@/api/endpoints/search';
 
 interface CommandPaletteProps {
@@ -48,26 +46,27 @@ interface CommandPaletteProps {
   onClose: () => void;
 }
 
-const TYPE_ORDER: SearchType[] = ['course', 'assignment', 'user'];
+const TYPE_ORDER: SearchType[] = ['person', 'submission', 'course', 'assignment'];
 
 function typeIcon(type: SearchType) {
   if (type === 'course') return <BookOpen className="h-4 w-4 text-muted-foreground" />;
   if (type === 'assignment') return <FileText className="h-4 w-4 text-muted-foreground" />;
+  if (type === 'submission') return <FileCode2 className="h-4 w-4 text-muted-foreground" />;
   return <UserIcon className="h-4 w-4 text-muted-foreground" />;
 }
 
-function typeLabel(type: SearchType, t: (k: string) => string): string {
-  const k =
-    type === 'course' ? 'cmdk.group.courses'
-    : type === 'assignment' ? 'cmdk.group.assignments'
-    : 'cmdk.group.users';
-  return t(k);
-}
+const TYPE_LABEL_KEY: Record<SearchType, string> = {
+  person: 'cmdk.group.users',
+  submission: 'cmdk.group.submissions',
+  course: 'cmdk.group.courses',
+  assignment: 'cmdk.group.assignments',
+};
 
 function buildHref(type: SearchType, id: string, slug?: string): string {
   if (type === 'course') return slug ? `/courses/${slug}` : `/courses/${id}`;
   if (type === 'assignment') return `/assignments/${id}`;
-  return `/admin/users/${id}`;
+  if (type === 'submission') return `/submissions/${id}`;
+  return `/u/${id}`;
 }
 
 interface QuickAction {
@@ -78,12 +77,21 @@ interface QuickAction {
 }
 
 function quickActionsForRole(role: string | undefined): QuickAction[] {
+  const isStudent = role === 'student';
   const base: QuickAction[] = [
     { id: 'home', labelKey: 'cmdk.quick.dashboard', to: '/', icon: <Home className="h-4 w-4 text-muted-foreground" /> },
-    { id: 'courses', labelKey: 'cmdk.quick.courses', to: '/me/assignments', icon: <BookOpen className="h-4 w-4 text-muted-foreground" /> },
+  ];
+  // A student's dashboard (home) *is* their course list, so a separate
+  // "Courses" entry pointed at the same screen — two identical search hits.
+  // Only staff get a distinct courses destination (the real /courses list,
+  // not /me/assignments which redirects students back to home).
+  if (!isStudent) {
+    base.push({ id: 'courses', labelKey: 'cmdk.quick.courses', to: '/courses', icon: <BookOpen className="h-4 w-4 text-muted-foreground" /> });
+  }
+  base.push(
     { id: 'profile', labelKey: 'cmdk.quick.profile', to: '/me/profile', icon: <UserIcon className="h-4 w-4 text-muted-foreground" /> },
     { id: 'notifications', labelKey: 'cmdk.quick.notifications', to: '/notifications', icon: <Bell className="h-4 w-4 text-muted-foreground" /> },
-  ];
+  );
   if (role === 'teacher' || role === 'admin') {
     base.push({
       id: 'integrations',
@@ -137,21 +145,17 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
     [user?.global_role],
   );
 
-  const onPickResult = useCallback(
-    (type: SearchType, id: string, slug?: string) => {
-      navigate(buildHref(type, id, slug));
-      onClose();
-    },
-    [navigate, onClose],
-  );
-
-  const onPickQuick = useCallback(
+  const go = useCallback(
     (to: string) => {
       navigate(to);
       onClose();
     },
     [navigate, onClose],
   );
+
+  const seeAll = useCallback(() => {
+    go(`/search?q=${encodeURIComponent(trimmed)}`);
+  }, [go, trimmed]);
 
   return (
     <CommandDialog open={open} onOpenChange={(v) => !v && onClose()}>
@@ -164,8 +168,9 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
       <CommandList>
         {!hasQuery ? (
           <>
-            <div className="flex items-center gap-2 px-4 py-3 text-xs text-muted-foreground">
-              <SearchIcon className="h-3.5 w-3.5" />
+            {/* No magnifier here — CommandInput already renders one; a
+                second icon on the hint row read as "two search icons". */}
+            <div className="px-4 py-3 text-xs text-muted-foreground">
               {t('cmdk.hint')}
             </div>
             <CommandSeparator />
@@ -174,7 +179,7 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
                 <CommandItem
                   key={a.id}
                   value={`quick-${a.id} ${t(a.labelKey)}`}
-                  onSelect={() => onPickQuick(a.to)}
+                  onSelect={() => go(a.to)}
                   className="gap-3"
                   data-testid={`cmdk-quick-${a.id}`}
                 >
@@ -184,38 +189,59 @@ export function CommandPalette({ open, onClose }: CommandPaletteProps) {
               ))}
             </CommandGroup>
           </>
-        ) : isLoading ? (
-          <div className="px-4 py-6 text-sm text-muted-foreground">
-            {t('cmdk.loading')}
-          </div>
-        ) : groups.length === 0 ? (
-          <CommandEmpty>{t('cmdk.no_results')}</CommandEmpty>
         ) : (
-          groups.map((g) => (
-            <CommandGroup key={g.type} heading={typeLabel(g.type, t)}>
-              {g.items.map((r) => {
-                const subtitle = r.email ?? r.slug ?? '';
-                return (
-                  <CommandItem
-                    key={`${g.type}-${r.id}`}
-                    value={`${r.title} ${subtitle}`}
-                    onSelect={() => onPickResult(g.type, r.id, r.slug)}
-                    className="gap-3"
-                  >
-                    {typeIcon(g.type)}
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm">{r.title}</div>
-                      {subtitle && (
-                        <div className="truncate text-xs text-muted-foreground">
-                          {subtitle}
-                        </div>
-                      )}
-                    </div>
-                  </CommandItem>
-                );
-              })}
+          <>
+            {/* Pinned first → Enter opens the full results page. */}
+            <CommandGroup>
+              <CommandItem
+                value={`__all__ ${trimmed}`}
+                onSelect={seeAll}
+                className="gap-3"
+                data-testid="cmdk-see-all"
+              >
+                <SearchIcon className="h-4 w-4 text-primary" />
+                <span className="flex-1 truncate text-sm">
+                  {t('cmdk.see_all', { query: trimmed })}
+                </span>
+                <kbd className="rounded border border-border px-1 text-[10px] text-muted-foreground">
+                  ↵
+                </kbd>
+              </CommandItem>
             </CommandGroup>
-          ))
+            {isLoading ? (
+              <div className="px-4 py-6 text-sm text-muted-foreground">
+                {t('cmdk.loading')}
+              </div>
+            ) : groups.length === 0 ? (
+              <CommandEmpty>{t('cmdk.no_results')}</CommandEmpty>
+            ) : (
+              groups.map((g) => (
+                <CommandGroup key={g.type} heading={t(TYPE_LABEL_KEY[g.type])}>
+                  {g.items.map((r) => (
+                    <CommandItem
+                      key={`${g.type}-${r.id}`}
+                      value={`${g.type}-${r.id} ${r.title} ${r.subtitle ?? ''}`}
+                      onSelect={() => go(buildHref(g.type, r.id, r.slug))}
+                      className="gap-3"
+                    >
+                      {typeIcon(g.type)}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm">{r.title}</div>
+                        {r.subtitle && (
+                          <div className="truncate text-xs text-muted-foreground">
+                            {r.subtitle}
+                          </div>
+                        )}
+                      </div>
+                      {g.type === 'person' && r.role && (
+                        <RoleBadge role={r.role} className="flex-none" />
+                      )}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              ))
+            )}
+          </>
         )}
       </CommandList>
     </CommandDialog>

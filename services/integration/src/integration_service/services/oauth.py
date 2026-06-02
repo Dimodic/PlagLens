@@ -68,7 +68,7 @@ async def _from_db(
     async with factory() as s:
         repo = OAuthAppCredentialsRepo(s)
         row = await repo.get(tenant_id, kind)
-        # Fallback: in single-tenant deployments the super_admin lives in the
+        # Fallback: in single-tenant deployments the admin lives in the
         # `system` tenant and configures one global PlagLens OAuth app. We let
         # other tenants (e.g. `hse-fkn`) reuse those creds rather than fail.
         if row is None:

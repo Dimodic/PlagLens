@@ -23,8 +23,9 @@
  *   • the in-modal flow on the submission page (PlagiarismMapDialog)
  *   • the standalone /plagiarism-runs/:runId/pairs/:pairId page
  */
-import { Loader2 } from 'lucide-react';
 import { useMemo } from 'react';
+import { useTranslation } from '@/i18n';
+import { Skeleton } from '@/components/ui/skeleton';
 import { usePairDetail } from '@/hooks/api/usePlagiarism';
 import type { PlagiarismPairFragment } from '@/api/endpoints/plagiarism';
 import { SideBySideDiff } from './SideBySideDiff';
@@ -35,6 +36,7 @@ interface PairDiffInlineProps {
 }
 
 export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
+  const { t } = useTranslation();
   const { data, isLoading, error } = usePairDetail(runId, pairId);
 
   // ---- Hooks must run unconditionally — early returns sit below ----
@@ -104,23 +106,51 @@ export function PairDiffInline({ runId, pairId }: PairDiffInlineProps) {
   // ---- Early returns now safe — every hook above has fired ----
 
   if (isLoading) {
+    // Mirror the loaded layout (header row + two side-by-side code
+    // panes) so the loading→loaded swap doesn't reflow. Same wrapper,
+    // same grid header, same ``border-t`` two-pane split — just muted
+    // blocks where the names / percent / code lines will land.
     return (
-      <div className="py-10 text-center text-sm text-muted-foreground">
-        <Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />
-        Загрузка пары…
+      <div
+        role="status"
+        aria-live="polite"
+        aria-label={t('pair_diff_inline.loading')}
+        className="flex h-full flex-col gap-3 min-h-0"
+      >
+        <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4 shrink-0">
+          <Skeleton className="h-4 w-32 bg-muted/40" />
+          <Skeleton className="h-4 w-12 bg-muted/40" />
+          <Skeleton className="h-4 w-32 justify-self-end bg-muted/40" />
+        </div>
+        <div className="flex w-full flex-1 min-h-0 items-start gap-4 border-t border-border pt-3">
+          {(['left', 'right'] as const).map((pane) => (
+            <div
+              key={pane}
+              className="flex min-w-0 flex-1 flex-col gap-2 min-h-0 rounded-md border border-border bg-card p-2"
+            >
+              {Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton
+                  key={i}
+                  className="h-[18px] rounded-sm bg-muted/30"
+                  style={{ width: `${90 - ((i * 7) % 45)}%` }}
+                />
+              ))}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
   if (error || !data) {
     return (
       <div className="py-8 text-center text-sm text-destructive">
-        Не удалось загрузить детали пары.
+        {t('pair_diff_inline.error')}
       </div>
     );
   }
 
-  const aName = data.submissions.a.author?.display_name ?? 'студент A';
-  const bName = data.submissions.b.author?.display_name ?? 'студент B';
+  const aName = data.submissions.a.author?.display_name ?? t('pair_diff_inline.student_a');
+  const bName = data.submissions.b.author?.display_name ?? t('pair_diff_inline.student_b');
   const simPct = (data.similarity * 100).toFixed(1);
 
   return (

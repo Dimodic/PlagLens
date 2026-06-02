@@ -10,6 +10,10 @@ from pydantic import BaseModel, Field
 class SyncScope(BaseModel):
     course_id: Optional[str] = None
     assignment_id: Optional[str] = None
+    # Restrict a sync to specific homeworks (ДЗ). Empty / omitted means
+    # "all imported homeworks". Honoured by the Yandex.Contest sync-all
+    # flow via ``homework_filter``.
+    homework_ids: Optional[list[str]] = None
     since: Optional[datetime] = None
 
 

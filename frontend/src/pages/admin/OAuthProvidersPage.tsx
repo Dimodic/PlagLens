@@ -24,6 +24,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 
@@ -42,7 +43,8 @@ interface ProviderRow {
 }
 
 export default function OAuthProvidersPage() {
-  useDocumentTitle('OAuth-провайдеры');
+  const { t } = useTranslation();
+  useDocumentTitle(t('oauth_providers.title'));
   const qc = useQueryClient();
   const notify = useNotifications();
 
@@ -56,28 +58,28 @@ export default function OAuthProvidersPage() {
 
   const onSaved = () => {
     qc.invalidateQueries({ queryKey: ['admin', 'oauth-providers'] });
-    notify.success('Настройки OAuth-провайдера сохранены');
+    notify.success(t('oauth_providers.saved'));
     setEditing(null);
   };
 
   const onDelete = async (row: ProviderRow) => {
-    if (!confirm(`Удалить настройки ${row.title}?`)) return;
+    if (!confirm(t('oauth_providers.delete_confirm', { title: row.title }))) return;
     try {
       await integrationsApi.deleteOAuthProvider(row.provider_kind);
-      notify.success('Удалено');
+      notify.success(t('oauth_providers.deleted'));
       qc.invalidateQueries({ queryKey: ['admin', 'oauth-providers'] });
     } catch (e) {
-      notify.error((e as Problem).title ?? 'Не удалось удалить');
+      notify.error((e as Problem).title ?? t('oauth_providers.delete_failed'));
     }
   };
 
   return (
     <Page width="regular">
-      <PageHeader title="OAuth-провайдеры" />
+      <PageHeader title={t('oauth_providers.title')} />
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Не удалось загрузить</AlertTitle>
+          <AlertTitle>{t('oauth_providers.load_failed')}</AlertTitle>
           <AlertDescription>
             {(error as unknown as Problem).detail ??
               (error as unknown as Problem).title ??
@@ -89,7 +91,7 @@ export default function OAuthProvidersPage() {
       {isPending ? (
         <Card className="border-border/70">
           <CardContent className="p-8 flex items-center gap-3 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" /> Загружаем…
+            <Loader2 className="h-4 w-4 animate-spin" /> {t('oauth_providers.loading')}
           </CardContent>
         </Card>
       ) : (
@@ -108,10 +110,10 @@ export default function OAuthProvidersPage() {
                       {row.configured ? (
                         <StatusPill tone="success">
                           <CheckCircle2 className="mr-1 h-3 w-3" />
-                          подключено
+                          {t('oauth_providers.status_connected')}
                         </StatusPill>
                       ) : (
-                        <StatusPill tone="neutral">не настроено</StatusPill>
+                        <StatusPill tone="neutral">{t('oauth_providers.status_not_configured')}</StatusPill>
                       )}
                     </div>
                     <code className="mt-1 inline-block font-mono text-xs text-muted-foreground">
@@ -125,7 +127,7 @@ export default function OAuthProvidersPage() {
                       rel="noreferrer"
                       className="inline-flex items-center gap-1 text-xs text-primary hover:underline"
                     >
-                      где зарегистрировать
+                      {t('oauth_providers.where_to_register')}
                       <ExternalLink className="h-3 w-3" />
                     </a>
                   )}
@@ -141,7 +143,7 @@ export default function OAuthProvidersPage() {
                     <dd className="font-mono truncate">{row.redirect_uri}</dd>
                     <dt className="text-muted-foreground">Scope</dt>
                     <dd className="font-mono">{row.scope ?? '—'}</dd>
-                    <dt className="text-muted-foreground">Обновлено</dt>
+                    <dt className="text-muted-foreground">{t('oauth_providers.updated_at')}</dt>
                     <dd>
                       {row.updated_at
                         ? new Date(row.updated_at).toLocaleString('ru-RU')
@@ -157,7 +159,7 @@ export default function OAuthProvidersPage() {
                     data-testid={`oauth-edit-${row.provider_kind}`}
                   >
                     <Pencil className="mr-2 h-4 w-4" />
-                    {row.configured ? 'Изменить' : 'Настроить'}
+                    {row.configured ? t('oauth_providers.edit') : t('oauth_providers.configure')}
                   </Button>
                   {row.configured && (
                     <Button
@@ -168,7 +170,7 @@ export default function OAuthProvidersPage() {
                       data-testid={`oauth-delete-${row.provider_kind}`}
                     >
                       <Trash2 className="mr-2 h-4 w-4" />
-                      Удалить
+                      {t('common.delete')}
                     </Button>
                   )}
                 </div>
@@ -196,6 +198,7 @@ interface DialogProps {
 }
 
 function ProviderEditDialog({ row, onClose, onSaved }: DialogProps) {
+  const { t } = useTranslation();
   const [clientId, setClientId] = useState(row.client_id ?? '');
   const [clientSecret, setClientSecret] = useState('');
   const [redirectUri, setRedirectUri] = useState(
@@ -217,8 +220,8 @@ function ProviderEditDialog({ row, onClose, onSaved }: DialogProps) {
     setProblem(null);
     if (!clientId || !clientSecret || !redirectUri) {
       setProblem({
-        title: 'Заполните все обязательные поля',
-        detail: 'Client ID, Client Secret и Redirect URI обязательны.',
+        title: t('oauth_providers.validation_required_title'),
+        detail: t('oauth_providers.validation_required_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -275,7 +278,7 @@ function ProviderEditDialog({ row, onClose, onSaved }: DialogProps) {
               Client Secret
               {row.client_secret_set && (
                 <span className="ml-2 text-xs text-muted-foreground">
-                  (введите заново для замены)
+                  {t('oauth_providers.secret_reenter_hint')}
                 </span>
               )}
             </Label>
@@ -318,7 +321,7 @@ function ProviderEditDialog({ row, onClose, onSaved }: DialogProps) {
           <DialogFooter className="pt-2">
             <Button type="submit" disabled={submitting} data-testid="oauth-save">
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Сохранить
+              {t('common.save')}
             </Button>
           </DialogFooter>
         </form>

@@ -100,3 +100,42 @@ class HttpAuditProxy:
             "/api/v1/audit/events",
             {"tenant_id": tenant_id, "since": since, "until": until, "limit": limit},
         )
+
+
+class InProcessAuditProxy:
+    """Audit reads without a network hop.
+
+    audit_service runs in *this* (reporting) deployable, so we query its
+    repository directly instead of the old loopback HTTP to ``audit_service_base_url``
+    — removing a serialization round-trip and the silent-empty failure mode.
+    Returns the same dict shape the HTTP ``/audit/events`` endpoint serializes
+    (``AuditEventOut``), so callers are unchanged.
+
+    Imports of the sibling ``audit_service`` package are done lazily inside the
+    methods so ``reporting_service``'s module-import graph stays decoupled (the
+    only coupling is at call time, mirroring the shell-level merge seam).
+    """
+
+    async def _query(
+        self, tenant_id: str, *, limit: int, **filters: Any
+    ) -> list[dict[str, Any]]:
+        from audit_service.api.v1.events import _to_out
+        from audit_service.db import get_session_factory
+        from audit_service.repositories.events import AuditEventRepository
+
+        factory = get_session_factory()
+        async with factory() as session:
+            repo = AuditEventRepository(session)
+            rows, _ = await repo.list_events(tenant_id=tenant_id, limit=limit, **filters)
+            return [_to_out(e).model_dump(mode="json") for e in rows]
+
+    async def recent_for_course(self, tenant_id: str, course_id: str, limit: int = 50):
+        return await self._query(tenant_id, limit=limit, resource_id=course_id)
+
+    async def recent_for_user(self, tenant_id: str, user_id: str, limit: int = 50):
+        return await self._query(tenant_id, limit=limit, actor_id=user_id)
+
+    async def export_window(
+        self, tenant_id: str, *, since=None, until=None, limit: int = 1000
+    ):
+        return await self._query(tenant_id, limit=limit, since=since, until=until)

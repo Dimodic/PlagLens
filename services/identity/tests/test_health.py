@@ -12,6 +12,33 @@ async def test_healthz(client):
 
 
 @pytest.mark.asyncio
+async def test_readyz(client):
+    # Both DB (session factory monkeypatched to the in-memory engine) and
+    # Redis (FakeRedis.ping -> True) are healthy in the test fixtures.
+    r = await client.get("/readyz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["checks"]["db"] == "ok"
+    assert body["checks"]["redis"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_readyz_degraded_when_redis_missing(app, client):
+    # Drop the Redis client to exercise the failure path -> 503 + fail reason.
+    saved, app.state.redis = app.state.redis, None
+    try:
+        r = await client.get("/readyz")
+        assert r.status_code == 503
+        body = r.json()
+        assert body["status"] == "degraded"
+        assert body["checks"]["db"] == "ok"
+        assert body["checks"]["redis"].startswith("fail:")
+    finally:
+        app.state.redis = saved
+
+
+@pytest.mark.asyncio
 async def test_metrics(client):
     r = await client.get("/metrics")
     assert r.status_code == 200

@@ -5,7 +5,7 @@ public key from settings; in tests we accept an unsigned dev token (when
 ``settings.auth_required`` is False).
 
 Two-layer roles:
-- ``global_role`` — ``super_admin | admin | teacher | student``
+- ``global_role`` — ``admin | teacher | assistant | student``
 - ``course_roles`` — mapping ``course_id -> owner | co_owner | assistant | student``
 """
 from __future__ import annotations
@@ -29,9 +29,6 @@ class Principal:
     global_role: str
     course_roles: dict[str, str] = field(default_factory=dict)
     raw: dict = field(default_factory=dict)
-
-    def is_super_admin(self) -> bool:
-        return self.global_role == "admin"
 
     def is_admin(self) -> bool:
         return self.global_role in ("admin",)
@@ -113,7 +110,7 @@ def get_principal(
 
 def require_global(*roles: str):
     def _dep(principal: Principal):
-        if principal.is_super_admin():
+        if principal.is_admin():
             return principal
         if principal.global_role not in roles:
             raise forbidden(f"Requires one of: {', '.join(roles)}")
@@ -125,7 +122,7 @@ def require_global(*roles: str):
 def assert_tenant(principal: Principal, resource_tenant_id: str | None) -> None:
     if resource_tenant_id is None:
         return
-    if principal.is_super_admin():
+    if principal.is_admin():
         return
     if principal.tenant_id != resource_tenant_id:
         raise tenant_mismatch()
@@ -137,7 +134,7 @@ def assert_course_role(
     allowed: Iterable[str],
 ) -> None:
     # Admins bypass everything.
-    if principal.is_super_admin() or principal.is_admin():
+    if principal.is_admin():
         return
     # Same fallback as submission-service rbac: identity-service
     # doesn't yet enrich JWTs with per-course memberships, so a JWT
@@ -171,7 +168,7 @@ def assert_self_or_role(
     teacher_roles: Iterable[str] = ("owner", "co_owner", "assistant"),
 ) -> None:
     """Allow the submission's own author OR a course teacher."""
-    if principal.is_super_admin() or principal.is_admin():
+    if principal.is_admin():
         return
     if submission_author_id and principal.user_id == submission_author_id:
         return

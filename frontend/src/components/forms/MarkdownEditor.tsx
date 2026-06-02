@@ -3,6 +3,7 @@
  * Full Tiptap integration deferred to later milestone.
  */
 import { useId } from 'react';
+import { useTranslation } from '@/i18n';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
@@ -34,13 +35,14 @@ export function MarkdownEditor({
   error,
 }: MarkdownEditorProps) {
   const id = useId();
+  const { t } = useTranslation();
   return (
     <div className="space-y-1.5">
       {label && <Label htmlFor={id}>{label}</Label>}
       <Tabs defaultValue="edit">
         <TabsList>
-          <TabsTrigger value="edit">Редактировать</TabsTrigger>
-          <TabsTrigger value="preview">Превью</TabsTrigger>
+          <TabsTrigger value="edit">{t('markdown_editor.tab_edit')}</TabsTrigger>
+          <TabsTrigger value="preview">{t('markdown_editor.tab_preview')}</TabsTrigger>
         </TabsList>
         <TabsContent value="edit" className="pt-2">
           <Textarea
@@ -63,7 +65,7 @@ export function MarkdownEditor({
           <div
             className="min-h-[120px] rounded-md border border-border bg-card p-3 text-sm whitespace-pre-wrap"
           >
-            {naivePreview(value || '_Пусто_')}
+            {naivePreview(value || t('markdown_editor.preview_empty'))}
           </div>
         </TabsContent>
       </Tabs>

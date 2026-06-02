@@ -28,28 +28,33 @@ import {
   useSubmissionFiles,
 } from '@/hooks/api/useSubmissions';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation, type TParams } from '@/i18n';
 import { CodeViewer } from '@/components/submissions/CodeViewer';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { PdfFileView, isPdfFile } from '@/components/submissions/PdfFileView';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Page } from '@/components/layout/Page';
 
-function relTime(iso: string | Date | null | undefined): string {
+function relTime(
+  iso: string | Date | null | undefined,
+  t: (key: string, params?: TParams) => string,
+): string {
   if (!iso) return '—';
   const d = typeof iso === 'string' ? new Date(iso) : iso;
   if (Number.isNaN(d.getTime())) return '—';
   const diffMs = Date.now() - d.getTime();
   const minutes = Math.max(0, Math.round(diffMs / 60_000));
-  if (minutes < 1) return 'только что';
-  if (minutes < 60) return `${minutes} мин назад`;
+  if (minutes < 1) return t('my_sub.time.just_now');
+  if (minutes < 60) return t('my_sub.time.minutes_ago', { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours} ч назад`;
+  if (hours < 24) return t('my_sub.time.hours_ago', { count: hours });
   const days = Math.round(hours / 24);
-  if (days < 30) return `${days} д назад`;
+  if (days < 30) return t('my_sub.time.days_ago', { count: days });
   const months = Math.round(days / 30);
-  if (months < 12) return `${months} мес назад`;
+  if (months < 12) return t('my_sub.time.months_ago', { count: months });
   const years = Math.round(months / 12);
-  return `${years} г назад`;
+  return t('my_sub.time.years_ago', { count: years });
 }
 
 function initials(name?: string | null): string {
@@ -63,6 +68,7 @@ function initials(name?: string | null): string {
 }
 
 export default function MySubmissionDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
   const { data: submission, isLoading } = useSubmission(id);
   const { data: filesData } = useSubmissionFiles(id);
@@ -70,8 +76,15 @@ export default function MySubmissionDetailPage() {
   // Y.Contest submissions are single-file; we don't expose a picker.
   // If multiple files ever land here we just render the first one — the
   // student rarely needs to navigate between siblings.
-  const fileId = files[0]?.id;
-  const { data: fileContent } = useSubmissionFileContent(id, fileId);
+  const file = files[0];
+  const fileId = file?.id;
+  // PDF submissions (math / scans) get the real PDF viewer, not the text
+  // CodeViewer — and we skip the (binary-garbage) text fetch for them.
+  const isPdf = isPdfFile(file);
+  const { data: fileContent } = useSubmissionFileContent(
+    id,
+    isPdf ? undefined : fileId,
+  );
   const { data: grade } = useGrade(id);
   const { data: feedbackData } = useFeedback(id);
   const feedback = (feedbackData?.data ?? []).filter(
@@ -86,14 +99,30 @@ export default function MySubmissionDetailPage() {
       })
     | null
     | undefined;
-  const titleStr = sub?.assignment_title || 'Моя посылка';
+  const titleStr = sub?.assignment_title || t('my_sub.fallback_title');
   useDocumentTitle(titleStr);
 
   if (!id) return null;
   if (isLoading || !submission || !sub) {
+    // Mirror the real layout: header (title + meta, back-button on the
+    // right) → the dominant bordered code panel → a quiet grade line.
     return (
       <Page>
-        <SkeletonList rows={6} rowHeight={48} />
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div className="space-y-2 min-w-0">
+            <Skeleton className="h-3 w-40 rounded-md bg-muted/40" />
+            <Skeleton className="h-8 w-1/2 rounded-md bg-muted/50" />
+            <Skeleton className="h-3 w-1/3 rounded-md bg-muted/30" />
+          </div>
+          <Skeleton className="h-8 w-40 flex-none rounded-md bg-muted/30" />
+        </div>
+        <div className="overflow-hidden rounded-lg border border-border/70">
+          <Skeleton className="h-[18rem] w-full rounded-none bg-muted/40" />
+        </div>
+        <section className="space-y-2 border-t border-border/40 pt-5">
+          <Skeleton className="h-3 w-20 rounded-md bg-muted/30" />
+          <Skeleton className="h-7 w-32 rounded-md bg-muted/50" />
+        </section>
       </Page>
     );
   }
@@ -116,12 +145,13 @@ export default function MySubmissionDetailPage() {
             {titleStr}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Загружено{' '}
-            {dayjs(sub.submitted_at).format('DD.MM.YYYY HH:mm')}
+            {t('my_sub.submitted_at', {
+              date: dayjs(sub.submitted_at).format('DD.MM.YYYY HH:mm'),
+            })}
             {sub.is_late && (
               <>
                 {' · '}
-                <span className="text-sev-mid">опоздание</span>
+                <span className="text-sev-mid">{t('my_sub.late')}</span>
               </>
             )}
           </p>
@@ -130,46 +160,69 @@ export default function MySubmissionDetailPage() {
           <Button asChild variant="ghost" size="sm">
             <Link to={`/assignments/${sub.assignment_id}`}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              К заданию
+              {t('my_sub.back_to_assignment')}
             </Link>
           </Button>
         </div>
       </div>
 
-      {/* Code — inline, single file. Teachers may comment on a line so
-          students need to see the same view a teacher sees. */}
-      {fileContent && (
-        <div className="overflow-hidden rounded-lg border border-border/70">
-          <CodeViewer
-            fileName={files.find((f) => f.id === fileId)?.path ?? '—'}
-            code={fileContent}
-            language={sub.language}
-            maxHeight={520}
-          />
-        </div>
+      {/* Submission file — a real PDF viewer for math/scan submissions,
+          otherwise the inline CodeViewer (teachers may comment on a line,
+          so the student sees the same view a teacher sees). */}
+      {file && isPdf ? (
+        <PdfFileView submissionId={id} file={file} />
+      ) : (
+        fileContent && (
+          <div className="overflow-hidden rounded-lg border border-border/70">
+            <CodeViewer
+              fileName={file?.path ?? '—'}
+              code={fileContent}
+              language={sub.language}
+              maxHeight={520}
+            />
+          </div>
+        )
       )}
 
       {/* Grade — one quiet line: «Оценка 8.5 / 10  ×1.0  · 15.05.2026 14:32». */}
       {grade && (
         <section
-          className="flex flex-wrap items-baseline gap-x-4 gap-y-1 border-t border-border/40 pt-5"
+          className="space-y-2 border-t border-border/40 pt-5"
           data-testid={`grade-${id}`}
         >
-          <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Оценка
-          </h2>
-          <span className="text-2xl font-semibold tabular-nums tracking-tight">
-            {grade.score.toFixed(1)}
-            <span className="text-muted-foreground"> / {grade.max_score.toFixed(1)}</span>
-          </span>
-          {grade.applied_multiplier !== 1 && (
-            <span className="text-sm text-muted-foreground">
-              ×{grade.applied_multiplier.toFixed(2)}
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+            <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
+              {t('my_sub.grade')}
+            </h2>
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">
+              {grade.score.toFixed(1)}
+              <span className="text-muted-foreground">
+                {' '}
+                / {grade.max_score.toFixed(1)}
+              </span>
             </span>
+            {grade.applied_multiplier !== 1 && (
+              <span className="text-sm text-muted-foreground">
+                ×{grade.applied_multiplier.toFixed(2)}
+              </span>
+            )}
+            <span className="text-sm text-muted-foreground">
+              · {dayjs(grade.graded_at).format('DD.MM.YYYY HH:mm')}
+            </span>
+          </div>
+          {/* The teacher's overall comment from the grade form. Previously
+              only per-line / LLM ``feedback`` rows were shown below, so a
+              plain grade comment never reached the student. */}
+          {grade.comment && grade.comment.trim() && (
+            <div className="mt-1 max-w-[760px] border-l-2 border-border pl-3">
+              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                {t('my_sub.teacher_comment')}
+              </div>
+              <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/85">
+                {grade.comment}
+              </p>
+            </div>
           )}
-          <span className="text-sm text-muted-foreground">
-            · {dayjs(grade.graded_at).format('DD.MM.YYYY HH:mm')}
-          </span>
         </section>
       )}
 
@@ -177,7 +230,7 @@ export default function MySubmissionDetailPage() {
       {feedback.length > 0 && (
         <section className="space-y-3 border-t border-border/40 pt-5">
           <h2 className="text-sm font-medium uppercase tracking-wider text-muted-foreground">
-            Комментарий
+            {t('my_sub.feedback')}
           </h2>
           <ul className="space-y-4">
             {feedback.map((f) => (
@@ -189,11 +242,11 @@ export default function MySubmissionDetailPage() {
                 </Avatar>
                 <div className="min-w-0 flex-1">
                   <div className="text-xs text-muted-foreground">
-                    {relTime(f.created_at)}
+                    {relTime(f.created_at, t)}
                     {f.source === 'llm_curated' && (
                       <>
                         {' · '}
-                        <span className="text-primary">LLM-сводка</span>
+                        <span className="text-primary">{t('my_sub.llm_summary')}</span>
                       </>
                     )}
                   </div>

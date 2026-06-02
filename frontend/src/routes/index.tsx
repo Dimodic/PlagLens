@@ -18,6 +18,10 @@
  * keep the page-level skeleton inside the auth shell consistent.
  */
 import { lazy as reactLazy, Suspense, type ComponentType } from 'react';
+import {
+  clearStaleChunkGuard,
+  reloadForStaleChunk,
+} from '@/lib/staleChunkReload';
 
 // Reload-on-stale-chunk wrapper around React.lazy.
 //
@@ -41,26 +45,22 @@ type LazyImport<T extends ComponentType<any>> = () => Promise<{
   default: T;
 }>;
 
-const STALE_CHUNK_KEY = 'plaglens.stale_chunk_reloaded';
-
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function lazy<T extends ComponentType<any>>(factory: LazyImport<T>) {
   return reactLazy(async () => {
     try {
-      return await factory();
+      const mod = await factory();
+      // A route chunk loaded fine → we're on a fresh build; reset the
+      // reload guard so a *later* deploy's stale chunk recovers too.
+      clearStaleChunkGuard();
+      return mod;
     } catch (err) {
-      if (
-        typeof window !== 'undefined' &&
-        typeof sessionStorage !== 'undefined' &&
-        !sessionStorage.getItem(STALE_CHUNK_KEY)
-      ) {
-        sessionStorage.setItem(STALE_CHUNK_KEY, '1');
-        window.location.reload();
-        // Return a never-resolving promise so React holds the Suspense
-        // boundary while the reload completes — instead of surfacing
-        // the chunk error to ErrorBoundary first.
-        return new Promise<{ default: T }>(() => {});
-      }
+      // Stale chunk after a redeploy → reload to pull the new index.html +
+      // manifest. Hold Suspense with a never-resolving promise while the
+      // reload happens (so the chunk error never reaches ErrorPage). The
+      // helper's cooldown prevents an infinite loop on a genuinely-broken
+      // chunk.
+      if (reloadForStaleChunk()) return new Promise<{ default: T }>(() => {});
       throw err;
     }
   });
@@ -108,7 +108,6 @@ const MySubmissionDetailPage = lazy(() => import('@/pages/me/MySubmissionDetailP
 // Teacher / admin shortcuts.
 const GradingQueuePage = lazy(() => import('@/pages/teacher/GradingQueuePage'));
 const ActivityLogPage = lazy(() => import('@/pages/teacher/ActivityLogPage'));
-const AdminProvidersPage = lazy(() => import('@/pages/admin/AdminProvidersPage'));
 const AdminMetricsPage = lazy(() => import('@/pages/admin/AdminMetricsPage'));
 
 // Plagiarism + AI.
@@ -118,10 +117,6 @@ const PlagiarismPairDiffPage = lazy(() => import('@/pages/plagiarism/PlagiarismP
 const PlagiarismCorpusPage = lazy(() => import('@/pages/plagiarism/PlagiarismCorpusPage'));
 const AnalysisListPage = lazy(() => import('@/pages/ai/AnalysisListPage'));
 const SubmissionAIReportPage = lazy(() => import('@/pages/ai/SubmissionAIReportPage'));
-const PromptVersionsPage = lazy(() => import('@/pages/admin/PromptVersionsPage'));
-const LLMProvidersPage = lazy(() => import('@/pages/admin/LLMProvidersPage'));
-const LLMBudgetsPage = lazy(() => import('@/pages/admin/LLMBudgetsPage'));
-const LLMCacheAdminPage = lazy(() => import('@/pages/admin/LLMCacheAdminPage'));
 
 // Course / assignment / submission pages.
 const CoursesListPage = lazy(() => import('@/pages/courses/CoursesListPage'));
@@ -138,6 +133,8 @@ const SubmissionsListPage = lazy(() => import('@/pages/submissions/SubmissionsLi
 const AssignmentDeadlinesPage = lazy(() => import('@/pages/assignments/AssignmentDeadlinesPage'));
 const SubmissionDetailPage = lazy(() => import('@/pages/submissions/SubmissionDetailPage'));
 const SubmissionUploadPage = lazy(() => import('@/pages/submissions/SubmissionUploadPage'));
+const SearchResultsPage = lazy(() => import('@/pages/search/SearchResultsPage'));
+const PublicProfilePage = lazy(() => import('@/pages/profile/PublicProfilePage'));
 
 // Dashboards / Reporting / Notifications.
 const MyDashboardPage = lazy(() => import('@/pages/dashboard/MyDashboardPage'));
@@ -161,7 +158,6 @@ const IntegrationsListPage = lazy(() => import('@/pages/admin/IntegrationsListPa
 const OAuthProvidersPage = lazy(() => import('@/pages/admin/OAuthProvidersPage'));
 const LoginProvidersPage = lazy(() => import('@/pages/admin/LoginProvidersPage'));
 const IntegrationCreatePage = lazy(() => import('@/pages/admin/IntegrationCreatePage'));
-const IntegrationDetailPage = lazy(() => import('@/pages/admin/IntegrationDetailPage'));
 const YandexContestSetupPage = lazy(() => import('@/pages/integrations/YandexContestSetupPage'));
 const StepikSetupPage = lazy(() => import('@/pages/integrations/StepikSetupPage'));
 const EjudgeSetupPage = lazy(() => import('@/pages/integrations/EjudgeSetupPage'));
@@ -354,6 +350,10 @@ const protectedRoutes: RouteObject[] = [
       { path: 'submissions', element: <SubmissionsListPage /> },
       { path: 'submissions/:id', element: <SubmissionDetailPage /> },
 
+      // Global search results page (⌘K → Enter) + public people profiles.
+      { path: 'search', element: <SearchResultsPage /> },
+      { path: 'u/:id', element: <PublicProfilePage /> },
+
       { path: 'grading', element: <GradingQueuePage /> },
       // «Экспорт» — grades-to-spreadsheet first, other report kinds
       // secondary. ExportsListPage stays the generic list for the student
@@ -363,7 +363,7 @@ const protectedRoutes: RouteObject[] = [
 
       // ----- Top-level shortcuts to redesigned screens -----
       // ActivityLogPage calls `/api/v1/audit/events`, which requires
-      // admin/super_admin server-side. Non-admin visits redirect home so
+      // admin server-side. Non-admin visits redirect home so
       // a stale sidebar link doesn't dead-end at a 404 page.
       {
         path: 'activity',
@@ -483,37 +483,6 @@ const protectedRoutes: RouteObject[] = [
           </RoleGuard>
         ),
       },
-      // Teacher-friendly mirror of /admin/integrations/:id. Owners (teachers)
-      // need to be able to inspect and tune their own integrations without
-      // bouncing through an admin-only route. Backend already enforces the
-      // tenant/owner check on the API, so we just open the page.
-      // NB: keep AFTER /integrations/{stepik|ejudge|...}/setup so those
-      // literal paths win the route match instead of being captured by `:id`.
-      {
-        path: 'integrations/:id',
-        element: (
-          <RoleGuard
-            global={['teacher', 'admin']}
-            fallback={<NotFoundPage />}
-          >
-            <IntegrationDetailPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'llm',
-        // Backend `/api/v1/admin/ai/providers` requires admin/super_admin —
-        // the page calls it on mount. Non-admin visits redirect home so a
-        // stale sidebar link doesn't dead-end at a 404 page.
-        element: (
-          <RoleGuard
-            global={['admin']}
-            fallback={<Navigate to="/" replace />}
-          >
-            <LLMProvidersPage />
-          </RoleGuard>
-        ),
-      },
       // /settings was a dedicated landing page; consolidated into /me/profile
       // (one «настройки = профиль» surface). Bookmarks still work.
       { path: 'settings', element: <Navigate to="/me/profile" replace /> },
@@ -575,7 +544,7 @@ const protectedRoutes: RouteObject[] = [
         element: <Navigate to="/admin" replace />,
       },
 
-      // ----- Tenants (super_admin) -----
+      // ----- Tenants (admin) -----
       {
         path: 'admin/tenants',
         element: (
@@ -691,17 +660,6 @@ const protectedRoutes: RouteObject[] = [
             fallback={<NotFoundPage />}
           >
             <WebhooksAdminPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'admin/integrations/:id',
-        element: (
-          <RoleGuard
-            global={['admin']}
-            fallback={<NotFoundPage />}
-          >
-            <IntegrationDetailPage />
           </RoleGuard>
         ),
       },
@@ -866,7 +824,6 @@ const protectedRoutes: RouteObject[] = [
         ),
       },
 
-      { path: 'admin/providers', element: <AdminProvidersPage /> },
       { path: 'admin/metrics', element: <AdminMetricsPage /> },
       {
         path: 'admin/settings',
@@ -929,38 +886,6 @@ const protectedRoutes: RouteObject[] = [
         element: (
           <RoleGuard global={['teacher', 'admin']} fallback={<NotFoundPage />}>
             <SubmissionAIReportPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'admin/ai/prompt-versions',
-        element: (
-          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
-            <PromptVersionsPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'admin/ai/providers',
-        element: (
-          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
-            <LLMProvidersPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'admin/ai/budgets',
-        element: (
-          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
-            <LLMBudgetsPage />
-          </RoleGuard>
-        ),
-      },
-      {
-        path: 'admin/ai/cache',
-        element: (
-          <RoleGuard global={['admin']} fallback={<NotFoundPage />}>
-            <LLMCacheAdminPage />
           </RoleGuard>
         ),
       },

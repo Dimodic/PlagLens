@@ -25,6 +25,7 @@ import {
   useSubmissionFiles,
   useSubmissionFileContent,
 } from '@/hooks/api/useSubmissions';
+import { useTranslation } from '@/i18n';
 
 interface SubmissionPreviewDialogProps {
   submissionId: string | null;
@@ -35,6 +36,7 @@ export function SubmissionPreviewDialog({
   submissionId,
   onOpenChange,
 }: SubmissionPreviewDialogProps) {
+  const { t } = useTranslation();
   const open = !!submissionId;
   const sid = submissionId ?? undefined;
 
@@ -60,18 +62,18 @@ export function SubmissionPreviewDialog({
       >
         <DialogHeader className="px-6 pt-5 pb-3 border-b border-border/60">
           <DialogTitle className="text-base font-semibold">
-            {authorName || 'Посылка'}
+            {authorName || t('submission_preview.fallback_title')}
           </DialogTitle>
         </DialogHeader>
         <div className="flex-1 overflow-auto px-6 py-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Загружаем код…
+              {t('submission_preview.loading')}
             </div>
           ) : !firstFile ? (
             <p className="text-sm text-muted-foreground">
-              У этой посылки нет файлов.
+              {t('submission_preview.no_files')}
             </p>
           ) : (
             <CodeViewer
@@ -89,7 +91,7 @@ export function SubmissionPreviewDialog({
               className="text-primary hover:underline"
               onClick={() => onOpenChange(false)}
             >
-              Открыть посылку целиком →
+              {t('submission_preview.open_full')}
             </Link>
           </div>
         )}

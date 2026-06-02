@@ -19,12 +19,14 @@ import {
 } from '@/components/ui/select';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useBulkInviteUsers, useCreateUser } from '@/hooks/api/useUsers';
 import type { GlobalRole, Problem } from '@/api/types';
 
 export function UserCreatePage() {
-  useDocumentTitle('Новый пользователь');
+  const { t } = useTranslation();
+  useDocumentTitle(t('user_create.title'));
   const navigate = useNavigate();
   const notify = useNotifications();
   const create = useCreateUser();
@@ -49,7 +51,7 @@ export function UserCreatePage() {
         global_role: role,
         locale,
       });
-      notify.success(`Создан ${r.email}`);
+      notify.success(t('user_create.created', { email: r.email }));
       navigate(`/admin/users/${r.id}`);
     } catch (e) {
       setSingleProblem(e as Problem);
@@ -64,7 +66,7 @@ export function UserCreatePage() {
       .filter(Boolean);
     if (emails.length === 0) {
       setBulkProblem({
-        title: 'Нет email-ов',
+        title: t('user_create.no_emails'),
         status: 400,
         code: 'NO_EMAILS',
       });
@@ -72,7 +74,9 @@ export function UserCreatePage() {
     }
     try {
       const r = await bulk.mutateAsync({ emails, global_role: bulkRole });
-      notify.success(`Приглашено: ${r.invited}, пропущено: ${r.skipped}`);
+      notify.success(
+        t('user_create.bulk_done', { invited: r.invited, skipped: r.skipped }),
+      );
       setBulkEmails('');
     } catch (e) {
       setBulkProblem(e as Problem);
@@ -86,17 +90,17 @@ export function UserCreatePage() {
         to="/admin/users"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Пользователи
+        ← {t('user_create.back')}
       </Link>
-      <PageHeader title="Новый пользователь" />
+      <PageHeader title={t('user_create.title')} />
 
       <Tabs defaultValue="single">
         <TabsList>
           <TabsTrigger value="single" data-testid="user-create-tab-single">
-            Один
+            {t('user_create.tab_single')}
           </TabsTrigger>
           <TabsTrigger value="bulk" data-testid="user-create-tab-bulk">
-            Массово
+            {t('user_create.tab_bulk')}
           </TabsTrigger>
         </TabsList>
 
@@ -113,7 +117,7 @@ export function UserCreatePage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="user-name">Имя</Label>
+              <Label htmlFor="user-name">{t('user_create.name')}</Label>
               <Input
                 id="user-name"
                 value={name}
@@ -122,7 +126,7 @@ export function UserCreatePage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="user-role">Роль</Label>
+              <Label htmlFor="user-role">{t('user_create.role')}</Label>
               <Select
                 value={role}
                 onValueChange={(v) => setRole((v as GlobalRole) ?? 'student')}
@@ -156,7 +160,7 @@ export function UserCreatePage() {
                 data-testid="user-create-submit"
               >
                 {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Создать
+                {t('common.create')}
               </Button>
             </div>
           </div>
@@ -176,7 +180,7 @@ export function UserCreatePage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="bulk-role">Роль</Label>
+              <Label htmlFor="bulk-role">{t('user_create.role')}</Label>
               <Select
                 value={bulkRole}
                 onValueChange={(v) => setBulkRole((v as GlobalRole) ?? 'student')}
@@ -197,7 +201,7 @@ export function UserCreatePage() {
                 data-testid="user-bulk-submit"
               >
                 {bulk.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Пригласить
+                {t('user_create.invite')}
               </Button>
             </div>
           </div>

@@ -2,8 +2,8 @@
  * E2E: Dashboards — RBAC enforcement.
  *
  * Verifies that role-gated routes enforce the expected access:
- *   - global dashboard: super_admin only
- *   - tenant dashboard: admin / super_admin
+ *   - global dashboard: admin only
+ *   - tenant dashboard: admin
  *   - course dashboard: teacher / admin
  *   - my dashboard: any authenticated user
  *
@@ -20,7 +20,7 @@ test.describe('Dashboards RBAC', () => {
   }) => {
     await teacherPage.goto('/admin/dashboard/global');
     // Either 404 or fallback heading is acceptable; what we check is that
-    // we did NOT render a "Глобальный дашборд" heading (super_admin only).
+    // we did NOT render a "Глобальный дашборд" heading (admin only).
     const heading = teacherPage.getByRole('heading', {
       name: /Глобальный дашборд/,
     });

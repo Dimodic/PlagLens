@@ -26,6 +26,7 @@ import {
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { EmptyState } from '@/components/common/EmptyState';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useWebhookEvents } from '@/hooks/api/useIntegrations';
 import type { WebhookEvent } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
@@ -38,6 +39,7 @@ const STATUS_TONES: Record<WebhookEvent['status'], StatusTone> = {
 };
 
 export function WebhooksAdminPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Webhook events');
   const [kind, setKind] = useState<WebhookEvent['kind'] | null>(null);
 
@@ -62,7 +64,7 @@ export function WebhooksAdminPage() {
                   <SelectValue placeholder="Kind" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Все kinds</SelectItem>
+                  <SelectItem value="all">{t('webhooks_admin.all_kinds')}</SelectItem>
                   <SelectItem value="stepik">stepik</SelectItem>
                   <SelectItem value="yandex_contest">yandex_contest</SelectItem>
                   <SelectItem value="plagiarism">plagiarism</SelectItem>
@@ -72,7 +74,7 @@ export function WebhooksAdminPage() {
               </Select>
               {kind && (
                 <Button variant="ghost" size="sm" onClick={() => setKind(null)}>
-                  Сбросить
+                  {t('webhooks_admin.reset')}
                 </Button>
               )}
             </div>
@@ -84,7 +86,7 @@ export function WebhooksAdminPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : data && data.data.length === 0 ? (
-          <EmptyState title="События не приходили" />
+          <EmptyState title={t('webhooks_admin.empty')} />
         ) : (
           <Card>
             <CardContent className="p-0">
@@ -92,10 +94,10 @@ export function WebhooksAdminPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Kind</TableHead>
-                    <TableHead>Подпись</TableHead>
-                    <TableHead>Статус</TableHead>
-                    <TableHead>Получено</TableHead>
-                    <TableHead>Обработано</TableHead>
+                    <TableHead>{t('webhooks_admin.col_signature')}</TableHead>
+                    <TableHead>{t('webhooks_admin.col_status')}</TableHead>
+                    <TableHead>{t('webhooks_admin.col_received')}</TableHead>
+                    <TableHead>{t('webhooks_admin.col_processed')}</TableHead>
                     <TableHead>ID</TableHead>
                   </TableRow>
                 </TableHeader>

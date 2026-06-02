@@ -5,16 +5,17 @@ import { Calendar, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import type { CourseBrief } from '@/api/endpoints/courses';
 import { formatDate } from '@/utils/formatters';
+import { useTranslation, type TParams } from '@/i18n';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 
-function statusBadge(status: string) {
+function statusBadge(status: string, t: (key: string, params?: TParams) => string) {
   // Archive-only lifecycle: draft + active collapse into a single
   // "Активен" pill. Only "archived" is visually distinct.
   if (status === 'archived')
     return (
       <Badge variant="secondary" className="font-normal" data-testid="course-card-status">
-        В архиве
+        {t('course_card.status_archived')}
       </Badge>
     );
   return (
@@ -22,7 +23,7 @@ function statusBadge(status: string) {
       className="font-normal bg-accent text-accent-foreground hover:bg-accent"
       data-testid="course-card-status"
     >
-      Активен
+      {t('course_card.status_active')}
     </Badge>
   );
 }
@@ -32,6 +33,7 @@ interface CourseCardProps {
 }
 
 export function CourseCard({ course }: CourseCardProps) {
+  const { t } = useTranslation();
   return (
     <Link
       to={`/courses/${course.slug}`}
@@ -49,7 +51,7 @@ export function CourseCard({ course }: CourseCardProps) {
               >
                 {course.name}
               </p>
-              {statusBadge(course.status)}
+              {statusBadge(course.status, t)}
             </div>
             {course.description && (
               <p className="text-sm line-clamp-2 text-foreground">{course.description}</p>

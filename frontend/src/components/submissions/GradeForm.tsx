@@ -6,7 +6,7 @@
  * pencil icon to re-enter the form. That split removes the "always
  * editable" feel and keeps the rail quiet between graders' actions.
  */
-import { FormEvent, useEffect, useRef, useState } from 'react';
+import { FormEvent, ReactNode, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Loader2, Pencil, Trash2 } from 'lucide-react';
 import type { CreateGradeInput } from '@/api/endpoints/submissions';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 interface GradeFormProps {
   initial?: { score?: number; comment?: string; comment_visible_to_student?: boolean } | null;
@@ -31,6 +32,9 @@ interface GradeFormProps {
   /** Returns the form to display mode without saving. Provided only when
    * a grade already exists (i.e. there's a state to revert to). */
   onCancel?: () => void;
+  /** Quiet control rendered at the far left of the submit row — used for
+   * the subtle "mark suspicious" action so it sits next to Save. */
+  leftSlot?: ReactNode;
 }
 
 export function GradeForm({
@@ -41,7 +45,9 @@ export function GradeForm({
   suggestedComment,
   onSubmit,
   onCancel,
+  leftSlot,
 }: GradeFormProps) {
+  const { t } = useTranslation();
   const [score, setScore] = useState<string>(
     initial?.score !== undefined ? String(initial.score) : '0',
   );
@@ -70,20 +76,20 @@ export function GradeForm({
 
   const validate = (): boolean => {
     if (score === '' || score === undefined) {
-      setScoreError('Введите оценку');
+      setScoreError(t('grade_form.error_required'));
       return false;
     }
     const n = Number(score);
     if (!Number.isFinite(n)) {
-      setScoreError('Должно быть число');
+      setScoreError(t('grade_form.error_not_number'));
       return false;
     }
     if (n < 0) {
-      setScoreError('Оценка не может быть отрицательной');
+      setScoreError(t('grade_form.error_negative'));
       return false;
     }
     if (n > maxScore) {
-      setScoreError(`Не больше ${maxScore}`);
+      setScoreError(t('grade_form.error_max', { max: maxScore }));
       return false;
     }
     setScoreError(null);
@@ -114,14 +120,13 @@ export function GradeForm({
         >
           <AlertTriangle className="h-4 w-4" />
           <AlertDescription>
-            Посылка после жёсткого дедлайна — оценка по правилам сервиса будет
-            обнулена сервером.
+            {t('grade_form.late_hard_warning')}
           </AlertDescription>
         </Alert>
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="submission-grade-input">Оценка</Label>
+        <Label htmlFor="submission-grade-input">{t('grade_form.score')}</Label>
         {/* Symmetric pill grid: 0..maxScore on a uniform-width grid, with
             the manual-input box occupying the trailing cell so the
             whole control reads as one block (no orphan input row below).
@@ -198,14 +203,14 @@ export function GradeForm({
                 onChange={(e) => setScore(e.target.value)}
                 data-testid="submission-grade-input"
                 aria-invalid={!!scoreError}
-                aria-label="Ввести оценку вручную"
+                aria-label={t('grade_form.manual_input_label')}
                 placeholder=".5"
                 className="h-9 px-2 text-center border-dashed bg-background text-foreground/90 placeholder:text-muted-foreground/60 placeholder:font-normal [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           );
         })()}
-        <p className="text-xs text-muted-foreground">Максимум: {maxScore}</p>
+        <p className="text-xs text-muted-foreground">{t('grade_form.max', { max: maxScore })}</p>
         {scoreError && (
           <p role="alert" className="text-xs text-destructive">
             {scoreError}
@@ -214,7 +219,7 @@ export function GradeForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="submission-grade-comment">Комментарий</Label>
+        <Label htmlFor="submission-grade-comment">{t('grade_form.comment')}</Label>
         <Textarea
           id="submission-grade-comment"
           rows={3}
@@ -235,11 +240,12 @@ export function GradeForm({
           htmlFor="submission-grade-visible-to-student"
           className="font-normal cursor-pointer"
         >
-          Виден студенту
+          {t('grade_form.visible_to_student')}
         </Label>
       </div>
 
       <div className="flex items-center justify-end gap-2">
+        {leftSlot}
         {onCancel && (
           <Button
             type="button"
@@ -248,7 +254,7 @@ export function GradeForm({
             disabled={loading}
             data-testid="submission-grade-cancel"
           >
-            Отмена
+            {t('common.cancel')}
           </Button>
         )}
         <Button
@@ -257,7 +263,7 @@ export function GradeForm({
           data-testid="submission-grade-submit"
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Сохранить
+          {t('common.save')}
         </Button>
       </div>
     </form>
@@ -290,6 +296,7 @@ export function GradeDisplay({
   onDelete,
   deleting,
 }: GradeDisplayProps) {
+  const { t } = useTranslation();
   // Strip trailing zeros from "7.00" → "7"; keep "7.5" intact.
   const scoreStr = (() => {
     const n = Number(score);
@@ -307,7 +314,7 @@ export function GradeDisplay({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Оценка
+            {t('grade_form.score')}
           </Label>
           <div className="mt-1 flex items-baseline gap-1.5">
             <span
@@ -328,7 +335,7 @@ export function GradeDisplay({
             size="icon"
             onClick={onEdit}
             disabled={deleting}
-            aria-label="Изменить оценку"
+            aria-label={t('grade_form.edit')}
             data-testid="grade-display-edit"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
           >
@@ -340,7 +347,7 @@ export function GradeDisplay({
             size="icon"
             onClick={onDelete}
             disabled={deleting}
-            aria-label="Снять оценку"
+            aria-label={t('grade_form.delete')}
             data-testid="grade-display-delete"
             className="h-7 w-7 text-muted-foreground hover:text-foreground"
           >
@@ -356,7 +363,7 @@ export function GradeDisplay({
       {comment && comment.trim() && (
         <div className="space-y-1">
           <Label className="text-xs uppercase tracking-wide text-muted-foreground">
-            Комментарий
+            {t('grade_form.comment')}
           </Label>
           <p
             data-testid="grade-display-comment"
@@ -365,7 +372,9 @@ export function GradeDisplay({
             {comment}
           </p>
           <p className="text-xs text-muted-foreground">
-            {commentVisibleToStudent ? 'Виден студенту' : 'Скрыт от студента'}
+            {commentVisibleToStudent
+              ? t('grade_form.visible_to_student')
+              : t('grade_form.hidden_from_student')}
           </p>
         </div>
       )}

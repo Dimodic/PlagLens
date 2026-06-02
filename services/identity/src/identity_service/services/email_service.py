@@ -16,7 +16,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
+from plaglens_common.errors import PlagLensError
+from plaglens_common.service_client import ServiceClient
 
 from ..config import get_settings
 
@@ -122,18 +123,16 @@ class EmailService:
         headers = {"Content-Type": "application/json"}
         if self._token:
             headers["Authorization"] = f"Bearer {self._token}"
-        url = f"{self._base_url}/api/v1/internal/notifications/email-direct"
+        path = "/api/v1/internal/notifications/email-direct"
+        url = f"{self._base_url}{path}"
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-                if resp.status_code >= 400:
-                    logger.warning(
-                        "[email] notification rejected %s: %s",
-                        resp.status_code,
-                        resp.text[:300],
-                    )
-                else:
-                    logger.info("[email] sent to=%s subject=%s", recipient, subject)
+            async with ServiceClient(
+                self._base_url, provider="notification", timeout=self._timeout
+            ) as client:
+                await client.post(path, json=payload, headers=headers)
+            logger.info("[email] sent to=%s subject=%s", recipient, subject)
+        except PlagLensError as exc:  # non-2xx from notification, or upstream failure
+            logger.warning("[email] notification rejected (%s): %s", url, exc)
         except Exception as exc:  # network / dns / timeout
             logger.warning("[email] transport failed (%s): %s", url, exc)
 

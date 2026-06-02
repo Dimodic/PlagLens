@@ -70,6 +70,75 @@ def a1_of(row: int, col: int) -> str:
     return f"{col_to_letters(col)}{row + 1}"
 
 
+def _color_hex(c: dict[str, Any] | None) -> str | None:
+    """Google ``{red,green,blue}`` floats (0..1, missing → 0) → ``#rrggbb``."""
+    if not c:
+        return None
+    r = round(float(c.get("red", 0.0)) * 255)
+    g = round(float(c.get("green", 0.0)) * 255)
+    b = round(float(c.get("blue", 0.0)) * 255)
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _is_blackish(c: dict[str, Any] | None) -> bool:
+    """Default text colour (black) — don't bother sending it."""
+    if not c:
+        return True
+    return (
+        float(c.get("red", 0)) <= 0.06
+        and float(c.get("green", 0)) <= 0.06
+        and float(c.get("blue", 0)) <= 0.06
+    )
+
+
+def _chroma(c: dict[str, Any] | None) -> float:
+    """Max-min channel spread: 0 for white/grey/black, high for a saturated
+    colour. Lets us tell a meaningful conditional-format fill (red/green/
+    yellow) from neutral white/grey banding."""
+    if not c:
+        return 0.0
+    r = float(c.get("red", 0.0))
+    g = float(c.get("green", 0.0))
+    b = float(c.get("blue", 0.0))
+    return max(r, g, b) - min(r, g, b)
+
+
+def _preview_cell(cell: dict[str, Any]) -> dict[str, Any]:
+    """One Google grid cell → compact preview cell (value + non-default
+    background / text colour + bold)."""
+    v: Any = cell.get("formattedValue")
+    if v is None:
+        eff = cell.get("effectiveValue") or {}
+        if "stringValue" in eff:
+            v = eff["stringValue"]
+        elif "numberValue" in eff:
+            v = eff["numberValue"]
+        elif "boolValue" in eff:
+            v = eff["boolValue"]
+        else:
+            v = ""
+    out: dict[str, Any] = {"v": v if v is not None else ""}
+    note = cell.get("note")
+    if note:
+        out["note"] = note
+    fmt = cell.get("effectiveFormat") or {}
+    tf = fmt.get("textFormat") or {}
+    # Only mirror *meaningful* fills (conditional-format red/green/yellow).
+    # Neutral white/grey backgrounds are skipped so plain cells keep
+    # following the app's light/dark theme instead of forcing a white grid.
+    bg = fmt.get("backgroundColor")
+    if bg and _chroma(bg) >= 0.12:
+        out["bg"] = _color_hex(bg)
+        # Source text colour only matters on a painted cell — never force a
+        # dark fg onto a theme-coloured (possibly dark) plain cell.
+        fg = tf.get("foregroundColor")
+        if fg and not _is_blackish(fg):
+            out["fg"] = _color_hex(fg)
+    if tf.get("bold"):
+        out["bold"] = True
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Client protocol + impls
 # ---------------------------------------------------------------------------
@@ -91,6 +160,7 @@ class GoogleSheetsClient(Protocol):
         *,
         max_rows: int = 200,
         max_cols: int = 40,
+        sheet_name: str | None = None,
     ) -> dict[str, Any]: ...
 
     async def write_cells(
@@ -139,9 +209,17 @@ class InMemoryGoogleSheetsClient:
         *,
         max_rows: int = 200,
         max_cols: int = 40,
+        sheet_name: str | None = None,
     ) -> dict[str, Any]:
         sheets = self.spreadsheets.get(spreadsheet_id, {})
         notes_by_sheet = self.notes.get(spreadsheet_id, {})
+        if sheet_name:
+            target = str(sheet_name).strip().casefold()
+            sheets = {
+                t: v
+                for t, v in sheets.items()
+                if str(t).strip().casefold() == target
+            } or sheets
         worksheets: list[dict[str, Any]] = []
         for idx, (title, values) in enumerate(sheets.items()):
             sheet_notes = {
@@ -334,25 +412,131 @@ class GoogleApiClient:
         *,
         max_rows: int = 200,
         max_cols: int = 40,
+        sheet_name: str | None = None,
     ) -> dict[str, Any]:
         if self._fallback is not None:
             return await self._fallback.fetch_preview(
-                spreadsheet_id, max_rows=max_rows, max_cols=max_cols
+                spreadsheet_id,
+                max_rows=max_rows,
+                max_cols=max_cols,
+                sheet_name=sheet_name,
             )
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
-            None, self._fetch_preview_sync, spreadsheet_id, max_rows, max_cols
+            None,
+            self._fetch_preview_sync,
+            spreadsheet_id,
+            max_rows,
+            max_cols,
+            sheet_name,
         )
 
     def _fetch_preview_sync(  # pragma: no cover - integration path
-        self, spreadsheet_id: str, max_rows: int, max_cols: int
+        self,
+        spreadsheet_id: str,
+        max_rows: int,
+        max_cols: int,
+        sheet_name: str | None = None,
     ) -> dict[str, Any]:
+        # NB: do NOT use ``includeGridData=True`` on the whole spreadsheet —
+        # it returns the full *allocated* grid of every tab (even an empty
+        # sheet is 1000×26 cells, each with style metadata), which is
+        # megabytes and routinely takes 30 s+ → the client times out.
+        # Instead: one cheap metadata call (titles + dimensions, no grid),
+        # then a single ``values.batchGet`` for just the capped window.
         meta = (
             self._impl.spreadsheets()
-            .get(spreadsheetId=spreadsheet_id, includeGridData=True)
+            .get(
+                spreadsheetId=spreadsheet_id,
+                fields=(
+                    "properties.title,"
+                    "sheets.properties(sheetId,title,gridProperties)"
+                ),
+            )
             .execute()
         )
-        return _parse_preview(meta, max_rows=max_rows, max_cols=max_cols)
+        sheets_props = meta.get("sheets", []) or []
+        # When a specific tab is requested, fetch ONLY it — a gradebook can
+        # have 20 tabs, several hundreds of columns wide; pulling them all
+        # is multi-megabyte and slow. Fall back to all tabs if the name
+        # doesn't match (a typo shouldn't yield an empty preview).
+        if sheet_name:
+            target = str(sheet_name).strip().casefold()
+            only = [
+                sh
+                for sh in sheets_props
+                if str((sh.get("properties") or {}).get("title", "")).strip().casefold()
+                == target
+            ]
+            if only:
+                sheets_props = only
+        ranges: list[str] = []
+        for sh in sheets_props:
+            props = sh.get("properties", {})
+            grid = props.get("gridProperties", {})
+            rows = min(int(grid.get("rowCount", 0) or 0), max_rows) or 1
+            cols = min(int(grid.get("columnCount", 0) or 0), max_cols) or 1
+            end = a1_of(rows - 1, cols - 1)
+            # A1 sheet names are single-quoted; embedded quotes double up.
+            safe = str(props.get("title", "")).replace("'", "''")
+            ranges.append(f"'{safe}'!A1:{end}")
+
+        # Grid for ONLY the capped window, with a tight ``fields`` mask so
+        # we get column widths + values + cell colours/bold without the
+        # whole-sheet blob. ``includeGridData`` is safe here precisely
+        # because ``ranges`` bounds it.
+        data_by_title: dict[str, dict[str, Any]] = {}
+        if ranges:
+            grid_resp = (
+                self._impl.spreadsheets()
+                .get(
+                    spreadsheetId=spreadsheet_id,
+                    ranges=ranges,
+                    includeGridData=True,
+                    fields=(
+                        "sheets(properties.title,data("
+                        "columnMetadata.pixelSize,"
+                        "rowData.values(formattedValue,effectiveValue,note,"
+                        "effectiveFormat(backgroundColor,"
+                        "textFormat(bold,foregroundColor)))))"
+                    ),
+                )
+                .execute()
+            )
+            for sh in grid_resp.get("sheets", []):
+                title = (sh.get("properties") or {}).get("title", "")
+                blocks = sh.get("data") or []
+                data_by_title[title] = blocks[0] if blocks else {}
+
+        worksheets: list[dict[str, Any]] = []
+        for sh in sheets_props:
+            props = sh.get("properties", {})
+            grid = props.get("gridProperties", {})
+            title = props.get("title", "")
+            block = data_by_title.get(title, {})
+            col_meta = block.get("columnMetadata") or []
+            col_widths = [
+                int(cm.get("pixelSize") or 0) for cm in col_meta[:max_cols]
+            ]
+            rows_out: list[list[dict[str, Any]]] = []
+            for row in (block.get("rowData") or [])[:max_rows]:
+                cells_in = row.get("values") or []
+                rows_out.append([_preview_cell(c) for c in cells_in[:max_cols]])
+            worksheets.append(
+                {
+                    "sheet_id": props.get("sheetId"),
+                    "title": title,
+                    "row_count": grid.get("rowCount", 0),
+                    "col_count": grid.get("columnCount", 0),
+                    "rows": rows_out,
+                    "col_widths": col_widths,
+                }
+            )
+        return {
+            "spreadsheet_id": spreadsheet_id,
+            "title": (meta.get("properties") or {}).get("title", ""),
+            "worksheets": worksheets,
+        }
 
     async def write_cells(
         self,

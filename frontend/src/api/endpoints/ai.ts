@@ -68,71 +68,6 @@ export interface AIAnalysis {
   };
 }
 
-export interface PromptVersion {
-  id: string;
-  name: string;
-  system_prompt: string;
-  user_template: string;
-  json_schema: Record<string, unknown>;
-  active_for_tenant: boolean;
-  created_at: string;
-  deactivated_at: string | null;
-}
-
-export interface ProviderConfig {
-  id: string;
-  tenant_id: string;
-  provider: string; // e.g. 'openai', 'yandex', 'gigachat', 'self_hosted', 'openrouter'
-  base_url: string;
-  model: string;
-  api_key_env_var: string;
-  enabled: boolean;
-  default_for_tenant: boolean;
-  priority: number;
-  rate_limit_rpm: number;
-  max_tokens?: number | null;
-  settings?: Record<string, unknown>;
-  created_at: string;
-}
-
-export interface BudgetConfig {
-  scope: 'tenant' | 'course';
-  scope_id: string;
-  period: 'day' | 'week' | 'month';
-  max_tokens: number | null;
-  max_cost: number | null;
-  soft_warn_at: number;
-  hard_stop_at: number;
-  reset_at: string;
-}
-
-export interface BudgetUsage {
-  scope: 'tenant' | 'course';
-  scope_id: string;
-  period: 'day' | 'week' | 'month';
-  period_start: string;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-  total_cost: number;
-  analyses_count: number;
-  cache_hits: number;
-}
-
-export interface UsageHistoryPoint {
-  period_start: string;
-  total_tokens: number;
-  total_cost: number;
-  analyses_count: number;
-}
-
-export interface CacheStats {
-  total_entries: number;
-  size_bytes: number;
-  hit_rate: number;
-  by_prompt_version: Record<string, number>;
-}
-
 export interface AcceptedOperation {
   operation_id: string;
   status_url: string;
@@ -152,24 +87,24 @@ export interface CurateAsFeedbackBody {
   visible_to_student: boolean;
 }
 
-export interface TestProviderResult {
-  ok: boolean;
-  /** Round-trip latency in milliseconds. Absent if the request never left
-   * the gateway (e.g. missing API key). */
-  latency_ms?: number;
-  model_response?: string;
-  error?: string;
-}
-
-export interface TestPromptResult {
-  report: PlagLensReport | null;
-  raw_response: string;
-  tokens_used: number;
-  cost_estimate: number;
-  latency_ms: number;
-}
-
 // ---------- API ----------
+
+/** A staff member's own connected AI provider ("bring your own key"). */
+export interface MyAiProvider {
+  id: string;
+  provider: string;
+  model: string;
+  base_url: string;
+  active: boolean;
+  has_key: boolean;
+  /** Connector's own system-prompt override (null = standard prompt). */
+  system_prompt?: string | null;
+}
+
+export interface MyAiModel {
+  id: string;
+  name: string;
+}
 
 export const aiApi = {
   // A. Analyses
@@ -262,107 +197,59 @@ export const aiApi = {
       })
       .then((r) => r.data),
 
-  // E. Prompt versions (admin)
-  listPromptVersions: (params: ListParams = {}) =>
-    api
-      .get<Paginated<PromptVersion>>(`/admin/ai/prompt-versions`, {
-        params: buildListParams(params),
-      })
-      .then((r) => r.data),
-
-  getPromptVersion: (id: string) =>
-    api.get<PromptVersion>(`/admin/ai/prompt-versions/${id}`).then((r) => r.data),
-
-  createPromptVersion: (
-    body: Omit<PromptVersion, 'active_for_tenant' | 'created_at' | 'deactivated_at'>,
-  ) =>
-    api.post<PromptVersion>(`/admin/ai/prompt-versions`, body).then((r) => r.data),
-
-  updatePromptVersion: (id: string, body: Partial<PromptVersion>) =>
-    api.patch<PromptVersion>(`/admin/ai/prompt-versions/${id}`, body).then((r) => r.data),
-
-  activatePromptVersion: (id: string) =>
-    api.post<PromptVersion>(`/admin/ai/prompt-versions/${id}:activate`).then((r) => r.data),
-
-  testPromptVersion: (id: string, body: { code: string; language: string }) =>
-    api
-      .post<TestPromptResult>(`/admin/ai/prompt-versions/${id}:test`, body)
-      .then((r) => r.data),
-
-  // F. Provider configs
-  listProviders: () =>
-    api
-      .get<{ data: ProviderConfig[] } | ProviderConfig[]>(`/admin/ai/providers`)
-      .then((r) => {
-        // Backend may return either {data: [...]} or bare [...] shape; tolerate both.
-        const d = r.data as { data?: ProviderConfig[] } | ProviderConfig[];
-        if (Array.isArray(d)) return d;
-        return d?.data ?? [];
-      }),
-
-  getProvider: (id: string) =>
-    api.get<ProviderConfig>(`/admin/ai/providers/${id}`).then((r) => r.data),
-
-  createProvider: (
-    body: Omit<ProviderConfig, 'id' | 'created_at' | 'tenant_id'> & {
-      /** Plain API key — backend stores it as ``api_key_secret_ref``. Not
-       * returned on GET. Either this or ``api_key_env_var`` should be set. */
-      api_key?: string | null;
+  /** Run AI analysis for a set of submissions of an assignment (staff). */
+  batchCreate: (
+    assignmentId: string,
+    body: {
+      scope?: 'all' | 'selected' | 'suspicious_only';
+      submission_ids?: string[];
+      prompt_version?: string;
+      provider?: string;
     },
+    courseId?: string,
   ) =>
-    api.post<ProviderConfig>(`/admin/ai/providers`, body).then((r) => r.data),
-
-  updateProvider: (
-    id: string,
-    body: Partial<ProviderConfig> & { api_key?: string | null },
-  ) =>
-    api.patch<ProviderConfig>(`/admin/ai/providers/${id}`, body).then((r) => r.data),
-
-  deleteProvider: (id: string) =>
-    api.delete(`/admin/ai/providers/${id}`).then((r) => r.data),
-
-  testProvider: (id: string) =>
-    api.post<TestProviderResult>(`/admin/ai/providers/${id}:test`).then((r) => r.data),
-
-  setProviderDefault: (id: string) =>
-    api.post<ProviderConfig>(`/admin/ai/providers/${id}:set-default`).then((r) => r.data),
-
-  // G. Budgets
-  getTenantBudget: (tenantId: string) =>
-    api.get<BudgetConfig>(`/tenants/${tenantId}/ai/budget`).then((r) => r.data),
-
-  updateTenantBudget: (tenantId: string, body: Partial<BudgetConfig>) =>
-    api.patch<BudgetConfig>(`/tenants/${tenantId}/ai/budget`, body).then((r) => r.data),
-
-  getCourseBudget: (courseId: string) =>
-    api.get<BudgetConfig>(`/courses/${courseId}/ai/budget`).then((r) => r.data),
-
-  updateCourseBudget: (courseId: string, body: Partial<BudgetConfig>) =>
-    api.patch<BudgetConfig>(`/courses/${courseId}/ai/budget`, body).then((r) => r.data),
-
-  getTenantUsage: (tenantId: string) =>
     api
-      .get<{ current: BudgetUsage; history: UsageHistoryPoint[] }>(
-        `/tenants/${tenantId}/ai/usage`,
+      .post<AcceptedOperation>(
+        `/assignments/${assignmentId}/ai-analyses:batchCreate`,
+        body,
+        courseId ? { params: { course_id: courseId } } : undefined,
       )
       .then((r) => r.data),
 
-  getCourseUsage: (courseId: string) =>
-    api
-      .get<{ current: BudgetUsage; history: UsageHistoryPoint[] }>(
-        `/courses/${courseId}/ai/usage`,
-      )
-      .then((r) => r.data),
+  // Per-user provider connections — teacher/assistant "bring your own key".
+  myProviders: {
+    list: () => api.get<MyAiProvider[]>(`/me/ai/providers`).then((r) => r.data),
+    listModels: (body: {
+      provider: string;
+      api_key?: string;
+      base_url?: string;
+    }) =>
+      api
+        .post<MyAiModel[]>(`/me/ai/providers:listModels`, body)
+        .then((r) => r.data),
+    create: (body: {
+      provider: string;
+      model: string;
+      api_key: string;
+      base_url?: string;
+      activate?: boolean;
+      system_prompt?: string;
+    }) => api.post<MyAiProvider>(`/me/ai/providers`, body).then((r) => r.data),
+    update: (
+      id: string,
+      body: { model?: string; api_key?: string; system_prompt?: string },
+    ) =>
+      api.patch<MyAiProvider>(`/me/ai/providers/${id}`, body).then((r) => r.data),
+    activate: (id: string) =>
+      api
+        .post<MyAiProvider>(`/me/ai/providers/${id}:activate`)
+        .then((r) => r.data),
+    remove: (id: string) =>
+      api.delete(`/me/ai/providers/${id}`).then((r) => r.data),
+    defaultPrompt: () =>
+      api
+        .get<{ system_prompt: string }>(`/me/ai/prompt-default`)
+        .then((r) => r.data),
+  },
 
-  // H. Cache
-  getCacheStats: () =>
-    api.get<CacheStats>(`/admin/ai/cache/stats`).then((r) => r.data),
-
-  purgeCacheAll: () => api.delete(`/admin/ai/cache`).then((r) => r.data),
-
-  purgeCacheByPromptVersion: (id: string) =>
-    api.delete(`/admin/ai/cache/by-prompt-version/${id}`).then((r) => r.data),
-
-  purgeCacheBySubmission: (submissionId: string) =>
-    api.delete(`/admin/ai/cache/by-submission/${submissionId}`).then((r) => r.data),
 };

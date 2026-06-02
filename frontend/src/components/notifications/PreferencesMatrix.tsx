@@ -10,6 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/i18n';
 import type {
   AvailableEvent,
   PerEventPreferences,
@@ -32,6 +33,7 @@ export function PreferencesMatrix({
   value,
   onChange,
 }: PreferencesMatrixProps) {
+  const { t } = useTranslation();
   const toggle = (
     eventType: string,
     channel: 'inapp' | 'email' | 'telegram',
@@ -50,7 +52,7 @@ export function PreferencesMatrix({
   if (events.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">
-        Нет доступных типов событий.
+        {t('preferences_matrix.empty')}
       </p>
     );
   }
@@ -59,7 +61,7 @@ export function PreferencesMatrix({
     <Table data-testid="preferences-matrix">
       <TableHeader>
         <TableRow>
-          <TableHead>Событие</TableHead>
+          <TableHead>{t('preferences_matrix.col_event')}</TableHead>
           {CHANNELS.map((c) => (
             <TableHead key={c.key} className="w-[100px] text-center">
               {c.label}

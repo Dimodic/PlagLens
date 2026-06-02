@@ -20,6 +20,7 @@ import {
 } from '@/components/admin/IntegrationConfigForm';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useCreateIntegration } from '@/hooks/api/useIntegrations';
 import type { IntegrationKind } from '@/api/endpoints/integrations';
@@ -33,10 +34,16 @@ const KIND_OPTIONS: Array<{ value: IntegrationKind; label: string }> = [
   { value: 'google_sheets', label: 'Google Sheets' },
 ];
 
-const STEPS = ['Тип', 'Настройки', 'Создать'];
+const STEP_KEYS = [
+  'integration_create.step_type',
+  'integration_create.step_settings',
+  'integration_create.step_create',
+] as const;
 
 export function IntegrationCreatePage() {
-  useDocumentTitle('Новая интеграция');
+  const { t } = useTranslation();
+  useDocumentTitle(t('integration_create.title'));
+  const STEPS = STEP_KEYS.map((k) => t(k));
   const notify = useNotifications();
   const navigate = useNavigate();
   const create = useCreateIntegration();
@@ -59,9 +66,9 @@ export function IntegrationCreatePage() {
         display_name: values.display_name,
         settings: values.settings,
       });
-      notify.success('Интеграция создана');
+      notify.success(t('integration_create.created'));
       if (result.oauth_authorize_url) {
-        notify.info('Нужна OAuth-авторизация');
+        notify.info(t('integration_create.oauth_needed'));
       }
       navigate('/integrations');
     } catch (e) {
@@ -75,12 +82,15 @@ export function IntegrationCreatePage() {
         to="/integrations"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Интеграции
+        ← {t('integration_create.back_link')}
       </Link>
-      <PageHeader title="Новая интеграция" />
+      <PageHeader title={t('integration_create.title')} />
 
       <div className="text-xs text-muted-foreground">
-        Шаг {step + 1} из {STEPS.length}
+        {t('integration_create.step_counter', {
+          current: step + 1,
+          total: STEPS.length,
+        })}
       </div>
 
       {/* Stepper header (minimalist) */}
@@ -124,7 +134,7 @@ export function IntegrationCreatePage() {
       {step === 0 && (
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="integration-kind">Тип</Label>
+            <Label htmlFor="integration-kind">{t('integration_create.kind_label')}</Label>
             <Select
               value={kind}
               onValueChange={(v) => setKind((v as IntegrationKind) ?? 'stepik')}
@@ -143,7 +153,7 @@ export function IntegrationCreatePage() {
           </div>
           <div className="pt-2">
             <Button onClick={() => setStep(1)} data-testid="integration-wizard-next-step1">
-              Далее
+              {t('integration_create.next')}
             </Button>
           </div>
         </div>
@@ -158,7 +168,7 @@ export function IntegrationCreatePage() {
               disabled={!values.display_name}
               data-testid="integration-wizard-next-step2"
             >
-              Далее
+              {t('integration_create.next')}
             </Button>
           </div>
         </div>
@@ -177,7 +187,7 @@ export function IntegrationCreatePage() {
               data-testid="integration-wizard-create"
             >
               {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Создать
+              {t('common.create')}
             </Button>
           </div>
         </div>

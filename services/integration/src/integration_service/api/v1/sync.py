@@ -69,12 +69,12 @@ async def trigger_sync(
     # the integration page would otherwise leave a row stuck "в
     # очереди" forever.)
     if cfg.kind == "yandex_contest":
-        from integration_service.api.v1.yandex_contest import (
-            _run_sync_all_imported_contests,
-            _start_import_job,
+        from integration_service.services.yc_import import (
+            run_sync_all_imported_contests,
+            start_import_job,
         )
 
-        job_id = await _start_import_job(
+        job_id = await start_import_job(
             config_id=str(cfg.id),
             tenant_id=str(cfg.tenant_id),
             scope=scope,
@@ -90,8 +90,17 @@ async def trigger_sync(
                 "settings": cfg.settings,
             },
         )()
+        # Scope the sync to the homeworks the teacher picked (ДЗ). Empty
+        # → re-sync every imported homework.
+        hw_filter: set[str] | None = (
+            {str(h) for h in payload.scope.homework_ids}
+            if payload.scope.homework_ids
+            else None
+        )
         asyncio.create_task(
-            _run_sync_all_imported_contests(job_id=job_id, cfg=cfg_snapshot)
+            run_sync_all_imported_contests(
+                job_id=job_id, cfg=cfg_snapshot, homework_filter=hw_filter
+            )
         )
         response.headers["Location"] = (
             f"{get_settings().api_prefix}/operations/{job_id}"
@@ -262,7 +271,7 @@ async def stream_import_job_events(
             # on a long quiet job.
             if payload != last_payload:
                 last_payload = payload
-                yield f"event: progress\ndata: {payload}\n\n".encode("utf-8")
+                yield f"event: progress\ndata: {payload}\n\n".encode()
             if row.status not in ("running", "queued"):
                 yield b"event: done\ndata: {}\n\n"
                 return

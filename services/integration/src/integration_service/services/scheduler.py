@@ -18,7 +18,7 @@ Wiring
   through the same adapter the API endpoint uses.
 * Every run materialises an `ImportJob` row so the UI can display history.
 
-The pulled bearer is the cached super_admin service token (see
+The pulled bearer is the cached admin service token (see
 `service_token.py`), which has full cross-tenant rights.
 """
 from __future__ import annotations
@@ -32,13 +32,11 @@ import httpx
 import structlog
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from integration_service.adapters.yandex_contest import YandexContestAdapter
 from integration_service.common.db import get_sessionmaker
 from integration_service.common.ids import new_job_id
 from integration_service.common.redis_client import get_redis
 from integration_service.config import get_settings
 from integration_service.models.entities import ImportJob, IntegrationConfig
-from integration_service.services.service_token import auth_headers
 
 logger = structlog.get_logger(__name__)
 
@@ -49,7 +47,7 @@ _scheduler: Optional[AsyncIOScheduler] = None
 
 
 async def _list_active_yc_configs() -> list[IntegrationConfig]:
-    """Cross-tenant select — the scheduler runs as super_admin and must see
+    """Cross-tenant select — the scheduler runs as admin and must see
     integrations across every tenant. The repo's `list_` is tenant-bound, so
     we issue a direct select here."""
     from sqlalchemy import select
@@ -172,7 +170,7 @@ async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
     If autosync is off, no homeworks are selected, or we're inside the
     cooldown window, the tick skips without burning rate limits. The
     actual resync work is delegated to the same
-    ``_run_sync_all_imported_contests`` helper that backs the manual
+    ``run_sync_all_imported_contests`` helper that backs the manual
     "Sync all" button, but with a ``homework_filter`` set so only
     selected homeworks get pulled.
     """
@@ -214,13 +212,13 @@ async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
     # Run the same helper the manual sync uses, but constrained to the
     # selected homeworks. Inline await — the scheduler tick already
     # owns the event loop, no need for asyncio.create_task here.
-    from integration_service.api.v1.yandex_contest import (
-        _run_sync_all_imported_contests,
-        _start_import_job,
-        _stamp_autosync_last_run,
+    from integration_service.services.yc_import import (
+        run_sync_all_imported_contests,
+        stamp_autosync_last_run,
+        start_import_job,
     )
 
-    job_id = await _start_import_job(
+    job_id = await start_import_job(
         config_id=str(cfg.id),
         tenant_id=str(cfg.tenant_id),
         scope={
@@ -240,143 +238,15 @@ async def _sync_one_config(cfg: IntegrationConfig) -> dict[str, Any]:
             "settings": cfg.settings,
         },
     )()
-    await _run_sync_all_imported_contests(
+    await run_sync_all_imported_contests(
         job_id=job_id, cfg=cfg_snap, homework_filter=homework_ids
     )
-    await _stamp_autosync_last_run(str(cfg.id))
+    await stamp_autosync_last_run(str(cfg.id))
     return {
         "config": cfg.id,
         "homeworks": len(homework_ids),
         "hours": hours,
     }
-
-
-# Legacy scheduler path (course-scoped configs, pulls every contest
-# from every homework). Kept here in case we ever revive it for a
-# non-YC adapter that doesn't fit the new autosync model. Currently
-# unreachable from ``_sync_one_config``.
-async def _sync_one_config_legacy(cfg: IntegrationConfig) -> dict[str, Any]:
-    started = datetime.now(UTC)
-    headers = await auth_headers()
-    course_id = cfg.course_id
-    if not course_id:
-        return {"skipped": True, "reason": "no course_id"}
-
-    contest_ids = await _list_homework_contest_ids(course_id, headers)
-    if not contest_ids:
-        await _record_job(
-            cfg.id,
-            cfg.tenant_id,
-            started,
-            datetime.now(UTC),
-            "completed",
-            {"contests": 0, "participants_imported": 0},
-        )
-        return {"contests": 0}
-
-    adapter = YandexContestAdapter()
-    total_pp = 0
-    total_created = 0
-    total_existing = 0
-    total_enrolled = 0
-    total_failed = 0
-    errors: list[str] = []
-
-    for cid in contest_ids:
-        result = await adapter.import_participants(cfg, {"contest_id": cid})
-        total_pp += result.imported
-        total_failed += result.failed
-        if result.errors:
-            errors.extend(result.errors[:2])
-        if not result.participants:
-            continue
-
-        items = [
-            {
-                "external_id": rp.external_id,
-                "email": rp.email,
-                "login": rp.login,
-                "display_name": (
-                    f"{rp.surname or ''} {rp.name or ''}".strip()
-                    or rp.login
-                    or rp.external_id
-                ),
-                "global_role": "student",
-            }
-            for rp in result.participants
-        ]
-        ident = await _push_to_identity(headers, items, cfg.tenant_id)
-        if not ident.get("ok"):
-            total_failed += 1
-            errors.append(f"identity {ident.get('status')}: {ident.get('body')}")
-            continue
-        total_created += ident.get("created", 0)
-        total_existing += ident.get("existing", 0)
-
-        members = [
-            {"user_id": it["user_id"], "role": "student"}
-            for it in (ident.get("items") or [])
-        ]
-        if members:
-            crs = await _push_to_course(headers, course_id, members)
-            if not crs.get("ok"):
-                errors.append(f"course {crs.get('status')}: {crs.get('body')}")
-            else:
-                total_enrolled += crs.get("added", 0)
-
-    # ---- Submissions: pull deltas + advance cursor (count-only for now) ----
-    total_subs = 0
-    sub_failures = 0
-    factory = get_sessionmaker()
-    async with factory() as s:
-        # Re-load cfg to get the current cursor (may have advanced if a parallel
-        # request to /import-submissions ran).
-        from sqlalchemy import select as _sel
-
-        fresh = (
-            await s.execute(_sel(IntegrationConfig).where(IntegrationConfig.id == cfg.id))
-        ).scalar_one_or_none()
-        if fresh is not None:
-            cursor_map = dict(fresh.cursor or {})
-            for cid in contest_ids:
-                key = f"yc:{cid}:submissions"
-                sub_scope = {"contest_id": cid, "cursor": cursor_map.get(key) or {}}
-                try:
-                    sres = await adapter.import_submissions(cfg, sub_scope, since=None)
-                except Exception as exc:  # noqa: BLE001
-                    sub_failures += 1
-                    errors.append(f"submissions {cid}: {exc!s}")
-                    continue
-                total_subs += sres.imported
-                sub_failures += sres.failed
-                if sres.cursor and not sres.failed:
-                    cursor_map[key] = sres.cursor
-            fresh.cursor = cursor_map
-            await s.commit()
-
-    finished = datetime.now(UTC)
-    stats = {
-        "contests": len(contest_ids),
-        "participants_imported": total_pp,
-        "users_created": total_created,
-        "users_existing": total_existing,
-        "members_enrolled": total_enrolled,
-        "submissions_fetched": total_subs,
-        "failures": total_failed + sub_failures,
-    }
-    status = (
-        "failed" if (total_failed + sub_failures) and not (total_pp + total_subs) else "completed"
-    )
-    await _record_job(
-        cfg.id,
-        cfg.tenant_id,
-        started,
-        finished,
-        status,
-        stats,
-        error=" | ".join(errors[:3]) if errors else None,
-    )
-    return stats
 
 
 async def _run_tick() -> None:

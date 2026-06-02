@@ -127,6 +127,9 @@ PUBLIC_PREFIXES: tuple[str, ...] = (
     "/api/v1/auth/oauth/",
     "/api/v1/webhooks/",
     "/api/v1/.well-known/",
+    # Avatar image proxy — loaded by <img src> which can't send a Bearer
+    # token; avatars aren't secret. Streams bytes from the private bucket.
+    "/api/v1/avatars/",
 )
 
 

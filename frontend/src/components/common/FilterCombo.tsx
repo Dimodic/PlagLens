@@ -24,6 +24,7 @@ import {
   CommandList,
 } from '@/components/ui/command';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 export interface FilterComboOption {
   value: string;
@@ -45,6 +46,7 @@ export function FilterCombo({
   searchPlaceholder?: string;
   testId?: string;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
   return (
@@ -65,9 +67,11 @@ export function FilterCombo({
       </PopoverTrigger>
       <PopoverContent align="start" className="w-[280px] p-0">
         <Command>
-          <CommandInput placeholder={searchPlaceholder ?? 'Найти…'} />
+          <CommandInput
+            placeholder={searchPlaceholder ?? t('filter_combo.search_placeholder')}
+          />
           <CommandList>
-            <CommandEmpty>Ничего не найдено.</CommandEmpty>
+            <CommandEmpty>{t('filter_combo.empty')}</CommandEmpty>
             <CommandGroup>
               <CommandItem
                 value={allLabel}

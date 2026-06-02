@@ -24,6 +24,20 @@ class UserOut(BaseModel):
     anonymized_at: datetime | None = None
 
 
+class PublicProfileOut(BaseModel):
+    """Trimmed, cross-tenant-safe directory card — no email/PII beyond
+    name + org. Surfaced by global people search + the public profile."""
+
+    id: str
+    display_name: str
+    avatar_url: str | None = None
+    global_role: str
+    tenant_id: str
+    tenant_name: str | None = None
+    tenant_slug: str | None = None
+    created_at: datetime
+
+
 class UserCreate(BaseModel):
     email: str
     display_name: str = Field(min_length=1, max_length=255)
@@ -31,7 +45,7 @@ class UserCreate(BaseModel):
     locale: str = "ru"
     timezone: str = "UTC"
     password: str | None = None  # admin can set initial password
-    tenant_id: str | None = None  # required for super_admin; admin uses own tenant
+    tenant_id: str | None = None  # admin can target any tenant; otherwise own tenant
 
 
 class UserUpdate(BaseModel):
@@ -39,6 +53,7 @@ class UserUpdate(BaseModel):
     locale: str | None = None
     timezone: str | None = None
     avatar_url: str | None = None
+    email: str | None = None  # add/change own email (empty string clears) — self-service or admin
     global_role: str | None = None  # admin only
 
 
@@ -63,7 +78,7 @@ class BulkImportItem(BaseModel):
 
 class BulkImportRequest(BaseModel):
     items: list[BulkImportItem] = Field(min_length=1, max_length=2000)
-    tenant_id: str | None = None  # super_admin can target any tenant; admin uses their own
+    tenant_id: str | None = None  # admin can target any tenant; otherwise their own
 
 
 class BulkImportResultItem(BaseModel):

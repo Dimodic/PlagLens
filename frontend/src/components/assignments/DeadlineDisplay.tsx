@@ -4,6 +4,7 @@
 import { Clock } from 'lucide-react';
 import dayjs from 'dayjs';
 import { formatDateTime } from '@/utils/formatters';
+import { useTranslation } from '@/i18n';
 import {
   Tooltip,
   TooltipContent,
@@ -27,10 +28,11 @@ function classForDeadline(at: string | null, kind: 'soft' | 'hard'): string {
 }
 
 export function DeadlineDisplay({ softAt, hardAt, size = 'sm' }: DeadlineDisplayProps) {
+  const { t } = useTranslation();
   const sizeClass = size === 'xs' ? 'text-xs' : 'text-sm';
 
   if (!softAt && !hardAt) {
-    return <span className={`${sizeClass} text-muted-foreground`}>Без дедлайна</span>;
+    return <span className={`${sizeClass} text-muted-foreground`}>{t('deadline_display.none')}</span>;
   }
 
   return (
@@ -46,7 +48,7 @@ export function DeadlineDisplay({ softAt, hardAt, size = 'sm' }: DeadlineDisplay
                 </span>
               </div>
             </TooltipTrigger>
-            <TooltipContent>Мягкий дедлайн</TooltipContent>
+            <TooltipContent>{t('deadline_display.soft')}</TooltipContent>
           </Tooltip>
         )}
         {hardAt && (
@@ -61,7 +63,7 @@ export function DeadlineDisplay({ softAt, hardAt, size = 'sm' }: DeadlineDisplay
                 </span>
               </div>
             </TooltipTrigger>
-            <TooltipContent>Жёсткий дедлайн</TooltipContent>
+            <TooltipContent>{t('deadline_display.hard')}</TooltipContent>
           </Tooltip>
         )}
       </div>

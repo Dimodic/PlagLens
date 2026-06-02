@@ -13,13 +13,15 @@ import { useParams } from 'react-router-dom';
 import { Page } from '@/components/layout/Page';
 import { PairDiffInline } from '@/components/plagiarism/PairDiffInline';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
 export function PlagiarismPairDiffPage() {
+  const { t } = useTranslation();
   const { runId = '', pairId = '' } = useParams<{
     runId: string;
     pairId: string;
   }>();
-  useDocumentTitle('Сравнение пары');
+  useDocumentTitle(t('plagiarism_pair_diff.title'));
 
   return (
     <Page width="wide">

@@ -157,7 +157,7 @@ def _dev_signed_jwt(cfg: E2EConfig) -> str:
     payload = {
         "sub": "e2e-user",
         "tenant_id": cfg.tenant_slug,
-        "roles": ["super_admin"],
+        "roles": ["admin"],
         "course_roles": [],
         "iat": int(time.time()),
         "exp": int(time.time()) + 3600,

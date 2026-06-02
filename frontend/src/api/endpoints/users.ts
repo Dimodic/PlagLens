@@ -101,7 +101,7 @@ export const usersApi = {
   // -------- Self-service --------
   me: () => api.get<CurrentUser>('/users/me').then((r) => r.data),
 
-  patchMe: (patch: Partial<Pick<CurrentUser, 'display_name' | 'locale' | 'timezone'>>) =>
+  patchMe: (patch: Partial<Pick<CurrentUser, 'display_name' | 'locale' | 'timezone' | 'email'>>) =>
     api.patch<CurrentUser>('/users/me', patch).then((r) => r.data),
 
   uploadAvatar: (formData: FormData) =>

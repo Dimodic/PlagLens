@@ -1,11 +1,15 @@
 """Health / metrics / version."""
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Response
+from sqlalchemy import text
 
 from integration_service import __version__
+from integration_service.common.db import get_sessionmaker
+from integration_service.common.redis_client import get_redis
 from integration_service.config import get_settings
 
 try:
@@ -26,9 +30,38 @@ async def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+_READY_CHECK_TIMEOUT = 2.0  # seconds — keep readiness fast + resilient
+
+
+async def _check_db() -> str:
+    try:
+        sm = get_sessionmaker()
+        async with sm() as session:
+            await asyncio.wait_for(
+                session.execute(text("SELECT 1")), timeout=_READY_CHECK_TIMEOUT
+            )
+        return "ok"
+    except Exception as exc:  # never raise — readiness must always answer
+        return f"fail: {type(exc).__name__}"
+
+
+async def _check_redis() -> str:
+    try:
+        redis = get_redis()
+        await asyncio.wait_for(redis.ping(), timeout=_READY_CHECK_TIMEOUT)
+        return "ok"
+    except Exception as exc:  # never raise — readiness must always answer
+        return f"fail: {type(exc).__name__}"
+
+
 @router.get("/readyz", include_in_schema=False)
-async def readyz() -> dict[str, str]:
-    return {"status": "ready"}
+async def readyz(response: Response) -> dict[str, Any]:
+    db_result, redis_result = await asyncio.gather(_check_db(), _check_redis())
+    checks = {"db": db_result, "redis": redis_result}
+    ok = all(v == "ok" for v in checks.values())
+    if not ok:
+        response.status_code = 503
+    return {"status": "ok" if ok else "degraded", "checks": checks}
 
 
 @router.get("/metrics", include_in_schema=False)

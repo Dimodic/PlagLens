@@ -333,6 +333,10 @@ class SubmissionService:
         await self.repo.add_flag(flag)
         flags = dict(sub.flags or {})
         flags[kind] = True
+        # add_flag is the human review path; mark the submission as
+        # manually flagged so triage filters and row badges (which read
+        # flags["manually_flagged"]) pick it up.
+        flags["manually_flagged"] = True
         sub.flags = flags
         await self.session.flush()
         return flag
@@ -347,6 +351,9 @@ class SubmissionService:
             new_flags = dict(sub.flags or {})
             if flag.kind not in kinds:
                 new_flags.pop(flag.kind, None)
+            # No human flags left → drop the manual-review marker.
+            if not kinds:
+                new_flags.pop("manually_flagged", None)
             sub.flags = new_flags
             await self.session.flush()
 
@@ -356,8 +363,13 @@ class SubmissionService:
         ]
         for f in existing:
             await self.repo.clear_flag(f, when=utcnow())
+        remaining = await self.repo.list_flags(sub.id)
+        kinds = {f.kind for f in remaining if f.cleared_at is None}
         flags = dict(sub.flags or {})
         flags.pop(kind, None)
+        # No human flags left → drop the manual-review marker.
+        if not kinds:
+            flags.pop("manually_flagged", None)
         sub.flags = flags
         await self.session.flush()
 

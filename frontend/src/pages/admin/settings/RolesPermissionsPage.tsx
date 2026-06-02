@@ -14,6 +14,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   systemKeys,
   usePermissionsCatalogue,
@@ -24,7 +25,8 @@ import { systemApi } from '@/api/endpoints/system';
 import type { Problem } from '@/api/types';
 
 export function RolesPermissionsPage() {
-  useDocumentTitle('Роли и разрешения');
+  const { t } = useTranslation();
+  useDocumentTitle(t('roles_permissions.title'));
   const notify = useNotifications();
 
   const rolesQ = useRoles();
@@ -73,14 +75,16 @@ export function RolesPermissionsPage() {
       { role, permissions: Array.from(set) },
       {
         onError: (e) =>
-          notify.error((e as unknown as Problem)?.detail ?? 'Не удалось сохранить'),
+          notify.error(
+            (e as unknown as Problem)?.detail ?? t('roles_permissions.save_failed'),
+          ),
       },
     );
   };
 
   return (
     <Page width="wide">
-      <PageHeader title="Роли и разрешения" />
+      <PageHeader title={t('roles_permissions.title')} />
 
       <div className="space-y-4">
         {errored && <ProblemAlert problem={errored as unknown as Problem} />}
@@ -90,7 +94,7 @@ export function RolesPermissionsPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : (catalogueQ.data?.length ?? 0) === 0 ? (
-          <EmptyState title="Каталог разрешений пуст" />
+          <EmptyState title={t('roles_permissions.empty')} />
         ) : (
           <RolePermissionsMatrix
             permissions={catalogueQ.data ?? []}

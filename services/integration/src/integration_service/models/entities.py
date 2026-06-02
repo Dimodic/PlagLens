@@ -6,7 +6,6 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     JSON,
-    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
@@ -132,23 +131,6 @@ class WebhookEvent(Base):
     __table_args__ = (
         Index("ix_webhook_events_kind_status", "kind", "status"),
         UniqueConstraint("kind", "external_event_id", name="uq_webhook_external_event"),
-    )
-
-
-class TelegramBinding(Base):
-    __tablename__ = "telegram_bindings"
-
-    id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
-    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    verification_token: Mapped[Optional[str]] = mapped_column(
-        String(64), nullable=True, unique=True
-    )
-    bound_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
 

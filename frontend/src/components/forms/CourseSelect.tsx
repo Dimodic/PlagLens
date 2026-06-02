@@ -6,6 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { coursesApi, type CourseBrief } from '@/api/endpoints/courses';
+import { useTranslation } from '@/i18n';
 import {
   Select,
   SelectContent,
@@ -29,12 +30,13 @@ export interface CourseSelectProps {
 export function CourseSelect({
   value,
   onChange,
-  placeholder = 'Выберите курс',
+  placeholder,
   disabled,
   className,
   style,
   ...rest
 }: CourseSelectProps) {
+  const { t } = useTranslation();
   const { data, isLoading } = useQuery({
     queryKey: ['courses', { limit: 200 }],
     queryFn: () => coursesApi.list({ limit: 200 }),
@@ -53,12 +55,12 @@ export function CourseSelect({
         style={style}
         data-testid={rest['data-testid']}
       >
-        <SelectValue placeholder={placeholder} />
+        <SelectValue placeholder={placeholder ?? t('course_select.placeholder')} />
       </SelectTrigger>
       <SelectContent>
         {items.length === 0 ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">
-            {isLoading ? 'Загрузка…' : 'Ничего не найдено'}
+            {isLoading ? t('course_select.loading') : t('course_select.empty')}
           </div>
         ) : (
           items.map((c) => (

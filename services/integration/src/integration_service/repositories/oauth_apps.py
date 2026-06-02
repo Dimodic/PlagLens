@@ -32,7 +32,7 @@ class OAuthAppCredentialsRepo:
     async def get_any(self, provider_kind: str) -> Optional[OAuthAppCredentials]:
         """Return any creds for this provider regardless of tenant. Used as a
         single-tenant fallback when the looked-up tenant has no row of its own
-        — e.g. a super_admin in `system` configures the global app, and
+        — e.g. an admin in `system` configures the global app, and
         teachers in other tenants reuse it."""
         stmt = (
             select(OAuthAppCredentials)

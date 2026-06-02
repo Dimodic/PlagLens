@@ -7,7 +7,7 @@
  * domain is a vanity field nobody actually used, and CORS origins
  * leaked an implementation detail of the gateway's network policy. If
  * either ever becomes necessary they can be set later from the tenant
- * detail page (which has the full editor for the super-admin use case).
+ * detail page (which has the full editor for the admin use case).
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
@@ -20,10 +20,12 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useCreateTenant } from '@/hooks/api/useTenants';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function TenantCreatePage() {
-  useDocumentTitle('Новое учреждение');
+  const { t } = useTranslation();
+  useDocumentTitle(t('tenant_create.title'));
   const navigate = useNavigate();
   const notify = useNotifications();
   const create = useCreateTenant();
@@ -37,7 +39,7 @@ export function TenantCreatePage() {
     if (!trimmed) return;
     try {
       const result = await create.mutateAsync({ name: trimmed });
-      notify.success(`Учреждение «${result.name}» создано`);
+      notify.success(t('tenant_create.created', { name: result.name }));
       navigate(`/admin/tenants/${result.id}`);
     } catch (e) {
       setProblem(e as Problem);
@@ -50,20 +52,20 @@ export function TenantCreatePage() {
         to="/admin/tenants"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Учреждения
+        ← {t('tenant_create.back')}
       </Link>
-      <PageHeader title="Новое учреждение" />
+      <PageHeader title={t('tenant_create.title')} />
 
       {problem && <ProblemAlert problem={problem} />}
 
       <div className="space-y-4">
         <div className="space-y-1.5">
-          <Label htmlFor="tenant-name">Название</Label>
+          <Label htmlFor="tenant-name">{t('tenant_create.name_label')}</Label>
           <Input
             id="tenant-name"
             value={name}
             onChange={(e) => setName(e.currentTarget.value)}
-            placeholder="Например, ВШЭ ФКН"
+            placeholder={t('tenant_create.name_placeholder')}
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') void handleSubmit();
@@ -71,7 +73,7 @@ export function TenantCreatePage() {
             data-testid="tenant-create-name"
           />
           <p className="text-xs text-muted-foreground">
-            Короткий идентификатор и URL-слаг сгенерируются автоматически.
+            {t('tenant_create.name_hint')}
           </p>
         </div>
 
@@ -82,7 +84,7 @@ export function TenantCreatePage() {
             data-testid="tenant-create-submit"
           >
             {create.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Создать
+            {t('common.create')}
           </Button>
         </div>
       </div>

@@ -95,7 +95,6 @@ class Settings(BaseSettings):
             "SUBMISSION_SERVICE_URL", "SUBMISSION_BASE_URL"
         ),
     )
-    COURSE_SERVICE_URL: str = "http://course-service:8080"
 
     IDEMPOTENCY_TTL_SECONDS: int = 24 * 3600
 

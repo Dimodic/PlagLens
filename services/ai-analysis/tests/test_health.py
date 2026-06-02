@@ -11,6 +11,9 @@ async def test_healthz(client) -> None:
 async def test_readyz(client) -> None:
     r = await client.get("/readyz")
     assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"db": "ok", "redis": "ok"}
 
 
 async def test_version(client) -> None:

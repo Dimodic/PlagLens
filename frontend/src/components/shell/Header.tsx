@@ -2,14 +2,14 @@ import { Link, useNavigate } from 'react-router-dom';
 import {
   LogOut,
   Menu,
-  Search,
   User as UserIcon,
   Moon,
   Sun,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
+import { cn } from '@/components/ui/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { HeaderSearch } from './HeaderSearch';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -18,41 +18,32 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { useAuth } from '@/auth/useAuth';
 import { userSecondaryLabel } from '@/auth/userIdentity';
+import { initials } from '@/utils/initials';
 import { useTranslation } from '@/i18n';
 import { NotificationsBellDropdown } from '@/components/notifications/NotificationsBellDropdown';
 import { Wordmark } from './Wordmark';
 
 interface HeaderProps {
-  onOpenSearch?: () => void;
   onOpenMobileNav?: () => void;
 }
 
-function initials(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part.charAt(0).toUpperCase())
-    .join('');
-}
-
-export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
+export function Header({ onOpenMobileNav }: HeaderProps) {
   const { user, logout } = useAuth();
-  const { t } = useTranslation();
-  const { theme, setTheme } = useTheme();
+  const { t, locale, setLocale } = useTranslation();
+  const { theme, resolvedTheme, setTheme } = useTheme();
   const navigate = useNavigate();
+  const isDark = (resolvedTheme ?? theme) === 'dark';
 
   const onLogout = async () => {
     try { await logout(); } finally { navigate('/login'); }
   };
 
-  // Language picker moved into the Profile page — keeping the avatar
-  // dropdown to the bare minimum (Profile + Logout) so the header stays
-  // calm. The Profile section "Предпочтения" owns locale + notification
-  // channels now.
+  // The avatar dropdown carries quick theme + language toggles (right below
+  // Profile). The Profile page's "Предпочтения" still owns the canonical
+  // locale + notification-channel settings.
 
   const displayName = user?.display_name || user?.email || 'User';
 
@@ -67,7 +58,7 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
           size="icon"
           className="md:hidden"
           onClick={onOpenMobileNav}
-          aria-label="Открыть меню"
+          aria-label={t('shell.open_menu')}
           data-testid="header-mobile-menu"
         >
           <Menu className="h-5 w-5" />
@@ -86,41 +77,14 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
         <Wordmark variant="full" data-testid="wordmark-header" />
       </div>
 
-      {/* Search bar — absolutely centered to the viewport. Using absolute
-        * positioning so it doesn't get pulled sideways by the (wider) actions
-        * cluster on the right. */}
-      <div className="pointer-events-none absolute inset-x-0 hidden md:flex justify-center">
-        <button
-          type="button"
-          onClick={onOpenSearch}
-          data-testid="header-search-button"
-          className="group pointer-events-auto relative flex h-9 w-full max-w-md items-center"
-          aria-label={t('shell.search_placeholder')}
-        >
-          <Search className="absolute left-3.5 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder={t('shell.search_placeholder')}
-            className="pointer-events-none pl-10 pr-14 rounded-full bg-input-background border-transparent group-hover:border-border"
-            readOnly
-            tabIndex={-1}
-          />
-          <kbd className="absolute right-3 hidden h-5 select-none items-center gap-1 rounded-full border bg-background px-2 font-mono text-[10px] font-medium text-muted-foreground sm:flex">
-            ⌘K
-          </kbd>
-        </button>
+      {/* Inline search — centered in the bar; results drop down right under
+        * the field (no dimmed modal). Absolute so the wider actions cluster on
+        * the right doesn't pull it sideways. */}
+      <div className="pointer-events-none absolute inset-x-0 hidden md:flex justify-center px-4">
+        <HeaderSearch />
       </div>
 
       <div className="ml-auto flex items-center gap-1">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          aria-label="Toggle theme"
-        >
-          <Sun className="h-4 w-4 dark:hidden" />
-          <Moon className="hidden h-4 w-4 dark:block" />
-        </Button>
-
         <NotificationsBellDropdown />
         {/* Hidden link preserves the `header-notifications` testid for older
           * smoke scripts that still navigate via it; the visible UI is now the
@@ -137,6 +101,9 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
               data-testid="header-user-menu-trigger"
             >
               <Avatar className="h-7 w-7">
+                {user?.avatar_url && (
+                  <AvatarImage src={user.avatar_url} alt={displayName} />
+                )}
                 <AvatarFallback className="text-xs bg-accent text-accent-foreground">
                   {initials(displayName)}
                 </AvatarFallback>
@@ -145,29 +112,86 @@ export function Header({ onOpenSearch, onOpenMobileNav }: HeaderProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel>
-              <div className="flex flex-col">
-                <span className="text-sm font-medium">{displayName}</span>
-                {(() => {
-                  const sub = userSecondaryLabel(user);
-                  return sub ? (
-                    <span
-                      data-testid="header-user-email"
-                      className="text-xs text-muted-foreground truncate"
-                    >
-                      {sub}
-                    </span>
-                  ) : null;
-                })()}
-              </div>
+            {/* Name already sits in the trigger right above — the label only
+              * carries the secondary (handle / email) to avoid showing the
+              * name twice. Falls back to the name when there's no secondary. */}
+            <DropdownMenuLabel className="font-normal">
+              <span
+                data-testid="header-user-email"
+                className="block text-xs text-muted-foreground truncate"
+              >
+                {userSecondaryLabel(user) ?? displayName}
+              </span>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
             <DropdownMenuItem asChild data-testid="header-user-menu-profile">
               <Link to="/me/profile" className="cursor-pointer">
                 <UserIcon className="mr-2 h-4 w-4" />
                 {t('user_menu.profile')}
               </Link>
             </DropdownMenuItem>
+            {/* Theme + language as two segmented toggles. Plain div (not a
+              * DropdownMenuItem) so a click flips the setting without closing
+              * the menu. */}
+            <div className="flex items-center gap-2 px-2 py-1.5">
+              <div className="flex flex-1 rounded-md border border-border p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setTheme('light')}
+                  aria-label={t('user_menu.theme_light')}
+                  data-testid="header-theme-light"
+                  className={cn(
+                    'flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+                    !isDark
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Sun className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTheme('dark')}
+                  aria-label={t('user_menu.theme_dark')}
+                  data-testid="header-theme-dark"
+                  className={cn(
+                    'flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+                    isDark
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  <Moon className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="flex flex-1 rounded-md border border-border p-0.5 text-xs font-semibold">
+                <button
+                  type="button"
+                  onClick={() => setLocale('ru')}
+                  data-testid="header-lang-ru"
+                  className={cn(
+                    'flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+                    locale === 'ru'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  RU
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLocale('en')}
+                  data-testid="header-lang-en"
+                  className={cn(
+                    'flex flex-1 items-center justify-center rounded-[5px] py-1 transition-colors',
+                    locale === 'en'
+                      ? 'bg-accent text-accent-foreground'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  EN
+                </button>
+              </div>
+            </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={onLogout}

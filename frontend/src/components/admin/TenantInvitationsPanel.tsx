@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { StatusPill } from '@/components/common/StatusPill';
+import { t, useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useCreateInvitation,
@@ -31,11 +32,14 @@ import type {
 } from '@/api/endpoints/invitations';
 import type { Problem } from '@/api/types';
 
-const ROLE_LABEL: Record<InviteRole, string> = {
-  teacher: 'Преподаватель',
-  assistant: 'Ассистент',
-  student: 'Студент',
-};
+function roleLabel(role: InviteRole): string {
+  const map: Record<InviteRole, string> = {
+    teacher: t('tenant_invitations.role_teacher'),
+    assistant: t('tenant_invitations.role_assistant'),
+    student: t('tenant_invitations.role_student'),
+  };
+  return map[role];
+}
 
 function pillTone(inv: Invitation): 'success' | 'warning' | 'neutral' {
   if (inv.accepted_at) return 'success';
@@ -44,12 +48,13 @@ function pillTone(inv: Invitation): 'success' | 'warning' | 'neutral' {
 }
 
 function pillLabel(inv: Invitation): string {
-  if (inv.accepted_at) return 'использовано';
-  if (dayjs(inv.expires_at).isBefore(dayjs())) return 'истекло';
-  return 'активно';
+  if (inv.accepted_at) return t('tenant_invitations.status_used');
+  if (dayjs(inv.expires_at).isBefore(dayjs())) return t('tenant_invitations.status_expired');
+  return t('tenant_invitations.status_active');
 }
 
 export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const listQ = useInvitations();
   const create = useCreateInvitation();
@@ -61,7 +66,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
   const [courseId, setCourseId] = useState('');
 
   // Identity returns all invitations the caller can see (admin → all in
-  // tenant); filter to the tenant we're viewing in case super-admin opened
+  // tenant); filter to the tenant we're viewing in case an admin opened
   // the page from a different tenant.
   const list = (listQ.data ?? []).filter((inv) => inv.tenant_id === tenantId);
   const active = list.filter((inv) => !inv.accepted_at && !dayjs(inv.expires_at).isBefore(dayjs()));
@@ -77,33 +82,33 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
         // admin (in tenant=system) can administer HSE / other tenants this way.
         tenant_id: tenantId,
       });
-      notify.success('Приглашение создано');
+      notify.success(t('tenant_invitations.created'));
       setShowForm(false);
       setEmail('');
       setCourseId('');
       setRole('student');
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось создать');
+      notify.error(p?.detail ?? p?.title ?? t('tenant_invitations.create_failed'));
     }
   };
 
   const onCopy = async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      notify.success(`Код ${code} скопирован`);
+      notify.success(t('tenant_invitations.code_copied', { code }));
     } catch {
-      notify.error('Не удалось скопировать');
+      notify.error(t('tenant_invitations.copy_failed'));
     }
   };
 
   const onRevoke = async (id: string) => {
     try {
       await revoke.mutateAsync(id);
-      notify.success('Приглашение отозвано');
+      notify.success(t('tenant_invitations.revoked'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? 'Не удалось отозвать');
+      notify.error(p?.detail ?? t('tenant_invitations.revoke_failed'));
     }
   };
 
@@ -111,10 +116,9 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium">Приглашения</h3>
+          <h3 className="text-sm font-medium">{t('tenant_invitations.title')}</h3>
           <p className="text-xs text-muted-foreground">
-            Создайте код и передайте пользователю — он введёт его в профиле
-            после регистрации.
+            {t('tenant_invitations.description')}
           </p>
         </div>
         {!showForm && (
@@ -125,7 +129,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
             data-testid="invitation-new-button"
           >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
-            Новое
+            {t('tenant_invitations.new')}
           </Button>
         )}
       </div>
@@ -134,20 +138,20 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
         <div className="space-y-3 rounded-md border bg-muted/30 p-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="inv-role">Роль</Label>
+              <Label htmlFor="inv-role">{t('tenant_invitations.role_label')}</Label>
               <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
                 <SelectTrigger id="inv-role" data-testid="invitation-role-select">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="teacher">Преподаватель</SelectItem>
-                  <SelectItem value="assistant">Ассистент</SelectItem>
-                  <SelectItem value="student">Студент</SelectItem>
+                  <SelectItem value="teacher">{t('tenant_invitations.role_teacher')}</SelectItem>
+                  <SelectItem value="assistant">{t('tenant_invitations.role_assistant')}</SelectItem>
+                  <SelectItem value="student">{t('tenant_invitations.role_student')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="inv-email">Email (опционально)</Label>
+              <Label htmlFor="inv-email">{t('tenant_invitations.email_label')}</Label>
               <Input
                 id="inv-email"
                 type="email"
@@ -158,7 +162,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="inv-course">Курс (опционально)</Label>
+              <Label htmlFor="inv-course">{t('tenant_invitations.course_label')}</Label>
               <Input
                 id="inv-course"
                 value={courseId}
@@ -175,7 +179,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               onClick={() => setShowForm(false)}
               disabled={create.isPending}
             >
-              Отмена
+              {t('common.cancel')}
             </Button>
             <Button
               size="sm"
@@ -184,7 +188,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               data-testid="invitation-create-submit"
             >
               {create.isPending && <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />}
-              Создать
+              {t('common.create')}
             </Button>
           </div>
         </div>
@@ -195,7 +199,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
           <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
         </div>
       ) : active.length === 0 && past.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Приглашений пока нет.</p>
+        <p className="text-sm text-muted-foreground">{t('tenant_invitations.empty')}</p>
       ) : (
         <div className="space-y-1">
           {active.map((inv) => (
@@ -207,21 +211,21 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
               <code
                 className="cursor-pointer rounded bg-muted px-2 py-1 font-mono text-sm tracking-wider hover:bg-muted/70"
                 onClick={() => inv.code && onCopy(inv.code)}
-                title="Скопировать код"
+                title={t('tenant_invitations.copy_code')}
               >
                 {inv.code ?? '—'}
               </code>
               <div className="min-w-0">
                 <div className="truncate text-sm">
-                  {ROLE_LABEL[inv.role] ?? inv.role}
+                  {roleLabel(inv.role) ?? inv.role}
                   {inv.course_id && (
                     <span className="ml-1.5 text-muted-foreground">
-                      · курс {inv.course_id}
+                      {t('tenant_invitations.course_prefix', { courseId: inv.course_id })}
                     </span>
                   )}
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
-                  {inv.email || 'без email'} · до {dayjs(inv.expires_at).format('D MMM HH:mm')}
+                  {inv.email || t('tenant_invitations.no_email')} · {t('tenant_invitations.until', { date: dayjs(inv.expires_at).format('D MMM HH:mm') })}
                 </div>
               </div>
               <StatusPill tone={pillTone(inv)}>{pillLabel(inv)}</StatusPill>
@@ -231,7 +235,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
                   variant="ghost"
                   onClick={() => inv.code && onCopy(inv.code)}
                   disabled={!inv.code}
-                  aria-label="Скопировать код"
+                  aria-label={t('tenant_invitations.copy_code')}
                 >
                   <Copy className="h-3.5 w-3.5" />
                 </Button>
@@ -240,7 +244,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
                   variant="ghost"
                   onClick={() => onRevoke(inv.id)}
                   disabled={revoke.isPending}
-                  aria-label="Отозвать"
+                  aria-label={t('tenant_invitations.revoke')}
                   className="text-muted-foreground hover:text-destructive"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -251,7 +255,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
           {past.length > 0 && (
             <details className="pt-2">
               <summary className="cursor-pointer text-xs text-muted-foreground">
-                История ({past.length})
+                {t('tenant_invitations.history', { count: past.length })}
               </summary>
               <div className="mt-2 space-y-1">
                 {past.map((inv) => (
@@ -261,7 +265,7 @@ export function TenantInvitationsPanel({ tenantId }: { tenantId: string }) {
                   >
                     <code className="font-mono">{inv.code ?? '—'}</code>
                     <span className="truncate">
-                      {ROLE_LABEL[inv.role] ?? inv.role} · {inv.email || 'без email'}
+                      {roleLabel(inv.role) ?? inv.role} · {inv.email || t('tenant_invitations.no_email')}
                     </span>
                     <StatusPill tone={pillTone(inv)}>{pillLabel(inv)}</StatusPill>
                   </div>

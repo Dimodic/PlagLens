@@ -26,6 +26,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { BrandIcon } from '@/components/icons/BrandIcon';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useOAuthProviders,
   useUpdateOAuthProvider,
@@ -47,7 +48,8 @@ function isConfigured(p: OAuthProviderInfo): boolean {
 }
 
 export default function LoginProvidersPage() {
-  useDocumentTitle('Авторизация');
+  const { t } = useTranslation();
+  useDocumentTitle(t('login_providers.title'));
 
   const { data, isPending, error } = useOAuthProviders();
   const providers = (data ?? [])
@@ -72,11 +74,11 @@ export default function LoginProvidersPage() {
 
   return (
     <Page width="regular">
-      <PageHeader title="Авторизация" />
+      <PageHeader title={t('login_providers.title')} />
 
       {error && (
         <Alert variant="destructive">
-          <AlertTitle>Не удалось загрузить</AlertTitle>
+          <AlertTitle>{t('login_providers.load_error')}</AlertTitle>
           <AlertDescription>
             {(error as unknown as Problem).detail ??
               (error as unknown as Problem).title ??
@@ -87,14 +89,14 @@ export default function LoginProvidersPage() {
 
       {isPending ? (
         <div className="flex items-center gap-3 py-6 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" /> Загружаем…
+          <Loader2 className="h-4 w-4 animate-spin" /> {t('login_providers.loading')}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
           {/* Sidebar — vertical list of providers. No borders, no shadows;
               selection state is a quiet background tint. */}
           <nav
-            aria-label="Провайдеры входа"
+            aria-label={t('login_providers.nav_label')}
             className="flex flex-col py-2"
           >
             {providers.map((p) => {
@@ -130,7 +132,9 @@ export default function LoginProvidersPage() {
                           : 'text-sev-mid font-medium',
                       )}
                     >
-                      {configured ? 'настроено' : 'не настроено'}
+                      {configured
+                        ? t('login_providers.configured')
+                        : t('login_providers.not_configured')}
                     </div>
                   </div>
                 </button>
@@ -148,7 +152,7 @@ export default function LoginProvidersPage() {
               <ProviderDetail provider={selected} />
             ) : (
               <p className="text-sm text-muted-foreground">
-                Выберите провайдера слева.
+                {t('login_providers.empty')}
               </p>
             )}
           </div>
@@ -163,6 +167,7 @@ interface DetailProps {
 }
 
 function ProviderDetail({ provider }: DetailProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const update = useUpdateOAuthProvider();
   // Both fields start empty: client_id_preview is masked (not the real id),
@@ -185,7 +190,7 @@ function ProviderDetail({ provider }: DetailProps) {
   const copyRedirect = () => {
     if (provider.redirect_uri && typeof navigator !== 'undefined' && navigator.clipboard) {
       void navigator.clipboard.writeText(provider.redirect_uri);
-      notify.info('Redirect URI скопирован');
+      notify.info(t('login_providers.redirect_copied'));
     }
   };
 
@@ -194,8 +199,8 @@ function ProviderDetail({ provider }: DetailProps) {
     setProblem(null);
     if (!configured && (!clientId.trim() || !clientSecret.trim())) {
       setProblem({
-        title: 'Заполните оба поля',
-        detail: 'Client ID и Client Secret обязательны при первой настройке.',
+        title: t('login_providers.err_both_required_title'),
+        detail: t('login_providers.err_both_required_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -203,8 +208,8 @@ function ProviderDetail({ provider }: DetailProps) {
     }
     if (configured && !clientId.trim() && !clientSecret.trim()) {
       setProblem({
-        title: 'Нечего сохранять',
-        detail: 'Введите новый Client ID или Client Secret.',
+        title: t('login_providers.err_nothing_to_save_title'),
+        detail: t('login_providers.err_nothing_to_save_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -218,7 +223,7 @@ function ProviderDetail({ provider }: DetailProps) {
           client_secret: clientSecret.trim() ? clientSecret.trim() : undefined,
         },
       });
-      notify.success(`${provider.title}: ключи сохранены`);
+      notify.success(t('login_providers.saved', { name: provider.title }));
       setClientId('');
       setClientSecret('');
     } catch (raw) {
@@ -241,8 +246,8 @@ function ProviderDetail({ provider }: DetailProps) {
             href={provider.docs_url}
             target="_blank"
             rel="noopener noreferrer"
-            title="Где зарегистрировать приложение"
-            aria-label="Где зарегистрировать приложение"
+            title={t('login_providers.docs_link')}
+            aria-label={t('login_providers.docs_link')}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
             data-testid="login-docs-link"
           >
@@ -257,7 +262,9 @@ function ProviderDetail({ provider }: DetailProps) {
               : 'text-sev-mid font-medium',
           )}
         >
-          {configured ? 'настроено' : 'не настроено'}
+          {configured
+            ? t('login_providers.configured')
+            : t('login_providers.not_configured')}
         </span>
       </header>
 
@@ -276,7 +283,7 @@ function ProviderDetail({ provider }: DetailProps) {
             Client ID
             {configured && (
               <span className="ml-2 text-xs text-muted-foreground">
-                (оставьте пустым, чтобы не менять)
+                {t('login_providers.hint_leave_blank')}
               </span>
             )}
           </Label>
@@ -297,7 +304,7 @@ function ProviderDetail({ provider }: DetailProps) {
             Client Secret
             {provider.has_secret && (
               <span className="ml-2 text-xs text-muted-foreground">
-                (введите заново для замены)
+                {t('login_providers.hint_reenter')}
               </span>
             )}
           </Label>
@@ -330,15 +337,15 @@ function ProviderDetail({ provider }: DetailProps) {
                 size="icon"
                 className="-my-1 h-7 w-7 shrink-0"
                 onClick={copyRedirect}
-                title="Скопировать"
-                aria-label="Скопировать redirect URI"
+                title={t('login_providers.copy')}
+                aria-label={t('login_providers.copy_redirect_aria')}
                 data-testid={`login-copy-${provider.provider}`}
               >
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Это наш фиксированный адрес — только скопируйте.
+              {t('login_providers.redirect_hint')}
             </p>
           </div>
         )}
@@ -351,13 +358,13 @@ function ProviderDetail({ provider }: DetailProps) {
             title={
               provider.editable
                 ? undefined
-                : 'Настраивается через переменные окружения'
+                : t('login_providers.env_managed')
             }
           >
             {update.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Сохранить
+            {t('login_providers.save')}
           </Button>
         </div>
       </form>

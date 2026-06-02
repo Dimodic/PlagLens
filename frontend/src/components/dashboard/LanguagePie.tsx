@@ -12,17 +12,19 @@ import {
 import type { LanguageBreakdownItem } from '@/api/endpoints/reporting';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/common/EmptyState';
+import { useTranslation } from '@/i18n';
 
 interface LanguagePieProps {
   data: LanguageBreakdownItem[] | undefined;
 }
 
 export function LanguagePie({ data }: LanguagePieProps) {
+  const { t } = useTranslation();
   if (!data || data.length === 0) {
     return (
       <EmptyState
-        title="Нет данных"
-        message="Пока нет посылок ни на одном языке."
+        title={t('language_pie.empty_title')}
+        message={t('language_pie.empty_message')}
       />
     );
   }
@@ -30,7 +32,7 @@ export function LanguagePie({ data }: LanguagePieProps) {
     <Card data-testid="language-pie">
       <CardContent className="p-4">
         <div className="flex flex-col gap-2">
-          <span className="font-medium">Распределение по языкам</span>
+          <span className="font-medium">{t('language_pie.heading')}</span>
           <div className="h-72 w-full">
             <ResponsiveContainer>
               <PieChart>

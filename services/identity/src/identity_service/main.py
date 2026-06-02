@@ -9,6 +9,7 @@ Wiring:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 import uuid
@@ -24,14 +25,16 @@ from prometheus_client import (
     Histogram,
     generate_latest,
 )
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from .api.v1 import api_v1
 from .common.events import KafkaProducer, StubProducer
 from .common.idempotency import IdempotencyMiddleware
 from .common.problem import make_handlers
 from .config import settings
-from .db import get_engine
+from .db import get_engine, get_session_factory
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +55,43 @@ HTTP_DURATION = Histogram(
     ["method", "route"],
     registry=_REGISTRY,
 )
+
+
+# --------------------------------------------------------------------------- #
+# Readiness checks (consumed by gateway + admin "System health" page)
+# --------------------------------------------------------------------------- #
+_READYZ_TIMEOUT_S = 2.0
+
+
+async def _check_db() -> str:
+    """Acquire a session and ``SELECT 1``. Returns ``"ok"`` or ``"fail: <Reason>"``."""
+    try:
+        factory = get_session_factory()
+
+        async def _probe() -> None:
+            async with factory() as session:
+                await session.execute(text("SELECT 1"))
+
+        await asyncio.wait_for(_probe(), timeout=_READYZ_TIMEOUT_S)
+        return "ok"
+    except Exception as exc:  # noqa: BLE001 - readyz must never raise
+        return f"fail: {type(exc).__name__}"
+
+
+async def _check_redis(app: FastAPI) -> str:
+    """Ping the live Redis client. Returns ``"ok"`` or ``"fail: <Reason>"``.
+
+    Redis is optional infra: when no client is wired (e.g. the server was
+    unreachable at startup) we report a failure rather than a false ``ok``.
+    """
+    redis = getattr(app.state, "redis", None)
+    if redis is None:
+        return "fail: RedisUnavailable"
+    try:
+        await asyncio.wait_for(redis.ping(), timeout=_READYZ_TIMEOUT_S)
+        return "ok"
+    except Exception as exc:  # noqa: BLE001 - readyz must never raise
+        return f"fail: {type(exc).__name__}"
 
 
 # --------------------------------------------------------------------------- #
@@ -171,13 +211,23 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @health.get("/readyz", summary="Readiness probe")
-    async def readyz(request: Request) -> dict[str, str]:
-        # We do not hard-fail on missing Redis/Kafka — they are best-effort —
-        # but we DO require the DB engine to be initialized.
-        engine = getattr(request.app.state, "engine", None)
-        if engine is None:
-            return Response(status_code=503, content='{"status":"degraded"}')
-        return {"status": "ready"}
+    async def readyz(request: Request) -> Response:
+        # Per-dependency checks consumed by the gateway parser + admin
+        # "System health" page. Shape is contractual:
+        #   {"status": "ok"|"degraded",
+        #    "checks": {"db": "ok"|"fail: <Reason>", "redis": ...}}
+        # 200 when every check passes, 503 otherwise. Each check is wrapped
+        # so this endpoint can never raise, and bounded by a short timeout so
+        # it stays fast under partial outages.
+        checks = {
+            "db": await _check_db(),
+            "redis": await _check_redis(request.app),
+        }
+        ok = all(v == "ok" for v in checks.values())
+        return JSONResponse(
+            status_code=200 if ok else 503,
+            content={"status": "ok" if ok else "degraded", "checks": checks},
+        )
 
     @health.get("/metrics", summary="Prometheus metrics")
     async def metrics() -> Response:

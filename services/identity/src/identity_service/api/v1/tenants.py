@@ -85,7 +85,7 @@ async def _user_counts(session: AsyncSession) -> dict[str, int]:
     return {tid: int(c) for tid, c in rows.all()}
 
 
-@router.get("", response_model=Page[TenantOut], summary="List tenants (super_admin)")
+@router.get("", response_model=Page[TenantOut], summary="List tenants (admin)")
 async def list_tenants(
     limit: int = Query(50, ge=1, le=200),
     cursor: str | None = None,  # noqa: ARG001 — TODO: cursor decode
@@ -109,7 +109,7 @@ async def list_tenants(
     "",
     response_model=TenantOut,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a new tenant (super_admin)",
+    summary="Create a new tenant (admin)",
 )
 async def create_tenant(
     payload: TenantCreate,

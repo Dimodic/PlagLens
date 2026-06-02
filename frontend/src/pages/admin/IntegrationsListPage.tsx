@@ -19,15 +19,16 @@
  * Same testids preserved so Playwright specs don't break.
  */
 import { FormEvent, useEffect, useState } from 'react';
-import { Copy, ExternalLink, Loader2 } from 'lucide-react';
+import { Copy, ExternalLink, Loader2, Sparkles } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { Button } from '@/components/ui/button';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { cn } from '@/components/ui/utils';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { t, useTranslation, type TParams } from '@/i18n';
 import {
   useDeleteIntegrationOAuthProvider,
   useIntegrationOAuthProviders,
@@ -53,16 +54,29 @@ import type { Problem } from '@/api/types';
 import { TokenIntegrationDialog } from '@/components/integrations/TokenIntegrationDialog';
 import { GoogleSheetsServiceAccountDialog } from '@/components/integrations/GoogleSheetsServiceAccountDialog';
 import { CourseIntegrationDetail } from '@/components/integrations/CourseIntegrationDetail';
+import { ManualUploadPanel } from '@/components/integrations/ManualUploadPanel';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
+import { AiProviderPanel } from '@/components/admin/AiProviderPanel';
+import { useMyAiProviders } from '@/hooks/api/useAi';
 
-const KIND_TITLES: Record<IntegrationKind, string> = {
+const KIND_BRAND_TITLES: Record<Exclude<IntegrationKind, 'manual'>, string> = {
   yandex_contest: 'Yandex.Contest',
   stepik: 'Stepik',
   ejudge: 'eJudge',
-  manual: 'Ручная загрузка',
   telegram: 'Telegram',
   google_sheets: 'Google Sheets',
 };
+
+/** Display title for an integration kind. Brand names are locale-neutral
+ *  constants; only the «manual» pseudo-source has translated copy. Resolved
+ *  at render time (not module scope) so it tracks the active locale. */
+function kindTitle(
+  t: (key: string, params?: TParams) => string,
+  kind: IntegrationKind,
+): string {
+  if (kind === 'manual') return t('integrations_list.kind_manual');
+  return KIND_BRAND_TITLES[kind] ?? kind;
+}
 
 interface CourseIntegrationsPanelProps {
   items: IntegrationConfig[];
@@ -84,6 +98,50 @@ const CONNECTABLE_KINDS: IntegrationKind[] = [
   'manual',
 ];
 
+/** Loading placeholder for both master-detail panels (teacher sources &
+ *  admin OAuth apps). Mirrors the real `grid-cols-[260px_1fr]` shape: a
+ *  left nav of icon + two-line buttons and a bordered detail pane, so the
+ *  layout doesn't reflow when data lands. `navRows` ≈ the real menu length;
+ *  `detailMinH` matches the pane's `md:min-h-[…]`. */
+function MasterDetailSkeleton({
+  navRows,
+  detailMinH,
+}: {
+  navRows: number;
+  detailMinH: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={t('skeleton.aria_label')}
+      className="grid grid-cols-1 md:grid-cols-[260px_1fr]"
+    >
+      <div className="flex flex-col px-2 py-2">
+        {Array.from({ length: navRows }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 px-4 py-3">
+            <Skeleton className="h-5 w-5 shrink-0 rounded bg-muted/40" />
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Skeleton className="h-3.5 w-2/3 rounded bg-muted/40" />
+              <Skeleton className="h-3 w-1/3 rounded bg-muted/30" />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div
+        className={cn('space-y-5 p-6 md:border-l md:border-border/60 md:p-8', detailMinH)}
+      >
+        <div className="flex items-center gap-2">
+          <Skeleton className="h-7 w-7 shrink-0 rounded bg-muted/40" />
+          <Skeleton className="h-6 w-40 rounded bg-muted/40" />
+        </div>
+        <Skeleton className="h-3 w-3/4 rounded bg-muted/30" />
+        <Skeleton className="h-3 w-1/2 rounded bg-muted/30" />
+      </div>
+    </div>
+  );
+}
+
 /** Teacher integrations — master-detail, same shape as the admin OAuth
  *  panel: ALL sources on the left (connected or not); the right pane is
  *  the selected source's sync/autosync controls, a «connect» prompt if
@@ -95,24 +153,58 @@ function CourseIntegrationsPanel({
   onTokenConnect,
   onChanged,
 }: CourseIntegrationsPanelProps) {
+  const { t } = useTranslation();
   // Nothing selected by default — keeps the page calm and shows the
   // «выберите интеграцию» hint instead of dumping one source's controls.
-  const [selectedKind, setSelectedKind] = useState<IntegrationKind | null>(null);
+  // 'ai' is a pseudo-kind: the teacher's own LLM connection (not a sync
+  // source) shares this menu since it's conceptually "connect a service".
+  const [selectedKind, setSelectedKind] = useState<
+    IntegrationKind | 'ai' | null
+  >(null);
+  // Status dot for the «ИИ» menu item — "подключено" only when there's an
+  // active provider with a stored key.
+  const { data: myAi } = useMyAiProviders();
+  const aiConnected = (myAi ?? []).some((p) => p.active && p.has_key);
 
   if (error) return <ProblemAlert problem={error} />;
-  if (isPending) return <SkeletonList rows={5} rowHeight={56} />;
+  // Mirror the master-detail grid: 5 sources + the AI item in the left
+  // nav, detail pane min-height matching the loaded pane below.
+  if (isPending)
+    return (
+      <MasterDetailSkeleton
+        navRows={CONNECTABLE_KINDS.length + 1}
+        detailMinH="md:min-h-[420px]"
+      />
+    );
 
+  // Only an ACTIVE config counts as "connected". A lingering
+  // ``pending_auth`` row (an OAuth flow started but not finished) is
+  // treated as not-connected — OAuth completes instantly on the redirect,
+  // so there's no meaningful "ожидает авторизации" state to surface; the
+  // user just (re)clicks «Подключить».
   const configFor = (kind: IntegrationKind) =>
-    items.find((i) => i.kind === kind) ?? null;
-  const selectedConfig = selectedKind ? configFor(selectedKind) : null;
+    items.find((i) => i.kind === kind && i.status === 'active') ?? null;
+  const selectedConfig =
+    selectedKind && selectedKind !== 'ai' ? configFor(selectedKind) : null;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
-      <nav aria-label="Интеграции курса" className="flex flex-col py-2">
+      <nav
+        aria-label={t('integrations_list.course_nav_aria')}
+        className="flex flex-col px-2 py-2"
+      >
         {CONNECTABLE_KINDS.map((kind) => {
           const cfg = configFor(kind);
           const connected = !!cfg && cfg.status === 'active';
           const isSel = kind === selectedKind;
+          // Manual upload isn't a "connection" — it's always available;
+          // show a neutral label instead of a connect status.
+          const isManualKind = kind === 'manual';
+          const subtitle = isManualKind
+            ? t('integrations_list.manual_subtitle')
+            : connected
+              ? t('integrations_list.connected')
+              : t('integrations_list.not_connected');
           return (
             <button
               key={kind}
@@ -128,38 +220,70 @@ function CourseIntegrationsPanel({
               <ProviderIcon kind={kind} className="h-5 w-5 shrink-0" />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-foreground">
-                  {KIND_TITLES[kind] ?? kind}
+                  {kindTitle(t, kind)}
                 </span>
                 <span
                   className={cn(
                     'block text-xs truncate',
-                    connected
+                    isManualKind || connected
                       ? 'text-muted-foreground'
-                      : cfg
-                        ? 'text-sev-mid font-medium'
-                        : 'text-muted-foreground/60',
+                      : 'text-muted-foreground/60',
                   )}
                 >
-                  {connected
-                    ? 'подключено'
-                    : cfg
-                      ? 'ожидает авторизации'
-                      : 'не подключено'}
+                  {subtitle}
                 </span>
               </span>
             </button>
           );
         })}
+
+        {/* AI provider — not an import source (it's analysis tooling), so
+            it's set apart from the sources by a hairline divider instead of
+            sitting in the same list. Same page, not a separate tab. */}
+        <div className="mx-2 my-2 border-t border-border/40" />
+        <button
+          type="button"
+          onClick={() => setSelectedKind('ai')}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-md px-4 py-3 text-left transition-colors',
+            selectedKind === 'ai' ? 'bg-muted/40' : 'hover:bg-muted/20',
+          )}
+          data-testid="integration-kind-ai"
+          aria-current={selectedKind === 'ai' ? 'page' : undefined}
+        >
+          <Sparkles className="h-5 w-5 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-medium text-foreground">
+              {t('integrations_list.ai_title')}
+            </span>
+            <span
+              className={cn(
+                'block truncate text-xs',
+                aiConnected
+                  ? 'text-muted-foreground'
+                  : 'text-muted-foreground/60',
+              )}
+            >
+              {aiConnected
+                ? t('integrations_list.connected')
+                : t('integrations_list.not_connected')}
+            </span>
+          </span>
+        </button>
       </nav>
 
       <div className="md:border-l md:border-border/60 p-6 md:p-8 md:min-h-[420px]">
         {!selectedKind ? (
           <div className="flex h-full min-h-[200px] items-center justify-center">
             <p className="max-w-xs text-center text-sm text-muted-foreground">
-              Выберите интеграцию слева, чтобы настроить синхронизацию или
-              подключить новый источник.
+              {t('integrations_list.select_hint')}
             </p>
           </div>
+        ) : selectedKind === 'ai' ? (
+          <AiProviderPanel />
+        ) : selectedKind === 'manual' ? (
+          // Manual upload needs no connection — straight to the upload pane.
+          <ManualUploadPanel />
         ) : selectedConfig ? (
           // key per source so switching sources gives each pane fresh
           // state (no stale inline error / course selection bleed-through).
@@ -193,19 +317,22 @@ function ConnectPrompt({
   kind: IntegrationKind;
   onTokenConnect: (kind: IntegrationKind) => void;
 }) {
+  const { t } = useTranslation();
   const createMut = useCreateIntegration();
   const [problem, setProblem] = useState<string | null>(null);
 
-  const title = KIND_TITLES[kind] ?? kind;
-  const viaOauth =
+  const title = kindTitle(t, kind);
+  const isOauth =
     kind === 'yandex_contest' || kind === 'stepik' || kind === 'google_sheets';
   const busy = createMut.isPending;
 
   const connect = () => {
-    if (!viaOauth) {
+    // eJudge needs a server URL + token up front → defer to the modal.
+    if (kind === 'ejudge') {
       onTokenConnect(kind);
       return;
     }
+    // OAuth sources create the row inline, then redirect to the provider.
     setProblem(null);
     createMut.mutate(
       { kind, display_name: title, settings: {} },
@@ -215,15 +342,13 @@ function ConnectPrompt({
             window.location.assign(res.oauth_authorize_url);
             return;
           }
-          // Defensive — backend now 409s when unconfigured, so this
-          // branch shouldn't fire.
-          setProblem(
-            'OAuth для этого источника ещё не настроен. Попросите администратора заполнить ключи в «Интеграции → Авторизация».',
-          );
+          // Defensive — backend 409s when the provider isn't configured,
+          // so a success without a URL shouldn't happen.
+          setProblem(t('integrations_list.oauth_not_configured'));
         },
         onError: (p) => {
           const pr = p as unknown as Problem;
-          setProblem(pr.detail || pr.title || 'Не удалось подключить');
+          setProblem(pr.detail || pr.title || t('integrations_list.connect_failed'));
         },
       },
     );
@@ -234,12 +359,14 @@ function ConnectPrompt({
       <header className="flex items-center gap-2">
         <ProviderIcon kind={kind} className="h-7 w-7 shrink-0" />
         <h2 className="text-xl font-semibold text-foreground">{title}</h2>
-        <span className="ml-auto text-xs text-muted-foreground/60">не подключено</span>
+        <span className="ml-auto text-xs text-muted-foreground/60">
+          {t('integrations_list.not_connected')}
+        </span>
       </header>
       <p className="max-w-md text-sm text-muted-foreground">
-        {viaOauth
-          ? 'Подключение откроет страницу авторизации провайдера. После входа источник появится здесь, и можно будет настроить синхронизацию.'
-          : 'Подключите источник по токену или загрузите архив с решениями.'}
+        {isOauth
+          ? t('integrations_list.oauth_connect_hint')
+          : t('integrations_list.ejudge_connect_hint')}
       </p>
       {problem && (
         <p role="alert" className="max-w-md text-sm text-destructive">
@@ -252,7 +379,7 @@ function ConnectPrompt({
         data-testid={`integration-connect-${kind}`}
       >
         {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Подключить
+        {t('integrations_list.connect')}
       </Button>
     </div>
   );
@@ -262,7 +389,8 @@ function ConnectPrompt({
 /* Page                                                              */
 
 export function IntegrationsListPage() {
-  useDocumentTitle('Интеграции');
+  const { t } = useTranslation();
+  useDocumentTitle(t('integrations_list.title'));
   const { user } = useAuth();
   const isAdmin = user?.global_role === 'admin';
   const { data, isPending, error, refetch } = useIntegrations({ limit: 100 });
@@ -279,7 +407,9 @@ export function IntegrationsListPage() {
       <PageHeader
         title={
           <span data-testid="integrations-title">
-            {isAdmin ? 'Интеграции' : 'Интеграции курса'}
+            {isAdmin
+              ? t('integrations_list.title')
+              : t('integrations_list.title_course')}
           </span>
         }
       />
@@ -327,6 +457,7 @@ const INTEGRATION_OAUTH_ORDER: IntegrationOAuthKind[] = [
 ];
 
 function OAuthProvidersPanel() {
+  const { t } = useTranslation();
   const { data, isLoading, error } = useIntegrationOAuthProviders();
   const [selectedId, setSelectedId] = useState<IntegrationOAuthKind | null>(
     null,
@@ -351,10 +482,13 @@ function OAuthProvidersPanel() {
   }, [selectedId, providers]);
 
   if (isLoading) {
+    // Same master-detail shape as the loaded panel: the 3 OAuth providers
+    // in the left nav, detail pane min-height matching the form below.
     return (
-      <div className="flex items-center justify-center py-8">
-        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-      </div>
+      <MasterDetailSkeleton
+        navRows={INTEGRATION_OAUTH_ORDER.length}
+        detailMinH="md:min-h-[480px]"
+      />
     );
   }
 
@@ -368,8 +502,8 @@ function OAuthProvidersPanel() {
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-[260px_1fr]">
         <nav
-          aria-label="OAuth-провайдеры интеграций"
-          className="flex flex-col py-2"
+          aria-label={t('integrations_list.oauth_nav_aria')}
+          className="flex flex-col px-2 py-2"
         >
           {providers.map((p) => {
             const isSelected = p.provider_kind === selectedId;
@@ -401,7 +535,9 @@ function OAuthProvidersPanel() {
                         : 'text-sev-mid font-medium',
                     )}
                   >
-                    {p.configured ? 'настроено' : 'не настроено'}
+                    {p.configured
+                      ? t('integrations_list.configured')
+                      : t('integrations_list.not_configured')}
                   </div>
                 </div>
               </button>
@@ -414,7 +550,7 @@ function OAuthProvidersPanel() {
             <IntegrationOAuthDetail provider={selected} />
           ) : (
             <p className="text-sm text-muted-foreground">
-              Выберите провайдера слева.
+              {t('integrations_list.select_provider_hint')}
             </p>
           )}
         </div>
@@ -428,6 +564,7 @@ interface DetailProps {
 }
 
 function IntegrationOAuthDetail({ provider }: DetailProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const upsert = useUpsertIntegrationOAuthProvider();
   const remove = useDeleteIntegrationOAuthProvider();
@@ -457,7 +594,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
   const copyRedirect = () => {
     if (redirectUri && typeof navigator !== 'undefined' && navigator.clipboard) {
       void navigator.clipboard.writeText(redirectUri);
-      notify.info('Redirect URI скопирован');
+      notify.info(t('integrations_list.redirect_copied'));
     }
   };
 
@@ -469,9 +606,8 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
     setProblem(null);
     if (!canSave) {
       setProblem({
-        title: 'Заполните Client ID, Client Secret и Redirect URI',
-        detail:
-          'Бэкенд хранит все три поля вместе — секрет нельзя обновить отдельно.',
+        title: t('integrations_list.fill_all_fields_title'),
+        detail: t('integrations_list.fill_all_fields_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -487,7 +623,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
           scope: scope.trim() || null,
         },
       });
-      notify.success(`${provider.title}: ключи сохранены`);
+      notify.success(t('integrations_list.keys_saved', { name: provider.title }));
       setClientSecret('');
     } catch (raw) {
       setProblem(raw as Problem);
@@ -495,12 +631,15 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
   };
 
   const onRemove = async () => {
-    if (!confirm(`Удалить OAuth-приложение «${provider.title}»?`)) return;
+    if (!confirm(t('integrations_list.delete_confirm', { name: provider.title })))
+      return;
     try {
       await remove.mutateAsync(provider.provider_kind);
-      notify.success(`${provider.title}: приложение удалено`);
+      notify.success(t('integrations_list.app_deleted', { name: provider.title }));
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось удалить');
+      notify.error(
+        (e as Problem)?.detail ?? t('integrations_list.delete_failed'),
+      );
     }
   };
 
@@ -519,8 +658,8 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
             href={provider.register_url}
             target="_blank"
             rel="noopener noreferrer"
-            title="Где зарегистрировать приложение"
-            aria-label="Где зарегистрировать приложение"
+            title={t('integrations_list.register_app')}
+            aria-label={t('integrations_list.register_app')}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
             data-testid={`integration-oauth-register-${provider.provider_kind}`}
           >
@@ -535,7 +674,9 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
               : 'text-sev-mid font-medium',
           )}
         >
-          {provider.configured ? 'настроено' : 'не настроено'}
+          {provider.configured
+            ? t('integrations_list.configured')
+            : t('integrations_list.not_configured')}
         </span>
       </header>
 
@@ -566,7 +707,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
             Client Secret
             {provider.client_secret_set && (
               <span className="ml-2 text-xs text-muted-foreground">
-                (введите заново для замены)
+                {t('integrations_list.reenter_to_replace')}
               </span>
             )}
           </Label>
@@ -597,15 +738,15 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
               size="icon"
               className="-my-1 h-7 w-7 shrink-0"
               onClick={copyRedirect}
-              title="Скопировать"
-              aria-label="Скопировать redirect URI"
+              title={t('integrations_list.copy')}
+              aria-label={t('integrations_list.copy_redirect_aria')}
               data-testid={`integration-oauth-copy-${provider.provider_kind}`}
             >
               <Copy className="h-4 w-4" />
             </Button>
           </div>
           <p className="text-xs text-muted-foreground">
-            Это наш фиксированный адрес — только скопируйте.
+            {t('integrations_list.redirect_fixed_hint')}
           </p>
         </div>
 
@@ -621,9 +762,9 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
             data-testid="integration-oauth-edit-scope"
           />
           <p className="text-xs text-muted-foreground">
-            По умолчанию{' '}
-            <code className="font-mono">{provider.default_scope ?? '—'}</code>.
-            Широкий scope = меньше подтверждений у преподавателя.
+            {t('integrations_list.scope_default_prefix')}{' '}
+            <code className="font-mono">{provider.default_scope ?? '—'}</code>.{' '}
+            {t('integrations_list.scope_hint')}
           </p>
         </div>
 
@@ -641,7 +782,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
                 className="text-muted-foreground hover:text-foreground"
                 data-testid="integration-oauth-google-sheets-sa"
               >
-                Сервисный аккаунт (JSON)
+                {t('integrations_list.service_account')}
               </Button>
             )}
             {provider.configured && (
@@ -652,7 +793,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
                 disabled={upsert.isPending || remove.isPending}
                 className="text-destructive hover:text-destructive"
               >
-                Удалить приложение
+                {t('integrations_list.delete_app')}
               </Button>
             )}
           </div>
@@ -664,7 +805,7 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
             {upsert.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Сохранить
+            {t('integrations_list.save')}
           </Button>
         </div>
       </form>

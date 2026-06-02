@@ -14,6 +14,7 @@
  * minimalism principle — no descriptions, just numbers.
  */
 import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/components/ui/utils';
 
@@ -56,6 +57,17 @@ export function Pagination({
   onPageChange,
   hideOnSinglePage = true,
 }: PaginationProps) {
+  const { t } = useTranslation();
+  // Pagers sit at the bottom of a list — jump back to the top on a page
+  // change so the new page starts in view instead of leaving the reader
+  // parked at the pager. Shared by every paginated list, so this is the
+  // one place the "scroll to top on page change" behaviour lives.
+  const change = (p: number) => {
+    onPageChange(p);
+    if (typeof window !== 'undefined') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
   // No total? Fall back to bare prev/next — we don't know how many pages
   // exist. This path is mostly for legacy cursor endpoints.
   if (total == null) {
@@ -64,9 +76,9 @@ export function Pagination({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onPageChange(page - 1)}
+          onClick={() => change(page - 1)}
           disabled={page <= 1}
-          aria-label="Назад"
+          aria-label={t('common.back')}
         >
           <ChevronLeft className="h-4 w-4" />
         </Button>
@@ -76,8 +88,8 @@ export function Pagination({
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => onPageChange(page + 1)}
-          aria-label="Вперёд"
+          onClick={() => change(page + 1)}
+          aria-label={t('pagination.forward')}
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -91,7 +103,7 @@ export function Pagination({
   return (
     <nav
       className="flex items-center justify-center gap-1 py-3"
-      aria-label="Пагинация"
+      aria-label={t('pagination.nav_label')}
       data-testid="pagination"
     >
       <Button
@@ -100,12 +112,12 @@ export function Pagination({
         className="h-8 w-8"
         onClick={() => onPageChange(page - 1)}
         disabled={page <= 1}
-        aria-label="Предыдущая страница"
+        aria-label={t('pagination.prev_page')}
       >
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      {tokens.map((t, i) =>
-        t === '…' ? (
+      {tokens.map((token, i) =>
+        token === '…' ? (
           <span
             key={`ellipsis-${i}`}
             className="px-2 text-sm text-muted-foreground select-none"
@@ -115,18 +127,18 @@ export function Pagination({
           </span>
         ) : (
           <Button
-            key={t}
+            key={token}
             type="button"
-            variant={t === page ? 'default' : 'ghost'}
+            variant={token === page ? 'default' : 'ghost'}
             className={cn(
               'h-8 min-w-8 px-2 tabular-nums text-sm',
-              t === page && 'pointer-events-none',
+              token === page && 'pointer-events-none',
             )}
-            onClick={() => onPageChange(t)}
-            aria-current={t === page ? 'page' : undefined}
-            aria-label={`Страница ${t}`}
+            onClick={() => change(token)}
+            aria-current={token === page ? 'page' : undefined}
+            aria-label={t('pagination.page_n', { n: token })}
           >
-            {t}
+            {token}
           </Button>
         ),
       )}
@@ -136,7 +148,7 @@ export function Pagination({
         className="h-8 w-8"
         onClick={() => onPageChange(page + 1)}
         disabled={page >= totalPages}
-        aria-label="Следующая страница"
+        aria-label={t('pagination.next_page')}
       >
         <ChevronRight className="h-4 w-4" />
       </Button>

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { Button } from '@/components/ui/button';
 import { errorReporter } from '@/lib/errorReporter';
+import { t } from '@/i18n';
 
 interface Props {
   children: ReactNode;
@@ -38,9 +39,9 @@ export class ErrorBoundary extends Component<Props, State> {
           role="alert"
           className="mx-auto my-20 max-w-xl rounded-xl border bg-card p-8 text-card-foreground shadow-sm"
         >
-          <h2 className="mt-0 text-xl font-semibold">Что-то пошло не так</h2>
+          <h2 className="mt-0 text-xl font-semibold">{t('error_boundary.title')}</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Ошибка отправлена в логи. Можно перезагрузить страницу.
+            {t('error_boundary.description')}
           </p>
           {this.state.message && (
             <pre className="mt-4 max-h-48 overflow-auto rounded-md bg-muted p-3 text-xs text-destructive whitespace-pre-wrap break-words">
@@ -48,8 +49,8 @@ export class ErrorBoundary extends Component<Props, State> {
             </pre>
           )}
           <div className="mt-6 flex gap-2">
-            <Button onClick={() => window.location.reload()}>Перезагрузить</Button>
-            <Button variant="outline" onClick={this.reset}>Закрыть</Button>
+            <Button onClick={() => window.location.reload()}>{t('error_boundary.reload')}</Button>
+            <Button variant="outline" onClick={this.reset}>{t('error_boundary.close')}</Button>
           </div>
         </div>
       );

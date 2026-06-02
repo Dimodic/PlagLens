@@ -11,13 +11,25 @@ from ...deps import (
     assert_same_tenant,
     current_user,
     get_session,
+    require_global_role,
 )
 from ...models import ExternalBinding
 from ...repositories.external_bindings import ExternalBindingRepository
 from ...repositories.users import UserRepository
-from ...schemas.external_bindings import ExternalBindingCreate, ExternalBindingOut
+from ...schemas.external_bindings import (
+    ExternalBindingCreate,
+    ExternalBindingOut,
+    YcBindingRef,
+    YcMigrateRequest,
+    YcMigrateResult,
+)
 
 router = APIRouter(prefix="/users/{target_user_id}/external-bindings", tags=["bindings"])
+
+# Admin/service-token surface — collection-level action routes that don't hang
+# off a single ``target_user_id`` (the gateway routes ``/external-bindings*``
+# here). Kept on its own router so the per-user CRUD prefix above is untouched.
+admin_router = APIRouter(prefix="/external-bindings", tags=["bindings"])
 
 
 def _to_out(b: ExternalBinding) -> ExternalBindingOut:
@@ -113,3 +125,40 @@ async def delete_binding(
     if not deleted:
         raise ProblemException(status=404, code="NOT_FOUND", title="Binding not found")
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@admin_router.post(
+    ":migrate-yc",
+    response_model=YcMigrateResult,
+    summary="Reconcile Yandex.Contest binding external_ids (admin)",
+)
+async def migrate_yc_bindings(
+    payload: YcMigrateRequest,
+    user: CurrentUser = Depends(require_global_role("admin")),  # noqa: ARG001
+    session: AsyncSession = Depends(get_session),
+) -> YcMigrateResult:
+    """Swap unstable ``yc:<participantId>`` binding keys for stable
+    ``yc:<login>`` ones, then return every YC binding in ``tenant_id``.
+
+    Called service-to-service by integration-service's one-shot author-id
+    migration with an admin service JWT. Only touches identity's OWN
+    ``external_bindings`` table (the rename) and joins its OWN ``users`` table
+    (the listing) — no cross-schema reach. The returned list feeds
+    submission-service's claim pass. Idempotent — a re-run renames 0 rows.
+    """
+    repo = ExternalBindingRepository(session)
+    bindings_updated = 0
+    for remap in payload.remaps:
+        bindings_updated += await repo.rename_yc_external_id(
+            from_external_id=remap.from_external_id,
+            to_external_id=remap.to_external_id,
+        )
+    rows = await repo.list_yc_for_tenant(tenant_id=payload.tenant_id)
+    await session.commit()
+    return YcMigrateResult(
+        bindings_updated=bindings_updated,
+        bindings=[
+            YcBindingRef(external_id=b.external_id, user_id=b.user_id)
+            for b in rows
+        ],
+    )

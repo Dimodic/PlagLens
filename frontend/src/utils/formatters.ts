@@ -38,3 +38,16 @@ export function formatDuration(ms: number): string {
   const rm = m % 60;
   return `${h} ч ${rm} мин`;
 }
+
+/**
+ * Display form of an internal entity id: drops the `prefix_` segment
+ * (e.g. `usr_77b2e81c…` → `77b2e81c…`). DISPLAY-ONLY — the full prefixed id
+ * stays the source of truth everywhere it's used as a key (routing, API
+ * calls, data-attributes, copy targets). Returns the raw value unchanged
+ * when there is no `_` prefix.
+ */
+export function shortId(id: string | null | undefined): string {
+  if (!id) return '';
+  const underscore = id.indexOf('_');
+  return underscore >= 0 ? id.slice(underscore + 1) : id;
+}

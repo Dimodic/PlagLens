@@ -19,6 +19,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import type { PlagiarismPair } from '@/api/endpoints/plagiarism';
+import { useTranslation } from '@/i18n';
 import { SimilarityBar } from './SimilarityBar';
 
 interface PairTableProps {
@@ -27,9 +28,12 @@ interface PairTableProps {
 }
 
 export function PairTable({ pairs, runId }: PairTableProps) {
+  const { t } = useTranslation();
   if (!pairs.length) {
     return (
-      <p className="py-4 text-sm text-muted-foreground">Пар не найдено.</p>
+      <p className="py-4 text-sm text-muted-foreground">
+        {t('pair_table.empty')}
+      </p>
     );
   }
 
@@ -38,11 +42,11 @@ export function PairTable({ pairs, runId }: PairTableProps) {
       <Table data-testid="plagiarism-pairs-table" className="min-w-[760px]">
         <TableHeader>
           <TableRow>
-            <TableHead>Студент A</TableHead>
-            <TableHead>Студент B</TableHead>
-            <TableHead>Схожесть</TableHead>
-            <TableHead>Совпало токенов</TableHead>
-            <TableHead>Фрагменты</TableHead>
+            <TableHead>{t('pair_table.student_a')}</TableHead>
+            <TableHead>{t('pair_table.student_b')}</TableHead>
+            <TableHead>{t('pair_table.similarity')}</TableHead>
+            <TableHead>{t('pair_table.matched_tokens')}</TableHead>
+            <TableHead>{t('pair_table.fragments')}</TableHead>
             <TableHead>Cross</TableHead>
             <TableHead></TableHead>
           </TableRow>
@@ -71,7 +75,7 @@ export function PairTable({ pairs, runId }: PairTableProps) {
                           className="gap-1 px-1.5 py-0 text-[10px]"
                         >
                           <ArrowLeftRight className="h-2.5 w-2.5" />
-                          курс
+                          {t('pair_table.cross_course_badge')}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>Cross-course</TooltipContent>
@@ -84,7 +88,7 @@ export function PairTable({ pairs, runId }: PairTableProps) {
                           variant="secondary"
                           className="px-1.5 py-0 text-[10px]"
                         >
-                          задание
+                          {t('pair_table.cross_assignment_badge')}
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>Cross-assignment</TooltipContent>
@@ -97,7 +101,7 @@ export function PairTable({ pairs, runId }: PairTableProps) {
                   asChild
                   variant="ghost"
                   size="icon"
-                  aria-label="Открыть детально"
+                  aria-label={t('pair_table.open_detail')}
                   data-testid={`pair-row-${p.id}-open`}
                 >
                   <Link to={`/plagiarism-runs/${runId}/pairs/${p.id}`}>

@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import UTC, datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import Course, CourseMember, CourseOwner
@@ -39,7 +39,7 @@ class CourseRepository:
 
     async def list_for_tenant(
         self,
-        tenant_id: str,
+        tenant_id: str | None,
         *,
         status: str | None = None,
         owner_id: str | None = None,
@@ -49,7 +49,10 @@ class CourseRepository:
         limit: int = 50,
         include_deleted: bool = False,
     ) -> tuple[Sequence[Course], int | None]:
-        stmt = select(Course).where(Course.tenant_id == tenant_id)
+        # ``tenant_id=None`` → span ALL tenants (admin-only global search).
+        stmt = select(Course)
+        if tenant_id is not None:
+            stmt = stmt.where(Course.tenant_id == tenant_id)
         if not include_deleted:
             stmt = stmt.where(Course.deleted_at.is_(None))
         if status:
@@ -62,8 +65,10 @@ class CourseRepository:
             )
             stmt = stmt.where(Course.id.in_(sub))
         if q:
+            # LC_CTYPE=C → fold via ICU so Cyrillic names match.
             like = f"%{q.lower()}%"
-            stmt = stmt.where(Course.name.ilike(like) | Course.slug.ilike(like))
+            name_l = func.lower(Course.name.collate("und-x-icu"))
+            stmt = stmt.where(name_l.like(like) | Course.slug.ilike(like))
         if cursor_id is not None:
             stmt = stmt.where(Course.id > cursor_id)
         stmt = stmt.order_by(Course.id).limit(limit + 1)
@@ -94,6 +99,7 @@ class CourseRepository:
         tenant_id: str,
         *,
         status: str | None = None,
+        q: str | None = None,
         cursor_id: int | None = None,
         limit: int = 50,
     ) -> tuple[Sequence[Course], int | None]:
@@ -106,6 +112,12 @@ class CourseRepository:
             Course.deleted_at.is_(None),
             Course.id.in_(member_sub.union(owner_sub)),
         )
+        if q:
+            # Same ICU fold as list_for_tenant so global search filters the
+            # user's own courses by query instead of ignoring it.
+            like = f"%{q.lower()}%"
+            name_l = func.lower(Course.name.collate("und-x-icu"))
+            stmt = stmt.where(name_l.like(like) | Course.slug.ilike(like))
         # ``status`` filter — equivalent of what list_for_tenant does for
         # admins. Without it the teacher-facing /courses endpoint ignored
         # ?status=archived and always returned the full set, making the

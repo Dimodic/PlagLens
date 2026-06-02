@@ -7,6 +7,7 @@
  * 2FA exposes a single password field + button — same row pattern.
  */
 import { CheckCircle2, ChevronDown, Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -19,9 +20,11 @@ import {
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/auth/useAuth';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function TwoFactorSection() {
+  const { t } = useTranslation();
   const { user, reloadMe } = useAuth();
   const notify = useNotifications();
   const enroll = useEnroll2FA();
@@ -37,31 +40,31 @@ export function TwoFactorSection() {
       const r = await enroll.mutateAsync();
       setOtpAuth(r.otpauth_uri);
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('two_factor.error_generic'));
     }
   };
 
   const confirmEnroll = async () => {
     try {
       await enable.mutateAsync(code);
-      notify.success('2FA включена');
+      notify.success(t('two_factor.enabled_toast'));
       setOtpAuth(null);
       setCode('');
       await reloadMe();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('two_factor.error_generic'));
     }
   };
 
   const disableMfa = async () => {
     try {
       await disable.mutateAsync(pwd);
-      notify.success('2FA отключена');
+      notify.success(t('two_factor.disabled_toast'));
       setPwd('');
       setShowDisable(false);
       await reloadMe();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('two_factor.error_generic'));
     }
   };
 
@@ -73,14 +76,14 @@ export function TwoFactorSection() {
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="text-sm text-foreground">
-            Двухфакторная аутентификация
+            {t('two_factor.title')}
           </span>
           {enabled && (
             <span
               className="inline-flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400"
               data-testid="profile-2fa-enabled"
             >
-              <CheckCircle2 className="h-3 w-3" /> включена
+              <CheckCircle2 className="h-3 w-3" /> {t('two_factor.status_enabled')}
             </span>
           )}
         </div>
@@ -95,7 +98,7 @@ export function TwoFactorSection() {
             className="flex items-center gap-1 text-sm text-muted-foreground hover:text-destructive transition-colors"
             data-testid="profile-2fa-disable-toggle"
           >
-            {showDisable ? 'Отмена' : 'Отключить'}
+            {showDisable ? t('two_factor.cancel') : t('two_factor.disable')}
             {!showDisable && (
               <ChevronDown
                 className={cn(
@@ -115,7 +118,7 @@ export function TwoFactorSection() {
             data-testid="profile-2fa-enroll-start"
           >
             {enroll.isPending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-            Включить
+            {t('two_factor.enable')}
           </Button>
         ) : (
           <button
@@ -126,7 +129,7 @@ export function TwoFactorSection() {
             }}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
           >
-            Отмена
+            {t('two_factor.cancel')}
           </button>
         )}
       </div>
@@ -135,19 +138,34 @@ export function TwoFactorSection() {
       {!enabled && otpAuth && (
         <div className="space-y-3 pt-1">
           <p className="text-xs text-muted-foreground">
-            Отсканируйте QR-код в Google Authenticator / Яндекс.Ключ /
-            Authy и введите 6-значный код из приложения.
+            {t('two_factor.enroll_instruction')}
           </p>
-          <div
-            className="rounded-md bg-muted/40 p-3 font-mono text-[11px] break-all"
-            data-testid="profile-2fa-otpauth-uri"
-          >
-            {otpAuth}
+          {/* QR generated in-browser from the otpauth URI (backend returns
+              qr_svg=null — never implemented). White box so it scans on the
+              dark theme. */}
+          <div className="flex justify-center">
+            <div
+              className="rounded-md bg-white p-3"
+              data-testid="profile-2fa-qr"
+            >
+              <QRCodeSVG value={otpAuth} size={176} level="M" />
+            </div>
           </div>
+          <details className="group">
+            <summary className="cursor-pointer list-none text-xs text-muted-foreground hover:text-foreground">
+              {t('two_factor.manual_key_summary')}
+            </summary>
+            <div
+              className="mt-2 rounded-md bg-muted/40 p-3 font-mono text-[11px] break-all"
+              data-testid="profile-2fa-otpauth-uri"
+            >
+              {otpAuth}
+            </div>
+          </details>
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="profile-2fa-code" className="text-xs">
-                Код из приложения
+                {t('two_factor.code_label')}
               </Label>
               <Input
                 id="profile-2fa-code"
@@ -167,7 +185,7 @@ export function TwoFactorSection() {
               data-testid="profile-2fa-confirm-enroll"
             >
               {enable.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Подтвердить
+              {t('two_factor.confirm')}
             </Button>
           </div>
         </div>
@@ -177,12 +195,12 @@ export function TwoFactorSection() {
       {enabled && showDisable && (
         <div className="space-y-3 pt-1">
           <p className="text-xs text-muted-foreground">
-            Чтобы отключить 2FA, введите пароль учётной записи.
+            {t('two_factor.disable_instruction')}
           </p>
           <div className="flex items-end gap-2">
             <div className="flex-1 space-y-1.5">
               <Label htmlFor="profile-2fa-disable-password" className="text-xs">
-                Пароль
+                {t('two_factor.password_label')}
               </Label>
               <Input
                 id="profile-2fa-disable-password"
@@ -201,7 +219,7 @@ export function TwoFactorSection() {
               data-testid="profile-2fa-disable-submit"
             >
               {disable.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Отключить
+              {t('two_factor.disable')}
             </Button>
           </div>
         </div>

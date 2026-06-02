@@ -24,7 +24,7 @@ router = APIRouter(prefix="/integrations/manual", tags=["manual"])
 
 
 def _ensure_teacher_or_assistant(p: Principal, course_id: str | None) -> None:
-    if p.is_admin or p.is_super_admin:
+    if p.is_admin:
         return
     if p.has_global("teacher"):
         return
@@ -47,6 +47,7 @@ def _summarise(parsed: list[ParsedSubmission]) -> dict[str, Any]:
 async def upload_zip(
     file: UploadFile = File(...),
     course_id: str | None = Form(default=None),
+    homework_id: str | None = Form(default=None),
     assignment_id: str | None = Form(default=None),
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
@@ -69,6 +70,7 @@ async def upload_zip(
             "kind": "manual",
             "trigger": "upload-zip",
             "course_id": course_id,
+            "homework_id": homework_id,
             "assignment_id": assignment_id,
             "summary": summary,
         },
@@ -94,6 +96,7 @@ async def upload_zip(
 async def upload_csv(
     file: UploadFile = File(...),
     course_id: str | None = Form(default=None),
+    homework_id: str | None = Form(default=None),
     assignment_id: str | None = Form(default=None),
     p: Principal = Depends(principal_dep),
     bus: KafkaBus = Depends(bus_dep),
@@ -115,6 +118,7 @@ async def upload_csv(
             "kind": "manual",
             "trigger": "upload-csv",
             "course_id": course_id,
+            "homework_id": homework_id,
             "assignment_id": assignment_id,
             "summary": summary,
         },

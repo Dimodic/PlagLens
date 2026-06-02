@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useTranslation } from '@/i18n';
 import type { AuditEvent } from '@/api/endpoints/audit';
 
 interface Props {
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function AuditEventCard({ event, defaultOpen = false }: Props) {
+  const { t } = useTranslation();
   const [opened, setOpened] = useState(defaultOpen);
   const isSuccess = event.result === 'success';
   const ResultIcon = isSuccess ? Check : X;
@@ -31,7 +33,7 @@ export function AuditEventCard({ event, defaultOpen = false }: Props) {
               size="icon"
               className="h-7 w-7 shrink-0"
               onClick={() => setOpened((v) => !v)}
-              aria-label={opened ? 'свернуть' : 'развернуть'}
+              aria-label={opened ? t('audit_event_card.collapse') : t('audit_event_card.expand')}
               data-testid={`audit-event-toggle-${event.id}`}
             >
               <ChevIcon className="h-4 w-4" />

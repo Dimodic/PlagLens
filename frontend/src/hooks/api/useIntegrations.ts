@@ -123,6 +123,27 @@ export function useSyncNow(id: string) {
   });
 }
 
+/** Manual (push) source — upload a ZIP/CSV of solutions. Picks the
+ *  endpoint by file extension; refreshes the integrations list so the
+ *  source's "last activity" reflects the upload. */
+export function useManualUpload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: {
+      file: File;
+      course_id?: string | null;
+      homework_id?: string | null;
+      assignment_id?: string | null;
+    }) =>
+      integrationsApi.manualUpload(vars.file, {
+        course_id: vars.course_id,
+        homework_id: vars.homework_id,
+        assignment_id: vars.assignment_id,
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: integrationKeys.all }),
+  });
+}
+
 export function useImportJobs(id: string | undefined, params: ListParams = {}) {
   return useQuery({
     queryKey: integrationKeys.importJobs(id ?? '', params),

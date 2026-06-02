@@ -271,22 +271,22 @@ class DashboardService:
         return {
             "tenant_id": tenant_id or "all",
             "active_courses": await self._scalar(
-                f"SELECT count(*) FROM course.courses {courses_w}", **p
+                f"SELECT count(*) FROM course.courses {courses_w}", **p  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
             ),
             "submissions_total": await self._scalar(
-                f"SELECT count(*) FROM submission.submissions {subs_w}", **p
+                f"SELECT count(*) FROM submission.submissions {subs_w}", **p  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
             ),
             "plagiarism_runs_total": await self._scalar(
-                f"SELECT count(*) FROM plagiarism.plagiarism_runs {plag_w}", **p
+                f"SELECT count(*) FROM plagiarism.plagiarism_runs {plag_w}", **p  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
             ),
             "active_users_dau": await self._scalar(
-                f"SELECT count(*) FROM identity.users {dau_w}", **p
+                f"SELECT count(*) FROM identity.users {dau_w}", **p  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
             ),
             "active_users_mau": await self._scalar(
-                f"SELECT count(*) FROM identity.users {mau_w}", **p
+                f"SELECT count(*) FROM identity.users {mau_w}", **p  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
             ),
             "storage_used_bytes": await self._scalar(
-                "SELECT coalesce(sum(total_size_bytes), 0) "
+                "SELECT coalesce(sum(total_size_bytes), 0) "  # noqa: S608 — admin stat, hardcoded WHERE; TODO read-model
                 f"FROM submission.submissions {subs_w}",
                 **p,
             ),
@@ -309,48 +309,6 @@ class DashboardService:
             self.overview_ttl,
         )
         data["cached"] = cached
-        return data
-
-    async def instance_integrations_health(self) -> dict[str, Any]:
-        async def gen():
-            from sqlalchemy import text
-
-            _STATUS_MAP = {
-                "active": "healthy",
-                "pending_auth": "degraded",
-                "disabled": "degraded",
-                "error": "down",
-                "failed": "down",
-            }
-            try:
-                rows = (
-                    await self.repo.session.execute(
-                        text(
-                            "SELECT DISTINCT ON (kind) "
-                            "coalesce(display_name, kind) AS name, "
-                            "kind, status, updated_at "
-                            "FROM integration.integration_configs "
-                            "ORDER BY kind, updated_at DESC"
-                        )
-                    )
-                ).mappings().all()
-            except Exception:  # noqa: BLE001
-                rows = []
-            items = [
-                {
-                    "integration": r["name"] or r["kind"],
-                    "status": _STATUS_MAP.get(str(r["status"]), "degraded"),
-                    "last_check_at": (
-                        r["updated_at"].isoformat() if r["updated_at"] else None
-                    ),
-                }
-                for r in rows
-            ]
-            return {"tenant_id": "all", "integrations": items}
-
-        data, _ = await self._cached(
-            "instance:integ-health", gen, self.detail_ttl
-        )
         return data
 
     async def tenant_active_courses(self, tenant_id: str) -> dict[str, Any]:
@@ -403,56 +361,6 @@ class DashboardService:
 
         data, _ = await self._cached(
             f"{tenant_id}:tenant:active-users", gen, self.detail_ttl
-        )
-        return data
-
-    async def tenant_integrations_health(self, tenant_id: str) -> dict[str, Any]:
-        # Live from integration.integration_configs. Maps the config
-        # ``status`` enum to the dashboard's health tone vocabulary.
-        async def gen():
-            from sqlalchemy import text
-
-            _STATUS_MAP = {
-                "active": "healthy",
-                "pending_auth": "degraded",
-                "disabled": "degraded",
-                "error": "down",
-                "failed": "down",
-            }
-            try:
-                # One row per integration *kind* — the latest config's
-                # status. A tenant can accumulate several configs of the
-                # same kind (re-auth, tests); a health table wants the
-                # current state per integration, not every historical row.
-                rows = (
-                    await self.repo.session.execute(
-                        text(
-                            "SELECT DISTINCT ON (kind) "
-                            "coalesce(display_name, kind) AS name, "
-                            "kind, status, updated_at "
-                            "FROM integration.integration_configs "
-                            "WHERE tenant_id = :t "
-                            "ORDER BY kind, updated_at DESC"
-                        ),
-                        {"t": tenant_id},
-                    )
-                ).mappings().all()
-            except Exception:  # noqa: BLE001
-                rows = []
-            items = [
-                {
-                    "integration": r["name"] or r["kind"],
-                    "status": _STATUS_MAP.get(str(r["status"]), "degraded"),
-                    "last_check_at": (
-                        r["updated_at"].isoformat() if r["updated_at"] else None
-                    ),
-                }
-                for r in rows
-            ]
-            return {"tenant_id": tenant_id, "integrations": items}
-
-        data, _ = await self._cached(
-            f"{tenant_id}:tenant:integ-health", gen, self.detail_ttl
         )
         return data
 

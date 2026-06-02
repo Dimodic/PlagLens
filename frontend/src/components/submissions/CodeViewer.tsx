@@ -12,6 +12,7 @@
  */
 import { Eye, EyeOff, Loader2, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 import { tokenize, SEGMENT_CLASS, type Segment } from './highlight';
 import { cn } from '@/components/ui/utils';
 
@@ -137,15 +138,14 @@ function splitSegmentsByLine(segments: Segment[]): Segment[][] {
   return lines;
 }
 
-// Annotation styling is intentionally quiet — same calm card as a GitHub
-// PR inline comment. Severity is signalled only by a small dot, not by a
-// loud border + tinted background that competes with the code itself.
-// Dot palette matches the design-system status palette (status dots
-// section): sky=info, amber=warning, red=destructive.
-const SEV_DOT: Record<CodeAnnotation['severity'], string> = {
-  low: 'bg-sky-500',
-  medium: 'bg-amber-500',
-  high: 'bg-red-500',
+// Annotation styling is intentionally quiet — a thin coloured left rule
+// carries severity, with a faint tint, instead of a boxed card with a full
+// border that competes with the code. Palette matches the status palette:
+// sky=info, amber=warning, red=destructive.
+const SEV_BORDER: Record<CodeAnnotation['severity'], string> = {
+  low: 'border-l-sky-500/70',
+  medium: 'border-l-amber-500/70',
+  high: 'border-l-red-500/70',
 };
 
 export function CodeViewer({
@@ -266,6 +266,7 @@ function AnnotatedCode({
   onToggleTeacherNoteVisibility,
   teacherNoteActionsBusyFor,
 }: AnnotatedCodeProps) {
+  const { t } = useTranslation();
   const lines = splitSegmentsByLine(segments);
 
   // Index annotations by their anchor line. We dropped the per-line
@@ -299,7 +300,7 @@ function AnnotatedCode({
                   <button
                     type="button"
                     onClick={() => onAddComment(lineNumber)}
-                    aria-label="Добавить комментарий"
+                    aria-label={t('code_viewer.add_comment')}
                     className="absolute left-1.5 top-1/2 hidden h-5 w-5 -translate-y-1/2 items-center justify-center rounded bg-primary text-primary-foreground text-xs leading-none opacity-0 transition-opacity group-hover:flex group-hover:opacity-100 focus-visible:opacity-100 focus-visible:flex"
                   >
                     +
@@ -331,7 +332,9 @@ function AnnotatedCode({
               {anns?.map((ann, i) => {
                 const [from, to] = ann.range ?? [ann.line, ann.line];
                 const rangeLabel =
-                  from === to ? `строка ${from}` : `строки ${from}–${to}`;
+                  from === to
+                    ? t('code_viewer.line_single', { from })
+                    : t('code_viewer.line_range', { from, to });
                 const isTeacher = ann.kind === 'teacher';
                 // AI signals also expose edit / delete / visibility via
                 // the same callbacks (the page dispatches on the id
@@ -348,7 +351,7 @@ function AnnotatedCode({
                   return (
                     <div
                       key={ann.id}
-                      className="mx-10 my-2 w-fit max-w-full rounded-md border border-border/40 bg-background/60 p-2 font-sans"
+                      className="mx-10 my-2 max-w-full font-sans"
                     >
                       {renderTeacherEditor(ann.id)}
                     </div>
@@ -366,27 +369,29 @@ function AnnotatedCode({
                   <div
                     key={ann.id ?? `ann-${i}`}
                     data-annotation-kind={ann.kind ?? 'ai'}
-                    className="group/ann mx-10 my-2 rounded-md border border-border/50 bg-muted/30 px-3 py-2.5 font-sans"
+                    className={cn(
+                      // Recessed darker card (contrasts the bg-muted code
+                      // panel so it reads as grounded, not floating) with a
+                      // thin severity stripe on the left.
+                      'group/ann mx-10 my-1.5 rounded-md border-l-2 bg-background/70 py-2 pl-3 pr-3 font-sans',
+                      isTeacher
+                        ? 'border-l-border'
+                        : SEV_BORDER[ann.severity],
+                    )}
                   >
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      {isTeacher ? (
-                        <Pencil className="h-3 w-3 text-muted-foreground/80 shrink-0" />
-                      ) : (
-                        <span
-                          className={cn(
-                            'inline-block h-1.5 w-1.5 rounded-full shrink-0',
-                            SEV_DOT[ann.severity],
-                          )}
-                          aria-label={`severity: ${ann.severity}`}
-                        />
+                    <div className="flex items-center gap-2 text-xs">
+                      {isTeacher && (
+                        <Pencil className="h-3 w-3 shrink-0 text-muted-foreground/80" />
                       )}
                       <span className="font-medium text-foreground/90">
                         {ann.title}
                       </span>
-                      <span aria-hidden className="text-muted-foreground/60">
+                      <span aria-hidden className="text-muted-foreground/40">
                         ·
                       </span>
-                      <span className="lowercase">{rangeLabel}</span>
+                      <span className="lowercase text-muted-foreground">
+                        {rangeLabel}
+                      </span>
                       {/* Teacher action row in the top-right. Both AI
                           signals and teacher-authored notes get the
                           same three icons — the parent (SubmissionDetail
@@ -411,8 +416,8 @@ function AnnotatedCode({
                               }
                               aria-label={
                                 ann.visibleToStudent
-                                  ? 'Скрыть от студента'
-                                  : 'Показать студенту'
+                                  ? t('code_viewer.hide_from_student')
+                                  : t('code_viewer.show_to_student')
                               }
                               data-testid={`annotation-toggle-visible-${ann.id}`}
                               data-visible={
@@ -441,7 +446,7 @@ function AnnotatedCode({
                               onClick={() =>
                                 onEditTeacherNote(ann.id!, ann.body)
                               }
-                              aria-label="Изменить заметку"
+                              aria-label={t('code_viewer.edit_note')}
                               data-testid={`annotation-edit-${ann.id}`}
                               className="h-6 w-6 text-muted-foreground/70 hover:text-foreground"
                             >
@@ -455,7 +460,7 @@ function AnnotatedCode({
                               size="icon"
                               disabled={busyThis}
                               onClick={() => onDeleteTeacherNote(ann.id!)}
-                              aria-label="Удалить заметку"
+                              aria-label={t('code_viewer.delete_note')}
                               data-testid={`annotation-delete-${ann.id}`}
                               className="h-6 w-6 text-muted-foreground/70 hover:text-foreground"
                             >
@@ -469,7 +474,7 @@ function AnnotatedCode({
                         </div>
                       )}
                     </div>
-                    <p className="mt-1.5 text-sm leading-relaxed whitespace-pre-wrap text-foreground/85">
+                    <p className="mt-1 text-sm leading-relaxed whitespace-pre-wrap text-foreground/80">
                       {ann.body}
                     </p>
                   </div>
@@ -480,7 +485,7 @@ function AnnotatedCode({
                 // card. We let the composer set its own max-width so the
                 // box doesn't span the entire code panel — short notes are
                 // the norm, not paragraphs.
-                <div className="mx-10 my-2 w-fit max-w-full rounded-md border border-border/40 bg-background/60 p-2 font-sans">
+                <div className="mx-10 my-2 max-w-full font-sans">
                   {renderComposer(lineNumber)}
                 </div>
               )}

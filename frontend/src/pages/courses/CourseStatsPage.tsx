@@ -18,6 +18,7 @@ import {
 } from '@/hooks/api/useDashboards';
 import { useSuspiciousSubmissions } from '@/hooks/api/usePlagiarism';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { Card, CardContent } from '@/components/ui/card';
 import { KPICard } from '@/components/dashboard/KPICard';
 // Defer recharts behind React.lazy so the KPI strip + lists render
@@ -35,7 +36,8 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
 
 export default function CourseStatsPage() {
-  useDocumentTitle('Статистика курса');
+  const { t } = useTranslation();
+  useDocumentTitle(t('course_stats.document_title'));
   const { slug } = useParams<{ slug: string }>();
   const { data: course } = useCourse(slug);
   const courseId = course?.id;
@@ -61,14 +63,14 @@ export default function CourseStatsPage() {
   return (
     <Page width="wide">
       <PageHeader
-        title={<span data-testid="course-stats-title">Статистика</span>}
+        title={<span data-testid="course-stats-title">{t('course_stats.title')}</span>}
         action={
           courseId ? (
             <Link
               to={`/courses/${slug}/dashboard`}
               className="text-primary hover:underline text-sm"
             >
-              Полный дашборд →
+              {t('course_stats.full_dashboard')}
             </Link>
           ) : undefined
         }
@@ -76,19 +78,19 @@ export default function CourseStatsPage() {
 
       <div data-testid="course-stats" className="space-y-4">
         {!courseId && !overview.isLoading ? (
-          <EmptyState title="Нет данных" message="Курс не найден." />
+          <EmptyState title={t('course_stats.empty_title')} message={t('course_stats.empty_message')} />
         ) : (
           <>
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <KPICard
-                label="Посылок"
+                label={t('course_stats.kpi_submissions')}
                 value={kpi?.submissions_total}
                 icon={<Book className="h-4 w-4" />}
                 loading={isLoading}
                 testId="kpi-submissions-total"
               />
               <KPICard
-                label="Средняя оценка"
+                label={t('course_stats.kpi_avg_score')}
                 value={kpi?.average_score ?? null}
                 icon={<BarChart3 className="h-4 w-4" />}
                 color="blue"
@@ -104,7 +106,7 @@ export default function CourseStatsPage() {
                 testId="kpi-plagiarism-alerts"
               />
               <KPICard
-                label="Студентов"
+                label={t('course_stats.kpi_students')}
                 value={kpi?.enrolled_students}
                 icon={<Users className="h-4 w-4" />}
                 loading={isLoading}
@@ -125,13 +127,13 @@ export default function CourseStatsPage() {
                 <Card data-testid="course-stats-suspicious-card">
                   <CardContent className="p-4 space-y-2">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold">Подозрительные посылки</p>
+                      <p className="font-semibold">{t('course_stats.suspicious_title')}</p>
                       {courseId && (
                         <Link
                           to={`/courses/${slug}/suspicious`}
                           className="text-primary hover:underline text-sm"
                         >
-                          Все →
+                          {t('course_stats.suspicious_all')}
                         </Link>
                       )}
                     </div>
@@ -139,7 +141,7 @@ export default function CourseStatsPage() {
                       <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                     ) : suspiciousList.length === 0 ? (
                       <p className="text-sm text-muted-foreground">
-                        Нет подозрительных посылок выше 70% сходства.
+                        {t('course_stats.suspicious_empty')}
                       </p>
                     ) : (
                       <div className="flex flex-col gap-1.5">
@@ -180,13 +182,13 @@ export default function CourseStatsPage() {
                   <CardContent className="p-4 space-y-2">
                     <p className="font-semibold">KPI</p>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-muted-foreground">Заданий</span>
+                      <span className="text-sm text-muted-foreground">{t('course_stats.kpi_assignments')}</span>
                       <span className="text-sm font-medium">
                         {kpi?.assignments_count ?? '—'}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-3">
-                      <span className="text-sm text-muted-foreground">AI-запусков</span>
+                      <span className="text-sm text-muted-foreground">{t('course_stats.kpi_ai_runs')}</span>
                       <span className="text-sm font-medium inline-flex items-center gap-1">
                         <Brain className="h-3 w-3" />
                         {kpi?.ai_runs_count ?? '—'}
@@ -200,7 +202,7 @@ export default function CourseStatsPage() {
                     </div>
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm text-muted-foreground">
-                        Последняя активность
+                        {t('course_stats.kpi_last_activity')}
                       </span>
                       <span className="text-sm font-medium inline-flex items-center gap-1">
                         <ClipboardList className="h-3 w-3" />

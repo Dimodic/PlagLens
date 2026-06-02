@@ -7,70 +7,34 @@ Two jobs:
     it even when the caller (notably the batch endpoint) didn't pass any
     ``code`` in the request.
 
-Service-to-service auth: we mint a short-lived admin-scoped RS256 JWT
-with the shared private key (same pattern as the plagiarism service's
-``submission_fetcher``). The submission service's file endpoints require
-a real bearer token — ``X-Tenant-Id`` alone isn't enough there.
+Service-to-service auth: we mint a short-lived admin-scoped RS256 JWT via
+the shared :func:`plaglens_common.service_token.mint_service_jwt` (same
+pattern as the plagiarism service's ``submission_fetcher``). The submission
+service's file endpoints require a real bearer token — ``X-Tenant-Id``
+alone isn't enough there.
+
+Transport is the shared :class:`plaglens_common.service_client.ServiceClient`
+(``X-Request-Id`` propagation, Problem→error translation). Retries are
+disabled here to preserve the previous raw-httpx behaviour (a single attempt
+per call); the feedback POST and the best-effort code fetch keep their own
+error handling.
 """
 from __future__ import annotations
 
 import logging
-import os
-import time
 from typing import Any
 
 import httpx
-import jwt
+from plaglens_common.errors import PlagLensError
+from plaglens_common.service_client import ServiceClient
+from plaglens_common.service_token import mint_service_jwt
 
 from ..config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# tenant_id -> (token, expiry_epoch)
-_SERVICE_TOKENS: dict[str, tuple[str, float]] = {}
-_SERVICE_TOKEN_TTL_S = 30 * 60
-
-
-def _service_token(tenant_id: str) -> str | None:
-    """Mint (or reuse) a short-lived admin-scoped JWT for service-to-service
-    calls. Returns ``None`` if the private key can't be loaded."""
-    now = time.time()
-    cached = _SERVICE_TOKENS.get(tenant_id)
-    if cached is not None and cached[1] > now + 60:
-        return cached[0]
-    key_path = (
-        os.environ.get("JWT_PRIVATE_KEY_PATH") or "/run/secrets/jwt_private.pem"
-    )
-    try:
-        with open(key_path, encoding="utf-8") as fh:
-            private_key = fh.read()
-    except OSError as exc:
-        logger.warning("service jwt key missing at %s: %s", key_path, exc)
-        return None
-    issuer = os.environ.get("JWT_ISSUER") or "https://plaglens.local"
-    audience = os.environ.get("JWT_AUDIENCE") or "plaglens-api"
-    algorithm = os.environ.get("JWT_ALGORITHM") or "RS256"
-    iat = int(now)
-    exp = iat + _SERVICE_TOKEN_TTL_S + 5 * 60
-    payload = {
-        "sub": "svc_ai_analysis",
-        "iss": issuer,
-        "aud": audience,
-        "iat": iat,
-        "exp": exp,
-        "tenant_id": tenant_id,
-        "global_role": "admin",  # service principal — bypasses RBAC
-        "course_roles": {},
-    }
-    try:
-        token = jwt.encode(payload, private_key, algorithm=algorithm)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("service jwt sign failed: %s", exc)
-        return None
-    if isinstance(token, bytes):
-        token = token.decode("utf-8")
-    _SERVICE_TOKENS[tenant_id] = (token, float(exp))
-    return token
+# Token lifetime preserved from the previous local minting: 30 min + 5 min skew.
+_SERVICE_TOKEN_TTL_S = 30 * 60 + 5 * 60
 
 
 class SubmissionClient:
@@ -78,18 +42,28 @@ class SubmissionClient:
         self._transport = transport
         self._settings = get_settings()
 
-    def _build_client(self) -> httpx.AsyncClient:
+    def _build_client(self) -> ServiceClient:
         kwargs: dict[str, Any] = {
             "base_url": self._settings.SUBMISSION_SERVICE_URL.rstrip("/"),
             "timeout": 15.0,
         }
         if self._transport is not None:
             kwargs["transport"] = self._transport
-        return httpx.AsyncClient(**kwargs)
+        # Single attempt per request — the previous raw-httpx client did not
+        # retry; keep that so semantics (and test expectations) are unchanged.
+        return ServiceClient(
+            provider="submission",
+            max_retries=0,
+            client=httpx.AsyncClient(**kwargs),
+        )
 
     def _auth_headers(self, tenant_id: str) -> dict[str, str]:
         h = {"X-Tenant-Id": tenant_id}
-        token = _service_token(tenant_id)
+        token = mint_service_jwt(
+            subject="svc_ai_analysis",
+            tenant_id=tenant_id,
+            ttl_seconds=_SERVICE_TOKEN_TTL_S,
+        )
         if token:
             h["Authorization"] = f"Bearer {token}"
         return h
@@ -112,13 +86,13 @@ class SubmissionClient:
                         "X-Actor-Id": actor_id,
                     },
                 )
-            except httpx.RequestError as exc:
-                logger.exception("submission service unreachable")
-                raise SubmissionClientError(f"submission unreachable: {exc}") from exc
-            if resp.status_code >= 400:
-                raise SubmissionClientError(
-                    f"submission returned {resp.status_code}: {resp.text}"
-                )
+            except PlagLensError as exc:
+                # Covers transport errors, timeouts, open circuit and any
+                # >=400 the submission service returned (ServiceClient maps
+                # Problem responses to typed errors). Surface the same
+                # SubmissionClientError the caller already handles.
+                logger.warning("submission feedback call failed: %s", exc)
+                raise SubmissionClientError(f"submission call failed: {exc}") from exc
             try:
                 return resp.json()
             except ValueError:
@@ -137,14 +111,9 @@ class SubmissionClient:
                 resp = await client.get(
                     f"/api/v1/submissions/{submission_id}", headers=headers
                 )
-            except httpx.RequestError as exc:
-                logger.warning("submission service unreachable: %s", exc)
-                return ""
-            if resp.status_code >= 400:
+            except PlagLensError as exc:
                 logger.warning(
-                    "submission detail %s returned %s",
-                    submission_id,
-                    resp.status_code,
+                    "submission detail %s fetch failed: %s", submission_id, exc
                 )
                 return ""
             try:
@@ -165,8 +134,7 @@ class SubmissionClient:
                         f"/files/{file_id}/content",
                         headers=headers,
                     )
-                    cresp.raise_for_status()
-                except httpx.HTTPError as exc:
+                except PlagLensError as exc:
                     logger.warning(
                         "file content fetch failed (%s/%s): %s",
                         submission_id,

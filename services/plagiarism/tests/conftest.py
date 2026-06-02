@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 )
 
 from plagiarism_service.api.deps import set_idempotency_store, set_producer  # noqa: E402
+from plagiarism_service.common import redis_client as redis_module  # noqa: E402
 from plagiarism_service.common.idempotency import IdempotencyStore  # noqa: E402
 from plagiarism_service.config import get_settings  # noqa: E402
 from plagiarism_service.db import set_session_factory  # noqa: E402
@@ -86,7 +87,9 @@ async def fakeredis_store():
     redis = fakeredis.aioredis.FakeRedis()
     store = IdempotencyStore(redis_client=redis)
     set_idempotency_store(store)
+    redis_module.set_client(redis)
     yield store
+    redis_module.reset_client()
     await redis.aclose()
 
 

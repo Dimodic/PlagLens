@@ -110,13 +110,6 @@ class Settings(BaseSettings):
             "SUBMISSION_BASE_URL",
         ),
     )
-    course_service_base: str = Field(
-        default="http://course-service.internal:8080",
-        validation_alias=AliasChoices(
-            "COURSE_SERVICE_BASE",
-            "COURSE_BASE_URL",
-        ),
-    )
     submission_service_token: str = ""
     submission_fetch_timeout_seconds: int = 30
 

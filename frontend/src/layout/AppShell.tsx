@@ -1,23 +1,24 @@
 import { useState } from 'react';
 import { Suspense } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import { PageSkeleton } from '@/components/common/Skeleton';
+import { pageWidthForPath, pathHasTabs } from '@/components/shell/routeMap';
 import { Sidebar } from '@/components/shell/Sidebar';
 import { Header } from '@/components/shell/Header';
 import { Breadcrumbs } from '@/components/shell/Breadcrumbs';
-import { CommandPalette } from '@/components/shell/CommandPalette';
 import { useKeyboardShortcuts } from '@/components/shell/useKeyboardShortcuts';
 import { useAuth } from '@/auth/useAuth';
 import { useMyCourses } from '@/hooks/api/useCourses';
 
 export function AppShell() {
-  const [searchOpen, setSearchOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const { user } = useAuth();
+  const location = useLocation();
 
+  // ⌘K and the search field itself live in <HeaderSearch> now (inline, no
+  // modal), so the shell no longer owns a search-open state.
   useKeyboardShortcuts({
     onHelp: () => { /* TODO: help dialog */ },
-    onSearch: () => setSearchOpen(true),
   });
 
   // Sidebar visibility heuristic (unchanged): hide for "pure" students who
@@ -53,7 +54,6 @@ export function AppShell() {
       )}
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
-          onOpenSearch={() => setSearchOpen(true)}
           onOpenMobileNav={showSidebar ? () => setMobileNavOpen(true) : undefined}
         />
         <main data-testid="app-main" className="min-w-0 flex-1">
@@ -84,13 +84,19 @@ export function AppShell() {
                 so the initial bundle ships only the shell + auth.
                 Suspense here catches the chunk-load for any of them
                 with a uniform skeleton. */}
-            <Suspense fallback={<PageSkeleton width="regular" />}>
+            <Suspense
+              fallback={
+                <PageSkeleton
+                  width={pageWidthForPath(location.pathname, user?.global_role)}
+                  withTabs={pathHasTabs(location.pathname)}
+                />
+              }
+            >
               <Outlet />
             </Suspense>
           </div>
         </main>
       </div>
-      <CommandPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

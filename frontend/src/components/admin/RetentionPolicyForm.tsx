@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { useTranslation } from '@/i18n';
 import type { RetentionPolicy } from '@/api/endpoints/audit';
 
 interface Props {
@@ -20,6 +21,7 @@ interface Props {
 }
 
 export function RetentionPolicyForm({ initial, onSubmit, loading }: Props) {
+  const { t } = useTranslation();
   const [defDays, setDefDays] = useState<number>(initial?.default_retention_days ?? 365);
   const [longDays, setLongDays] = useState<number>(initial?.long_retention_days ?? 2555);
   const [legalHold, setLegalHold] = useState<boolean>(initial?.legal_hold_active ?? false);
@@ -44,7 +46,7 @@ export function RetentionPolicyForm({ initial, onSubmit, loading }: Props) {
           onChange={(e) => setDefDays(Number(e.target.value) || 0)}
           data-testid="retention-default-days"
         />
-        <p className="text-xs text-muted-foreground">Срок хранения обычных событий</p>
+        <p className="text-xs text-muted-foreground">{t('retention_policy.default_days_hint')}</p>
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="retention-long-days">long_retention_days</Label>
@@ -57,7 +59,7 @@ export function RetentionPolicyForm({ initial, onSubmit, loading }: Props) {
           data-testid="retention-long-days"
         />
         <p className="text-xs text-muted-foreground">
-          Срок для login/access-denied/data-export (e.g. 2555 = 7 лет)
+          {t('retention_policy.long_days_hint')}
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -68,7 +70,7 @@ export function RetentionPolicyForm({ initial, onSubmit, loading }: Props) {
           data-testid="retention-legal-hold-toggle"
         />
         <Label htmlFor="retention-legal-hold-toggle">
-          legal_hold_active (тенант-уровень)
+          {t('retention_policy.legal_hold_label')}
         </Label>
       </div>
       <div className="flex justify-end">
@@ -84,7 +86,7 @@ export function RetentionPolicyForm({ initial, onSubmit, loading }: Props) {
           data-testid="retention-save-button"
         >
           {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Сохранить
+          {t('retention_policy.save')}
         </Button>
       </div>
     </div>

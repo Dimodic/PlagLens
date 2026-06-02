@@ -10,78 +10,29 @@ Endpoints used (per ``05-SUBMISSION.md``):
 
 Auth: service-to-service. Submission rejects unauthenticated callers, and
 we have no end-user JWT available inside the background scheduler tick.
-We sign a short-lived admin-scoped JWT with the shared private key (the
-same one identity-service uses) and cache it in-process for 30 min.
+We mint a short-lived admin-scoped JWT (shared signing key) per tenant via
+``plaglens_common.service_token.mint_service_jwt``, which caches the token
+in-process so hot scheduler ticks don't re-sign on every call.
 
-We surface a small, fully async HTTPX client. In tests it is replaceable
-via ``set_submission_fetcher``.
+We surface a small, fully async HTTP client built on
+``plaglens_common.service_client.ServiceClient`` (retries + circuit breaker +
+X-Request-Id propagation). In tests it is replaceable via
+``set_submission_fetcher``.
 """
 from __future__ import annotations
 
-import os
-import time
 from collections.abc import Iterable
 from typing import Any
 
-import httpx
-import jwt as pyjwt
+from plaglens_common.errors import NotFoundError, PlagLensError
+from plaglens_common.service_client import ServiceClient
+from plaglens_common.service_token import mint_service_jwt
 
 from ..common.logging import get_logger
 from ..config import settings
 from ..providers.base import SubmissionFile, SubmissionItem
 
 log = get_logger(__name__)
-
-# Per-tenant cache of service tokens. A run can target a different tenant
-# from the one we minted a token for last time, so we need separate
-# entries — a global cache would return a tnt_A token in response to a
-# tnt_B query and the API would refuse with cross-tenant 403.
-_SERVICE_TOKENS: dict[str, tuple[str, float]] = {}
-_SERVICE_TOKEN_TTL_S = 30 * 60  # 30 min — well under any reasonable jwt exp
-
-
-def _service_token(tenant_id: str) -> str | None:
-    """Mint (or reuse) a short-lived admin-scoped JWT for service-to-service
-    calls to the submission service. Returns ``None`` if the private key
-    can't be loaded — the caller will fall back to unauthenticated, which
-    yields 401 in dev but at least doesn't raise."""
-    now = time.time()
-    cached = _SERVICE_TOKENS.get(tenant_id)
-    if cached is not None and cached[1] > now + 60:
-        return cached[0]
-    key_path = (
-        os.environ.get("JWT_PRIVATE_KEY_PATH") or "/run/secrets/jwt_private.pem"
-    )
-    try:
-        with open(key_path, encoding="utf-8") as fh:
-            private_key = fh.read()
-    except OSError as exc:
-        log.warning("service_jwt_key_missing", path=key_path, error=str(exc))
-        return None
-    issuer = os.environ.get("JWT_ISSUER") or "https://plaglens.local"
-    audience = os.environ.get("JWT_AUDIENCE") or "plaglens-api"
-    algorithm = os.environ.get("JWT_ALGORITHM") or "RS256"
-    iat = int(now)
-    exp = iat + _SERVICE_TOKEN_TTL_S + 5 * 60  # small slack
-    payload = {
-        "sub": "svc_plagiarism",
-        "iss": issuer,
-        "aud": audience,
-        "iat": iat,
-        "exp": exp,
-        "tenant_id": tenant_id,
-        "global_role": "admin",  # service principal — bypasses RBAC
-        "course_roles": {},
-    }
-    try:
-        token = pyjwt.encode(payload, private_key, algorithm=algorithm)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("service_jwt_sign_failed", error=str(exc))
-        return None
-    if isinstance(token, bytes):
-        token = token.decode("utf-8")
-    _SERVICE_TOKENS[tenant_id] = (token, float(exp))
-    return token
 
 
 class SubmissionFetcher:
@@ -104,21 +55,31 @@ class SubmissionFetcher:
         # rotating creds). Otherwise mint a short-lived service JWT via
         # the shared private key so the background scheduler can fetch
         # submissions on behalf of a teacher who initiated the run.
-        token = self.token or _service_token(tenant_id)
+        token = self.token or mint_service_jwt(
+            subject="svc_plagiarism", tenant_id=tenant_id
+        )
         if token:
             h["Authorization"] = f"Bearer {token}"
         return h
+
+    def _client(self) -> ServiceClient:
+        """Build a per-call ServiceClient (retries + circuit breaker +
+        X-Request-Id). One client per ``fetch_one`` / ``list_latest_per_student``
+        call mirrors the previous one-``AsyncClient``-per-fetch behavior."""
+        return ServiceClient(
+            self.base_url, provider="submission-service", timeout=self.timeout
+        )
 
     async def fetch_one(
         self, *, tenant_id: str, submission_id: str
     ) -> SubmissionItem | None:
         """Fetch a single submission with its files. Returns ``None`` on 404."""
         url = f"{self.base_url}/api/v1/submissions/{submission_id}"
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers=self._headers(tenant_id))
-            if resp.status_code == 404:
+        async with self._client() as client:
+            try:
+                resp = await client.get(url, headers=self._headers(tenant_id))
+            except NotFoundError:
                 return None
-            resp.raise_for_status()
             meta = resp.json()
             files: list[SubmissionFile] = []
             for f in meta.get("files", []) or []:
@@ -156,7 +117,7 @@ class SubmissionFetcher:
 
     async def _fetch_content(
         self,
-        client: httpx.AsyncClient,
+        client: ServiceClient,
         *,
         tenant_id: str,
         submission_id: str,
@@ -168,8 +129,7 @@ class SubmissionFetcher:
         )
         try:
             resp = await client.get(url, headers=self._headers(tenant_id))
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
+        except PlagLensError as exc:
             log.warning(
                 "submission_fetch_failed",
                 submission_id=submission_id,
@@ -205,11 +165,11 @@ class SubmissionFetcher:
             f"{self.base_url}/api/v1/assignments/{assignment_id}"
             f"/submissions/latest-per-student"
         )
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.get(url, headers=self._headers(tenant_id))
-            if resp.status_code == 404:
+        async with self._client() as client:
+            try:
+                resp = await client.get(url, headers=self._headers(tenant_id))
+            except NotFoundError:
                 return []
-            resp.raise_for_status()
             body = resp.json()
         # The endpoint may return either a bare list or a paginated dict.
         rows: list[Any]

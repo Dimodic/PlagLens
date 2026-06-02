@@ -6,7 +6,7 @@ integration and reconciles participants & submissions into PlagLens.
 ## Components
 
 ```
-identity-service ──── POST /v1/auth/service-token (X-Service-Secret) ──> JWT (24h, super_admin)
+identity-service ──── POST /v1/auth/service-token (X-Service-Secret) ──> JWT (24h, admin)
                                                                            │
 integration-service                                                        ▼
    ┌─ services/service_token.py  ── caches the bearer in-process ──────┘

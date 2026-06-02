@@ -26,7 +26,7 @@ class CrossTenantMigrate(BaseModel):
 @router.get(
     "/tenants",
     response_model=Page[TenantOut],
-    summary="List tenants (alias for /tenants, super_admin)",
+    summary="List tenants (alias for /tenants, admin)",
 )
 async def admin_list_tenants(
     limit: int = Query(50, ge=1, le=200),
@@ -62,7 +62,7 @@ async def admin_list_users(
 
 @router.post(
     "/cross-tenant/migrate-user",
-    summary="Migrate user across tenants (super_admin)",
+    summary="Migrate user across tenants (admin)",
 )
 async def cross_tenant_migrate_user(
     payload: CrossTenantMigrate,  # noqa: ARG001 — TODO use payload to perform migration

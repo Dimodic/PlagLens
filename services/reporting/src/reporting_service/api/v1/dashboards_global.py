@@ -1,4 +1,4 @@
-"""Global / super_admin dashboards (§G)."""
+"""Global / admin dashboards (§G)."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Request
@@ -41,15 +41,6 @@ async def instance_overview(
     aggregated across every tenant. Backs the admin dashboard's default
     «all organisations» view."""
     return await _service(request, session).instance_overview()
-
-
-@router.get("/integrations-health")
-async def instance_integrations_health(
-    request: Request,
-    p: Principal = Depends(require_global("admin")),
-    session: AsyncSession = Depends(get_session),
-):
-    return await _service(request, session).instance_integrations_health()
 
 
 @router.get("/system-health")

@@ -19,10 +19,10 @@ here is:
 4. Find-or-provision a user, link the Telegram identity, and finish like
    any other OAuth callback (set refresh cookie, redirect to the SPA).
 
-The created user gets a synthetic email of the form
-``tg-{telegram_id}@telegram.plaglens.local`` so the rest of the system
-(which assumes ``users.email`` is NOT NULL) keeps working untouched.
-Users can replace it with a real address from /me/profile later.
+The created user has NO email — Telegram accounts authenticate by their
+``(provider="telegram", telegram_id)`` OAuth link, not by an address.
+``users.email`` is nullable; the user can add a real address from
+/me/profile later if they want email notifications.
 """
 from __future__ import annotations
 
@@ -62,10 +62,6 @@ router = APIRouter(prefix="/auth/oauth/telegram", tags=["auth", "oauth", "telegr
 # Telegram replay window. The widget timestamps every callback; we refuse
 # anything older than this. 60 s is what Telegram themselves recommend.
 _TELEGRAM_MAX_AGE_S = 60
-
-# Pseudo-domain used for the synthetic email. Picked so it never collides
-# with a real mailbox (no MX, no public DNS record).
-_SYNTHETIC_EMAIL_DOMAIN = "telegram.plaglens.local"
 
 
 class TelegramBotInfo(BaseModel):
@@ -128,10 +124,6 @@ def _build_display_name(payload: dict[str, str]) -> str:
     last = payload.get("last_name", "").strip()
     full = f"{first} {last}".strip()
     return full or payload.get("username", "").strip() or f"tg-{payload.get('id', '')}"
-
-
-def _synthetic_email(telegram_id: str) -> str:
-    return f"tg-{telegram_id}@{_SYNTHETIC_EMAIL_DOMAIN}"
 
 
 def _build_redirect(redirect_url: str | None, *, params: dict[str, str]) -> str:
@@ -246,13 +238,15 @@ async def telegram_callback(
             session, user, ip=ip, user_agent=user_agent, return_url=return_url
         )
 
-    # 2) No Telegram link, but a Telegram-style synthetic email might be
-    # the only account this bot ever opens — match by id-derived email.
-    fake_email = _synthetic_email(telegram_id)
-
-    # Pick a tenant. Telegram sign-ups land in the canonical 'hse' tenant
-    # to match the rest of the OAuth flow; if it doesn't exist we fall
-    # back to the first tenant in the system (single-tenant deploys).
+    # 2) No Telegram link yet → provision a fresh account. Telegram accounts
+    # authenticate by their (provider, telegram_id) OAuth link, not by email,
+    # so we create the user WITHOUT an email — no synthetic address. (Existing
+    # Telegram users always carry their link, so they take the path above;
+    # only genuinely new ones reach here.)
+    #
+    # Pick a tenant. Telegram sign-ups land in the canonical 'hse' tenant to
+    # match the rest of the OAuth flow; if it doesn't exist we fall back to
+    # the first tenant in the system (single-tenant deploys).
     tenant = await tenant_repo.get_by_slug("hse")
     if tenant is None:
         tenants = await tenant_repo.list()
@@ -264,45 +258,35 @@ async def telegram_callback(
             )
         tenant = tenants[0]
 
-    existing_user = await user_repo.get_by_email(tenant.id, fake_email)
-    if existing_user is None:
-        # 3) Brand-new user.
-        new_user = User(
-            id=user_id(),
-            tenant_id=tenant.id,
-            email=fake_email,
-            email_verified_at=None,
-            display_name=display_name or "Telegram user",
-            global_role="student",
-            locale="ru",
-            status="active",
-            avatar_url=avatar_url,
-            password_hash=None,
-        )
-        session.add(new_user)
-        await session.flush()
-        existing_user = new_user
+    new_user = User(
+        id=user_id(),
+        tenant_id=tenant.id,
+        email=None,
+        email_verified_at=None,
+        display_name=display_name or "Telegram user",
+        global_role="student",
+        locale="ru",
+        status="active",
+        avatar_url=avatar_url,
+        password_hash=None,
+    )
+    session.add(new_user)
+    await session.flush()
 
-    # Link the Telegram identity in either case.
     session.add(
         OAuthIdentity(
             id=oauth_id(),
-            user_id=existing_user.id,
+            user_id=new_user.id,
             provider="telegram",
             provider_user_id=telegram_id,
-            email=existing_user.email,
+            email=None,
             raw_profile=payload,
         )
     )
-    # Refresh display_name/avatar if we just provisioned the user; for
-    # already-existing users we leave their profile alone (they may have
-    # customised it).
-    if existing_user.avatar_url is None and avatar_url:
-        existing_user.avatar_url = avatar_url
 
     return await _finish_login(
         session,
-        existing_user,
+        new_user,
         ip=ip,
         user_agent=user_agent,
         return_url=return_url,

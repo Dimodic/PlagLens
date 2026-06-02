@@ -43,7 +43,10 @@ async def course_flagged(
     ensure_tenant(user, user.tenant_id)
     ensure_course_staff(user, course_id)
     repo = SubmissionRepository(session)
-    items = await repo.list_flagged(course_id=course_id, tenant_id=user.tenant_id)
+    # Admin may view a course in another tenant → span all tenants (still
+    # scoped to this course_id). Other staff stay tenant-local.
+    flag_tenant = None if user.global_role == "admin" else user.tenant_id
+    items = await repo.list_flagged(course_id=course_id, tenant_id=flag_tenant)
     return [SubmissionOut.model_validate(s) for s in items]
 
 
@@ -55,8 +58,9 @@ async def assignment_flagged(
     assignment_id: str, user: CurrentUser, session: SessionDep
 ) -> list[SubmissionOut]:
     repo = SubmissionRepository(session)
+    flag_tenant = None if user.global_role == "admin" else user.tenant_id
     items = await repo.list_flagged(
-        assignment_id=assignment_id, tenant_id=user.tenant_id
+        assignment_id=assignment_id, tenant_id=flag_tenant
     )
     if items:
         ensure_course_staff(user, items[0].course_id)

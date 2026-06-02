@@ -20,11 +20,13 @@ import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { AsyncOperationStatus } from '@/components/common/AsyncOperationStatus';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useCorpusStats, useRebuildCorpus } from '@/hooks/api/usePlagiarism';
 import type { Problem } from '@/api/types';
 
 export function PlagiarismCorpusPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Plagiarism corpus');
   const notify = useNotifications();
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -38,10 +40,10 @@ export function PlagiarismCorpusPage() {
     try {
       const r = await rebuild.mutateAsync();
       setOpId(r.operation_id);
-      notify.info('Перестройка запущена');
+      notify.info(t('plagiarism_corpus.rebuild_started'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось запустить перестройку');
+      notify.error(p?.detail ?? p?.title ?? t('plagiarism_corpus.rebuild_failed'));
     }
   };
 
@@ -56,7 +58,7 @@ export function PlagiarismCorpusPage() {
             data-testid="plagiarism-corpus-rebuild"
           >
             <RefreshCw className="mr-2 h-4 w-4" />
-            Перестроить
+            {t('plagiarism_corpus.rebuild')}
           </Button>
         }
       />
@@ -87,7 +89,7 @@ export function PlagiarismCorpusPage() {
             <Card data-testid="plagiarism-corpus-stat-entries">
               <CardContent className="p-4 space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
-                  Записей в корпусе
+                  {t('plagiarism_corpus.stat_entries')}
                 </div>
                 <div className="text-xl font-bold">{data.entries_count}</div>
               </CardContent>
@@ -95,7 +97,7 @@ export function PlagiarismCorpusPage() {
             <Card>
               <CardContent className="p-4 space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
-                  Языков
+                  {t('plagiarism_corpus.stat_languages')}
                 </div>
                 <div className="text-xl font-bold">
                   {Object.keys(data.by_language ?? {}).length}
@@ -105,7 +107,7 @@ export function PlagiarismCorpusPage() {
             <Card>
               <CardContent className="p-4 space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
-                  Курсов
+                  {t('plagiarism_corpus.stat_courses')}
                 </div>
                 <div className="text-xl font-bold">
                   {data.by_course?.length ?? 0}
@@ -115,7 +117,7 @@ export function PlagiarismCorpusPage() {
             <Card>
               <CardContent className="p-4 space-y-1">
                 <div className="text-xs uppercase text-muted-foreground">
-                  Последняя перестройка
+                  {t('plagiarism_corpus.stat_last_rebuild')}
                 </div>
                 <div className="text-base font-bold">
                   {data.last_rebuild_at
@@ -129,13 +131,13 @@ export function PlagiarismCorpusPage() {
           <Card>
             <CardContent className="p-4">
               <h4 className="text-lg font-medium mb-3">
-                Распределение по языкам
+                {t('plagiarism_corpus.by_language')}
               </h4>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Язык</TableHead>
-                    <TableHead>Записей</TableHead>
+                    <TableHead>{t('plagiarism_corpus.col_language')}</TableHead>
+                    <TableHead>{t('plagiarism_corpus.col_entries')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -154,13 +156,13 @@ export function PlagiarismCorpusPage() {
             <Card>
               <CardContent className="p-4">
                 <h4 className="text-lg font-medium mb-3">
-                  Распределение по курсам
+                  {t('plagiarism_corpus.by_course')}
                 </h4>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Курс</TableHead>
-                      <TableHead>Записей</TableHead>
+                      <TableHead>{t('plagiarism_corpus.col_course')}</TableHead>
+                      <TableHead>{t('plagiarism_corpus.col_entries')}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -197,8 +199,8 @@ export function PlagiarismCorpusPage() {
         opened={confirmOpen}
         onClose={() => setConfirmOpen(false)}
         onConfirm={triggerRebuild}
-        title="Перестроить индекс?"
-        confirmLabel="Запустить"
+        title={t('plagiarism_corpus.confirm_title')}
+        confirmLabel={t('plagiarism_corpus.confirm_label')}
         loading={rebuild.isPending}
       />
     </Page>

@@ -40,6 +40,7 @@ import { RunStatusBadge } from '@/components/plagiarism/RunStatusBadge';
 import { SimilarityBar } from '@/components/plagiarism/SimilarityBar';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useDeleteRun,
   usePlagiarismRuns,
@@ -64,6 +65,7 @@ interface RunModalProps {
 }
 
 function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
+  const { t } = useTranslation();
   const [provider, setProvider] = useState<ProviderName>('dolos');
   const [withCorpus, setWithCorpus] = useState(true);
   const [threshold, setThreshold] = useState(0.6);
@@ -83,11 +85,11 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
           include_versions: includeVersions,
         },
       });
-      notify.success('Проверка поставлена в очередь');
+      notify.success(t('plagiarism_runs_list.run_queued'));
       onClose();
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось запустить проверку');
+      notify.error(p?.detail ?? p?.title ?? t('plagiarism_runs_list.run_failed'));
     }
   };
 
@@ -95,11 +97,11 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
     <Dialog open={opened} onOpenChange={(o) => { if (!o) onClose(); }}>
       <DialogContent data-testid="plagiarism-run-create-modal" className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Запустить новую проверку</DialogTitle>
+          <DialogTitle>{t('plagiarism_runs_list.start_title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
           <div className="space-y-1">
-            <Label>Провайдер</Label>
+            <Label>{t('plagiarism_runs_list.provider')}</Label>
             <Select
               value={provider}
               onValueChange={(v) => setProvider(v as ProviderName)}
@@ -123,12 +125,12 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
               onCheckedChange={(c) => setWithCorpus(!!c)}
               data-testid="plagiarism-run-create-with-corpus"
             />
-            <span className="text-sm">Включить cross-course корпус</span>
+            <span className="text-sm">{t('plagiarism_runs_list.with_corpus')}</span>
           </label>
 
           <div className="space-y-1">
             <Label className="text-sm">
-              Threshold подозрительности:{' '}
+              {t('plagiarism_runs_list.threshold_label')}{' '}
               <span className="text-primary">{threshold.toFixed(2)}</span>
             </Label>
             <Slider
@@ -146,7 +148,7 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
           </div>
 
           <div className="space-y-1">
-            <Label>Какие версии посылок брать</Label>
+            <Label>{t('plagiarism_runs_list.versions_label')}</Label>
             <Select
               value={includeVersions}
               onValueChange={(v) => v && setIncludeVersions(v as typeof includeVersions)}
@@ -155,9 +157,9 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="selected">Выбранные преподавателем</SelectItem>
-                <SelectItem value="all_versions">Все версии</SelectItem>
-                <SelectItem value="latest_per_student">Только последние</SelectItem>
+                <SelectItem value="selected">{t('plagiarism_runs_list.versions_selected')}</SelectItem>
+                <SelectItem value="all_versions">{t('plagiarism_runs_list.versions_all')}</SelectItem>
+                <SelectItem value="latest_per_student">{t('plagiarism_runs_list.versions_latest')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -169,7 +171,7 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
             onClick={onClose}
             data-testid="plagiarism-run-create-cancel"
           >
-            Отмена
+            {t('plagiarism_runs_list.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -179,7 +181,7 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
             {mutation.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Запустить
+            {t('plagiarism_runs_list.submit')}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -188,8 +190,9 @@ function StartRunModal({ assignmentId, opened, onClose }: RunModalProps) {
 }
 
 export function PlagiarismRunsListPage() {
+  const { t } = useTranslation();
   const { assignmentId = '' } = useParams<{ assignmentId: string }>();
-  useDocumentTitle('Проверки на плагиат');
+  useDocumentTitle(t('plagiarism_runs_list.title'));
   const [opened, setOpened] = useState(false);
   const [runToDelete, setRunToDelete] = useState<string | null>(null);
   const notify = useNotifications();
@@ -207,7 +210,7 @@ export function PlagiarismRunsListPage() {
   return (
     <Page width="wide">
       <PageHeader
-        title="Проверки на плагиат"
+        title={t('plagiarism_runs_list.title')}
         action={
           <>
             <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -218,7 +221,7 @@ export function PlagiarismRunsListPage() {
               onClick={() => setOpened(true)}
               data-testid="plagiarism-run-create-open"
             >
-              Запустить новую проверку
+              {t('plagiarism_runs_list.start_title')}
             </Button>
           </>
         }
@@ -228,9 +231,9 @@ export function PlagiarismRunsListPage() {
 
       {data && data.data.length === 0 && (
         <EmptyState
-          title="Проверок не было"
+          title={t('plagiarism_runs_list.empty')}
           action={
-            <Button onClick={() => setOpened(true)}>Запустить</Button>
+            <Button onClick={() => setOpened(true)}>{t('plagiarism_runs_list.empty_action')}</Button>
           }
         />
       )}
@@ -240,13 +243,13 @@ export function PlagiarismRunsListPage() {
           <Table data-testid="plagiarism-runs-table" className="min-w-[900px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Запущено</TableHead>
-                <TableHead>Завершено</TableHead>
-                <TableHead>Провайдер</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Submissions</TableHead>
-                <TableHead>Max similarity</TableHead>
-                <TableHead>Подозр-ных пар</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_started')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_finished')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_provider')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_status')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_submissions')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_max_similarity')}</TableHead>
+                <TableHead>{t('plagiarism_runs_list.col_pairs')}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -273,12 +276,12 @@ export function PlagiarismRunsListPage() {
                         to={`/plagiarism-runs/${r.id}`}
                         className="text-sm text-primary hover:underline"
                       >
-                        Открыть
+                        {t('plagiarism_runs_list.open')}
                       </Link>
                       <button
                         type="button"
                         onClick={() => setRunToDelete(r.id)}
-                        aria-label="Удалить проверку"
+                        aria-label={t('plagiarism_runs_list.delete_aria')}
                         data-testid={`plagiarism-run-row-${r.id}-delete`}
                         className="flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-destructive"
                       >
@@ -301,20 +304,20 @@ export function PlagiarismRunsListPage() {
 
       <ConfirmDialog
         opened={!!runToDelete}
-        title="Удалить проверку?"
-        message="Запуск пропадёт из списка. Историю pairs/clusters восстановить не получится."
-        confirmLabel="Удалить"
+        title={t('plagiarism_runs_list.delete_title')}
+        message={t('plagiarism_runs_list.delete_message')}
+        confirmLabel={t('plagiarism_runs_list.delete_confirm')}
         destructive
         loading={deleteRunMut.isPending}
         onConfirm={async () => {
           try {
             await deleteRunMut.mutateAsync();
-            notify.success('Проверка удалена');
+            notify.success(t('plagiarism_runs_list.delete_success'));
           } catch (e) {
             notify.error(
               (e as Problem)?.detail ??
                 (e as Problem)?.title ??
-                'Не удалось удалить проверку',
+                t('plagiarism_runs_list.delete_failed'),
             );
           } finally {
             setRunToDelete(null);

@@ -28,10 +28,6 @@ from integration_service.schemas.sheets import (
     GoogleSheetsLinkOut,
     GoogleSheetsLinkUpdate,
 )
-from integration_service.schemas.telegram import (
-    TelegramBindingOut,
-    TelegramBindingStartResponse,
-)
 from integration_service.schemas.webhooks import (
     WebhookEventOut,
 )
@@ -49,8 +45,6 @@ __all__ = [
     "ScheduleCreate",
     "ScheduleOut",
     "ScheduleUpdate",
-    "TelegramBindingOut",
-    "TelegramBindingStartResponse",
     "GoogleSheetsLinkCreate",
     "GoogleSheetsLinkOut",
     "GoogleSheetsLinkUpdate",

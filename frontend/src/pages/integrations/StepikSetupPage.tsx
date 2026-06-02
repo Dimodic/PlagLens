@@ -16,11 +16,13 @@ import {
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useMyCourses } from '@/hooks/api/useCourses';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import type { Problem } from '@/api/types';
 
 export default function StepikSetupPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Stepik');
   const myCoursesQ = useMyCourses();
 
@@ -43,7 +45,7 @@ export default function StepikSetupPage() {
     setProblem(null);
     if (!courseId) {
       setProblem({
-        title: 'Выберите курс',
+        title: t('stepik_setup.select_course'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -68,7 +70,7 @@ export default function StepikSetupPage() {
       }
       if (!target) {
         throw {
-          title: 'OAuth-приложение Stepik не настроено',
+          title: t('stepik_setup.oauth_not_configured'),
           status: 500,
           code: 'INTERNAL',
         } as Problem;
@@ -86,7 +88,7 @@ export default function StepikSetupPage() {
         to="/integrations"
         className="text-sm text-muted-foreground hover:text-foreground"
       >
-        ← Интеграции
+        ← {t('stepik_setup.back_to_integrations')}
       </Link>
       <PageHeader title="Stepik" />
 
@@ -94,10 +96,10 @@ export default function StepikSetupPage() {
         {problem && <ProblemAlert problem={problem} />}
 
         <div className="space-y-1.5">
-          <Label htmlFor="stepik-course">Курс</Label>
+          <Label htmlFor="stepik-course">{t('stepik_setup.course')}</Label>
           <Select value={courseId} onValueChange={setCourseId}>
             <SelectTrigger id="stepik-course" data-testid="stepik-course-select">
-              <SelectValue placeholder="Выберите курс" />
+              <SelectValue placeholder={t('stepik_setup.select_course')} />
             </SelectTrigger>
             <SelectContent>
               {courses.map((c) => (
@@ -116,7 +118,7 @@ export default function StepikSetupPage() {
             data-testid="stepik-submit"
           >
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Подключить
+            {t('stepik_setup.connect')}
           </Button>
         </div>
       </form>

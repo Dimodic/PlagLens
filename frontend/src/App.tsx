@@ -8,7 +8,6 @@ import { RouterProvider } from 'react-router-dom';
 import { ThemeProvider } from 'next-themes';
 import { AuthProvider } from '@/auth/AuthProvider';
 import { ErrorBoundary } from '@/components/common/ErrorBoundary';
-import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { router } from '@/routes';
 
@@ -47,7 +46,6 @@ export default function App() {
             </ErrorBoundary>
           </AuthProvider>
         </QueryClientProvider>
-        <Toaster position="top-right" richColors closeButton />
       </TooltipProvider>
     </ThemeProvider>
   );

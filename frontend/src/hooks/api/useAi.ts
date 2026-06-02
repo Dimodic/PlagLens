@@ -6,8 +6,6 @@ import {
   aiApi,
   type CurateAsFeedbackBody,
   type RegenerateBody,
-  type ProviderConfig,
-  type BudgetConfig,
 } from '@/api/endpoints/ai';
 import type { ListParams } from '@/api/pagination';
 
@@ -78,72 +76,44 @@ export function useAnalysis(id: string | undefined) {
 export function useAnalysesForAssignment(
   assignmentId: string | undefined,
   params: ListParams = {},
+  opts: { forcePoll?: boolean } = {},
 ) {
   return useQuery({
     queryKey: ['ai', 'analyses', 'assignment', assignmentId, params],
     queryFn: () => aiApi.listForAssignment(assignmentId!, params),
     enabled: !!assignmentId,
+    // Poll while a batch is still processing so the list fills in live
+    // (queued → running → done/error), then stop. ``forcePoll`` keeps the
+    // poll alive during the window right after a batch is triggered — the
+    // backend creates analyses one by one, so there can be moments with no
+    // queued/running row loaded yet while more are still being created;
+    // without this the list freezes mid-batch and only a manual reload
+    // shows the rest.
+    refetchInterval: (query) => {
+      const rows = query.state.data?.data ?? [];
+      const active = rows.some(
+        (a) => a.status === 'queued' || a.status === 'running',
+      );
+      return active || opts.forcePoll ? 2500 : false;
+    },
   });
 }
 
-export function usePromptVersions(params: ListParams = {}) {
-  return useQuery({
-    queryKey: ['ai', 'prompt-versions', params],
-    queryFn: () => aiApi.listPromptVersions(params),
-  });
-}
-
-export function usePromptVersion(id: string | undefined) {
-  return useQuery({
-    queryKey: ['ai', 'prompt-version', id],
-    queryFn: () => aiApi.getPromptVersion(id!),
-    enabled: !!id,
-  });
-}
-
-export function useProviders() {
-  return useQuery({
-    queryKey: ['ai', 'providers'],
-    queryFn: () => aiApi.listProviders(),
-  });
-}
-
-export function useTenantBudget(tenantId: string | undefined) {
-  return useQuery({
-    queryKey: ['ai', 'budget', 'tenant', tenantId],
-    queryFn: () => aiApi.getTenantBudget(tenantId!),
-    enabled: !!tenantId,
-  });
-}
-
-export function useCourseBudget(courseId: string | undefined) {
-  return useQuery({
-    queryKey: ['ai', 'budget', 'course', courseId],
-    queryFn: () => aiApi.getCourseBudget(courseId!),
-    enabled: !!courseId,
-  });
-}
-
-export function useTenantUsage(tenantId: string | undefined) {
-  return useQuery({
-    queryKey: ['ai', 'usage', 'tenant', tenantId],
-    queryFn: () => aiApi.getTenantUsage(tenantId!),
-    enabled: !!tenantId,
-  });
-}
-
-export function useCourseUsage(courseId: string | undefined) {
-  return useQuery({
-    queryKey: ['ai', 'usage', 'course', courseId],
-    queryFn: () => aiApi.getCourseUsage(courseId!),
-    enabled: !!courseId,
-  });
-}
-
-export function useCacheStats() {
-  return useQuery({
-    queryKey: ['ai', 'cache', 'stats'],
-    queryFn: () => aiApi.getCacheStats(),
+/** Run AI analysis for a batch of submissions of an assignment (staff). */
+export function useBatchAnalyze(assignmentId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { submission_ids: string[]; course_id?: string }) =>
+      aiApi.batchCreate(
+        assignmentId,
+        { scope: 'all', submission_ids: vars.submission_ids },
+        vars.course_id,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({
+        queryKey: ['ai', 'analyses', 'assignment', assignmentId],
+      });
+    },
   });
 }
 
@@ -225,104 +195,68 @@ export function useUnshare(analysisId: string) {
   });
 }
 
-export function useActivatePromptVersion() {
+// -------------------- Per-user provider connections --------------------
+
+const myProvidersKey = ['ai', 'me', 'providers'] as const;
+
+export function useMyAiProviders(enabled = true) {
+  return useQuery({
+    queryKey: myProvidersKey,
+    queryFn: () => aiApi.myProviders.list(),
+    enabled,
+  });
+}
+
+export function useCreateMyAiProvider() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => aiApi.activatePromptVersion(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'prompt-versions'] });
-    },
+    mutationFn: (body: {
+      provider: string;
+      model: string;
+      api_key: string;
+      base_url?: string;
+      activate?: boolean;
+      system_prompt?: string;
+    }) => aiApi.myProviders.create(body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: myProvidersKey }),
   });
 }
 
-export function useTestPromptVersion(id: string) {
-  return useMutation({
-    mutationFn: (vars: { code: string; language: string }) =>
-      aiApi.testPromptVersion(id, vars),
-  });
-}
-
-export function useTestProvider() {
-  return useMutation({
-    mutationFn: (id: string) => aiApi.testProvider(id),
-  });
-}
-
-export function useUpdateProvider() {
+export function useUpdateMyAiProvider() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (vars: { id: string; body: Partial<ProviderConfig> }) =>
-      aiApi.updateProvider(vars.id, vars.body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'providers'] });
-    },
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: string;
+      body: { model?: string; api_key?: string; system_prompt?: string };
+    }) => aiApi.myProviders.update(id, body),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: myProvidersKey }),
   });
 }
 
-export function useCreateProvider() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Parameters<typeof aiApi.createProvider>[0]) =>
-      aiApi.createProvider(body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'providers'] });
-    },
+export function useDefaultAiPrompt(enabled = true) {
+  return useQuery({
+    queryKey: ['ai', 'me', 'prompt-default'],
+    queryFn: () => aiApi.myProviders.defaultPrompt(),
+    enabled,
+    staleTime: 60 * 60 * 1000,
   });
 }
 
-export function useDeleteProvider() {
+export function useActivateMyAiProvider() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => aiApi.deleteProvider(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'providers'] });
-    },
+    mutationFn: (id: string) => aiApi.myProviders.activate(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: myProvidersKey }),
   });
 }
 
-export function useSetProviderDefault() {
+export function useDeleteMyAiProvider() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => aiApi.setProviderDefault(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'providers'] });
-    },
-  });
-}
-
-export function useUpdateTenantBudget(tenantId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<BudgetConfig>) => aiApi.updateTenantBudget(tenantId, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'budget', 'tenant', tenantId] });
-    },
-  });
-}
-
-export function useUpdateCourseBudget(courseId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: Partial<BudgetConfig>) => aiApi.updateCourseBudget(courseId, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'budget', 'course', courseId] });
-    },
-  });
-}
-
-export function usePurgeCache() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (vars:
-      | { kind: 'all' }
-      | { kind: 'prompt'; id: string }
-      | { kind: 'submission'; id: string }) => {
-      if (vars.kind === 'all') return aiApi.purgeCacheAll();
-      if (vars.kind === 'prompt') return aiApi.purgeCacheByPromptVersion(vars.id);
-      return aiApi.purgeCacheBySubmission(vars.id);
-    },
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['ai', 'cache'] });
-    },
+    mutationFn: (id: string) => aiApi.myProviders.remove(id),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: myProvidersKey }),
   });
 }

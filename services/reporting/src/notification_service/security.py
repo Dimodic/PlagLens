@@ -27,9 +27,6 @@ class Principal:
     def is_admin(self) -> bool:
         return self.global_role in ("admin",)
 
-    def is_super_admin(self) -> bool:
-        return self.global_role == "admin"
-
 
 def _decode_jwt(token: str) -> dict[str, Any]:
     settings = get_settings()
@@ -110,10 +107,4 @@ def get_principal(
 def require_admin(principal: Principal = Depends(get_principal)) -> Principal:
     if not principal.is_admin():
         raise Problem(403, "FORBIDDEN", "Admin role required")
-    return principal
-
-
-def require_super_admin(principal: Principal = Depends(get_principal)) -> Principal:
-    if not principal.is_super_admin():
-        raise Problem(403, "FORBIDDEN", "Super admin role required")
     return principal

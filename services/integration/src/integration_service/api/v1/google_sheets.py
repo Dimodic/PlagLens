@@ -40,7 +40,7 @@ router = APIRouter(tags=["google-sheets"])
 
 
 def _ensure_owner_or_co_owner(p: Principal, course_id: str) -> None:
-    if p.is_admin or p.is_super_admin:
+    if p.is_admin:
         return
     if p.course_role(course_id) in ("owner", "co_owner"):
         return
@@ -72,7 +72,7 @@ async def setup_google_sheets(
     one tenant-level Google sheets connection in Iteration 1 (per-teacher
     OAuth is Iteration 2).
     """
-    if not (p.is_admin or p.is_super_admin):
+    if not p.is_admin:
         ensure_role(p, "admin")
     sa_raw = (payload.get("sa_json") or "").strip()
     display_name = (payload.get("display_name") or "Google Sheets").strip()
@@ -160,7 +160,6 @@ async def setup_personal_google_sheets(
     """
     if not (
         p.is_admin
-        or p.is_super_admin
         or getattr(p, "global_role", None) == "teacher"
     ):
         ensure_role(p, "teacher")
@@ -352,7 +351,7 @@ async def get_active_google_sa(
 async def list_spreadsheets(
     p: Principal = Depends(principal_dep),
 ) -> dict[str, Any]:
-    if not p.is_admin and not p.is_super_admin:
+    if not p.is_admin:
         ensure_role(p, "admin")
     adapter = GoogleSheetsAdapter()
     items = await adapter.list_spreadsheets()
@@ -397,7 +396,6 @@ async def get_link(
 ) -> GoogleSheetsLinkOut:
     _can_read = (
         p.is_admin
-        or p.is_super_admin
         or p.course_role(course_id) in ("owner", "co_owner", "assistant")
         # No course_roles in the JWT yet — trust the global staff role.
         or (not p.course_roles and p.global_role in ("teacher", "assistant"))

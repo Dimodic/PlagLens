@@ -13,6 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTranslation } from '@/i18n';
 import type { UserSession } from '@/api/endpoints/users';
 
 interface Props {
@@ -29,9 +30,12 @@ export function SessionsTable({
   loadingId,
   showCurrent = true,
 }: Props) {
+  const { t } = useTranslation();
   if (sessions.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">Активных сессий нет.</p>
+      <p className="text-sm text-muted-foreground">
+        {t('sessions_table.empty')}
+      </p>
     );
   }
 
@@ -42,8 +46,8 @@ export function SessionsTable({
           <TableRow>
             <TableHead>IP</TableHead>
             <TableHead>User-Agent</TableHead>
-            <TableHead>Создана</TableHead>
-            <TableHead>Активность</TableHead>
+            <TableHead>{t('sessions_table.col_created')}</TableHead>
+            <TableHead>{t('sessions_table.col_activity')}</TableHead>
             <TableHead />
           </TableRow>
         </TableHeader>
@@ -55,7 +59,7 @@ export function SessionsTable({
                   <span className="font-mono text-xs">{s.ip}</span>
                   {showCurrent && s.current && (
                     <Badge variant="secondary" className="font-normal">
-                      текущая
+                      {t('sessions_table.current')}
                     </Badge>
                   )}
                 </div>
@@ -91,7 +95,7 @@ export function SessionsTable({
                     ) : (
                       <LogOut className="mr-2 h-3.5 w-3.5" />
                     )}
-                    Завершить
+                    {t('sessions_table.revoke')}
                   </Button>
                 )}
               </TableCell>

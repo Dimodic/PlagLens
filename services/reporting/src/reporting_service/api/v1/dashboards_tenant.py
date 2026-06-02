@@ -65,17 +65,6 @@ async def active_users(
     return await _service(request, session).tenant_active_users(tenant_id)
 
 
-@router.get("/integrations-health")
-async def integrations_health(
-    tenant_id: str,
-    request: Request,
-    p: Principal = Depends(require_global("admin")),
-    session: AsyncSession = Depends(get_session),
-):
-    _ensure_admin(p, tenant_id)
-    return await _service(request, session).tenant_integrations_health(tenant_id)
-
-
 @router.get("/ai-usage")
 async def ai_usage(
     tenant_id: str,

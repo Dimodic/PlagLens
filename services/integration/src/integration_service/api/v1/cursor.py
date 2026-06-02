@@ -15,7 +15,7 @@ router = APIRouter(prefix="/integrations", tags=["cursor"])
 
 
 def _admin_or_owner(p: Principal, course_id: str | None) -> None:
-    if p.is_admin or p.is_super_admin:
+    if p.is_admin:
         return
     if course_id and p.course_role(course_id) == "owner":
         return
@@ -59,7 +59,7 @@ async def set_cursor(
     p: Principal = Depends(principal_dep),
     session: AsyncSession = Depends(session_dep),
 ) -> dict[str, Any]:
-    if not p.is_admin and not p.is_super_admin:
+    if not p.is_admin:
         raise ProblemException(403, "FORBIDDEN", "Forbidden", "admin required")
     repo = IntegrationConfigRepo(session)
     cfg = await repo.get(config_id, tenant_id=p.tenant_id)

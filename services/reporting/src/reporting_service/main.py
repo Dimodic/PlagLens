@@ -19,7 +19,7 @@ from .exports.formats.google_sheets import GoogleApiClient, InMemoryGoogleSheets
 from .logging import setup_logging
 from .read_models.handlers import build_handler_registry
 from .scheduling.scheduler import ReportingScheduler
-from .services.audit_proxy import HttpAuditProxy, InMemoryAuditProxy
+from .services.audit_proxy import InMemoryAuditProxy, InProcessAuditProxy
 from .services.export_service import ExportService
 from .storage import InMemoryStorage, MinioStorage
 
@@ -112,8 +112,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             ),
         )
         await scheduler.start()
+        # audit_service is co-hosted in this same (reporting) deployable, so
+        # query it in-process instead of a loopback HTTP hop. "memory" (tests)
+        # still uses the in-memory fake. HttpAuditProxy remains in audit_proxy.py
+        # as the seam if audit is ever re-split into its own deployable.
         audit_proxy = (
-            HttpAuditProxy(settings.audit_service_base_url)
+            InProcessAuditProxy()
             if settings.audit_service_base_url and settings.audit_service_base_url != "memory"
             else InMemoryAuditProxy()
         )

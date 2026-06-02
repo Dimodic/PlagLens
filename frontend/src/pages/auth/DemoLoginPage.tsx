@@ -17,6 +17,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-react';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -26,11 +27,14 @@ import { BrandMark } from '@/components/shell/BrandMark';
 interface DemoAccount {
   email: string;
   password: string;
-  label: string;
+  /** i18n key for the role's display name (resolved at render). */
+  labelKey: string;
   role: string;
-  roleLabel: string;
+  /** i18n key for the short role tag (resolved at render). */
+  roleLabelKey: string;
   testId: string;
-  description: string;
+  /** i18n key for the one-line account description (resolved at render). */
+  descriptionKey: string;
 }
 
 // Demo buttons map to the real seed accounts of the КНАД C++ 24/25 course
@@ -40,38 +44,38 @@ const ACCOUNTS: DemoAccount[] = [
   {
     email: 'admin@plaglens.local',
     password: 'changeme',
-    label: 'Администратор',
+    labelKey: 'demo_login.role_admin_label',
     role: 'admin',
-    roleLabel: 'админ',
+    roleLabelKey: 'demo_login.role_admin_tag',
     testId: 'admin',
-    description: '«Бог» учреждения — назначает преподавателей, общий ключ LLM',
+    descriptionKey: 'demo_login.role_admin_desc',
   },
   {
     email: 'teacher@plaglens.local',
     password: 'changeme',
-    label: 'Преподаватель',
+    labelKey: 'demo_login.role_teacher_label',
     role: 'teacher',
-    roleLabel: 'преподаватель',
+    roleLabelKey: 'demo_login.role_teacher_tag',
     testId: 'teacher',
-    description: 'Горденко М.К. — лектор курса C++ КНАД 24/25',
+    descriptionKey: 'demo_login.role_teacher_desc',
   },
   {
     email: 'assistant@plaglens.local',
     password: 'changeme',
-    label: 'Ассистент',
+    labelKey: 'demo_login.role_assistant_label',
     role: 'teacher',
-    roleLabel: 'ассистент',
+    roleLabelKey: 'demo_login.role_assistant_tag',
     testId: 'assistant',
-    description: 'Иванова Анна — ассистент активного курса C++',
+    descriptionKey: 'demo_login.role_assistant_desc',
   },
   {
     email: 'student@plaglens.local',
     password: 'changeme',
-    label: 'Студент',
+    labelKey: 'demo_login.role_student_label',
     role: 'student',
-    roleLabel: 'студент',
+    roleLabelKey: 'demo_login.role_student_tag',
     testId: 'student1',
-    description: 'Иван Петров — учится на C++ КНАД 24/25',
+    descriptionKey: 'demo_login.role_student_desc',
   },
 ];
 
@@ -83,7 +87,8 @@ function initials(name: string): string {
 }
 
 export function DemoLoginPage() {
-  useDocumentTitle('Демо-режим');
+  const { t } = useTranslation();
+  useDocumentTitle(t('demo_login.document_title'));
 
   const navigate = useNavigate();
   const { login } = useAuth();
@@ -128,16 +133,16 @@ export function DemoLoginPage() {
         <header className="flex flex-col items-center gap-3 text-center">
           <BrandMark tile className="h-12 w-12 rounded-xl" title="PlagLens" />
           <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-            Демо-режим
+            {t('demo_login.heading')}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Один клик — мгновенный вход под выбранной ролью
+            {t('demo_login.subtitle')}
           </p>
         </header>
 
         {problem && (
           <Alert variant="destructive" data-testid="problem-alert">
-            <AlertTitle>{problem.title || 'Не удалось войти'}</AlertTitle>
+            <AlertTitle>{problem.title || t('demo_login.error_title')}</AlertTitle>
             {problem.detail && (
               <AlertDescription>{problem.detail}</AlertDescription>
             )}
@@ -151,6 +156,7 @@ export function DemoLoginPage() {
             const busy = busyEmail === a.email;
             const otherBusy = !!busyEmail && !busy;
             const showMfaHint = mfaForEmail === a.email;
+            const label = t(a.labelKey);
             return (
               <li key={a.email} data-testid={`demo-card-${a.testId}`}>
                 <button
@@ -168,20 +174,20 @@ export function DemoLoginPage() {
                 >
                   <Avatar className="h-10 w-10 flex-none">
                     <AvatarFallback className="text-sm">
-                      {initials(a.label)}
+                      {initials(label)}
                     </AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-baseline gap-2">
                       <span className="text-sm font-medium text-foreground">
-                        {a.label}
+                        {label}
                       </span>
                       <span className="text-xs text-muted-foreground">
-                        {a.roleLabel}
+                        {t(a.roleLabelKey)}
                       </span>
                     </div>
                     <p className="mt-0.5 text-xs text-muted-foreground truncate">
-                      {a.description}
+                      {t(a.descriptionKey)}
                     </p>
                     {showMfaHint && (
                       <p
@@ -189,13 +195,12 @@ export function DemoLoginPage() {
                         data-testid={`demo-mfa-hint-${a.testId}`}
                         className="mt-1.5 text-xs text-sev-mid"
                       >
-                        У этого аккаунта включена двухфакторная
-                        аутентификация. Войдите через{' '}
+                        {t('demo_login.mfa_hint_prefix')}{' '}
                         <Link
                           to="/login"
                           className="text-foreground underline"
                         >
-                          обычный вход
+                          {t('demo_login.mfa_hint_link')}
                         </Link>
                         .
                       </p>
@@ -217,8 +222,7 @@ export function DemoLoginPage() {
 
         <div className="space-y-4 text-center">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            Эти аккаунты существуют только в seed-данных и не должны
-            попадать в продакшн.
+            {t('demo_login.seed_disclaimer')}
           </p>
           <p className="text-xs text-muted-foreground">
             <Link
@@ -227,7 +231,7 @@ export function DemoLoginPage() {
               className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors"
             >
               <ArrowLeft className="h-3 w-3" />
-              Обычный вход
+              {t('demo_login.back_to_login')}
             </Link>
           </p>
         </div>

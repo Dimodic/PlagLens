@@ -118,10 +118,10 @@ def auth_headers(rsa_keypair) -> dict[str, str]:
 
 
 @pytest.fixture
-def super_admin_headers(rsa_keypair) -> dict[str, str]:
+def admin_headers(rsa_keypair) -> dict[str, str]:
     return {
         "Authorization": "Bearer "
-        + make_token(rsa_keypair, sub="usr_admin", role="super_admin")
+        + make_token(rsa_keypair, sub="usr_admin", role="admin")
     }
 
 

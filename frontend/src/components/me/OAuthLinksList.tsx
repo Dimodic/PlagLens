@@ -9,6 +9,7 @@
  */
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from '@/i18n';
 import type { OAuthProvider } from '@/api/types';
 
 // Providers a regular user can sign in with. Stepik is intentionally
@@ -24,7 +25,7 @@ const ALL_PROVIDERS: OAuthProvider[] = [
 
 const LABELS: Record<OAuthProvider, string> = {
   google: 'Google',
-  yandex: 'Яндекс',
+  yandex: 'Yandex',
   stepik: 'Stepik',
   github: 'GitHub',
   telegram: 'Telegram',
@@ -93,8 +94,9 @@ export function OAuthLinksList({
   onUnlink,
   loadingProvider,
 }: Props) {
+  const { t } = useTranslation();
   return (
-    <ul className="divide-y divide-border/40" data-testid="oauth-list">
+    <ul className="space-y-0.5" data-testid="oauth-list">
       {ALL_PROVIDERS.map((p) => {
         const isLinked = linked.includes(p);
         const isLoading = loadingProvider === p;
@@ -105,27 +107,21 @@ export function OAuthLinksList({
             data-testid={`oauth-row-${p}`}
           >
             <ProviderGlyph provider={p} />
+            {/* No «привязан / не привязан» pill — the link / unlink button
+              * below already states the status. */}
             <span className="flex-1 text-sm text-foreground">{LABELS[p]}</span>
-            <span
-              className={
-                'text-xs ' +
-                (isLinked ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground/70')
-              }
-            >
-              {isLinked ? 'привязан' : 'не привязан'}
-            </span>
             {isLinked ? (
               onUnlink && (
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 text-destructive hover:text-destructive"
+                  className="h-7 px-2 text-muted-foreground hover:text-destructive"
                   onClick={() => onUnlink(p)}
                   disabled={isLoading}
                   data-testid={`oauth-unlink-${p}`}
                 >
                   {isLoading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                  Отвязать
+                  {t('oauth_links_list.unlink')}
                 </Button>
               )
             ) : (
@@ -139,7 +135,7 @@ export function OAuthLinksList({
                   data-testid={`oauth-link-${p}`}
                 >
                   {isLoading && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
-                  Привязать
+                  {t('oauth_links_list.link')}
                 </Button>
               )
             )}

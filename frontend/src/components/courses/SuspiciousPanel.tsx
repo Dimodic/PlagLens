@@ -34,6 +34,7 @@ import {
 } from '@/hooks/api/usePlagiarism';
 import { useUsers } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
+import { t as translate, useTranslation } from '@/i18n';
 import type {
   FlagSeverity,
   SuspiciousSubmission,
@@ -48,10 +49,10 @@ const SEVERITY_DOT: Record<FlagSeverity, string> = {
   high: 'bg-sev-high',
 };
 
-const SEVERITY_RU: Record<FlagSeverity, string> = {
-  low: 'низкая',
-  medium: 'средняя',
-  high: 'высокая',
+const SEVERITY_KEY: Record<FlagSeverity, string> = {
+  low: 'suspicious.severity_low',
+  medium: 'suspicious.severity_medium',
+  high: 'suspicious.severity_high',
 };
 
 type DismissedFilter = 'active' | 'dismissed' | 'all';
@@ -62,6 +63,7 @@ interface SuspiciousPanelProps {
 }
 
 export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const [severity, setSeverity] = useState<FlagSeverity | ''>('');
   const [dismissed, setDismissed] = useState<DismissedFilter>('active');
@@ -89,10 +91,10 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
         flagId,
         reason: 'manual review',
       });
-      notify.success('Помечено как «не подозрительно»');
+      notify.success(t('suspicious.notify_dismissed'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось снять флаг');
+      notify.error(p?.detail ?? p?.title ?? t('suspicious.notify_dismiss_error'));
     }
   };
 
@@ -109,10 +111,10 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
         flagId,
         severity: next,
       });
-      notify.success('Важность обновлена');
+      notify.success(t('suspicious.notify_severity_updated'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось обновить');
+      notify.error(p?.detail ?? p?.title ?? t('suspicious.notify_update_error'));
     }
   };
 
@@ -124,17 +126,21 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
           asks: "кто у кого чаще списывает". */}
       {rows.length > 0 && <TopPairs rows={rows} userById={userById} />}
 
-      {/* Full flag list — sits in its own visual zone, separated from
-          the top-pairs leaderboard above by a thin rule + breathing
-          space so the two don't visually merge into one giant list. */}
-      <section className="space-y-4 border-t border-border/60 pt-6">
+      {/* Full flag list. The separating rule only makes sense when there's a
+          leaderboard above it — when the panel is empty the rule would stack
+          right under the tab divider and read as a stray second line. */}
+      <section
+        className={`space-y-4 ${
+          rows.length > 0 ? 'border-t border-border/60 pt-6' : ''
+        }`}
+      >
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-base font-semibold text-foreground">
-            Все флаги
+            {t('suspicious.all_flags')}
           </h2>
           {!isLoading && rows.length > 0 && (
             <span className="text-xs tabular-nums text-muted-foreground">
-              {rows.length} {pluralFlag(rows.length)}
+              {t(pluralFlagKey(rows.length), { count: rows.length })}
             </span>
           )}
         </div>
@@ -142,25 +148,25 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
         {/* Filter strip */}
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <FilterGroup
-            label="Важность"
+            label={t('suspicious.filter_severity')}
             value={severity || 'all'}
             onChange={(v) => setSeverity((v === 'all' ? '' : v) as FlagSeverity | '')}
             options={[
-              { value: 'all', label: 'все' },
-              { value: 'low', label: 'низкая' },
-              { value: 'medium', label: 'средняя' },
-              { value: 'high', label: 'высокая' },
+              { value: 'all', label: t('suspicious.filter_all') },
+              { value: 'low', label: t('suspicious.severity_low') },
+              { value: 'medium', label: t('suspicious.severity_medium') },
+              { value: 'high', label: t('suspicious.severity_high') },
             ]}
             testId="suspicious-severity-filter"
           />
           <FilterGroup
-            label="Статус"
+            label={t('suspicious.filter_status')}
             value={dismissed}
             onChange={(v) => setDismissed(v as DismissedFilter)}
             options={[
-              { value: 'active', label: 'активные' },
-              { value: 'dismissed', label: 'снятые' },
-              { value: 'all', label: 'все' },
+              { value: 'active', label: t('suspicious.status_active') },
+              { value: 'dismissed', label: t('suspicious.status_dismissed') },
+              { value: 'all', label: t('suspicious.filter_all') },
             ]}
             testId="suspicious-dismissed-filter"
           />
@@ -176,8 +182,8 @@ export function SuspiciousPanel({ courseId }: SuspiciousPanelProps) {
           <EmptyState
             title={
               dismissed === 'dismissed'
-                ? 'Нет снятых флагов'
-                : 'Нет подозрительных посылок'
+                ? t('suspicious.empty_dismissed')
+                : t('suspicious.empty_active')
             }
           />
         ) : (
@@ -234,6 +240,7 @@ function Row({
   bumpPending,
   dismissPending,
 }: RowProps) {
+  const { t } = useTranslation();
   // Show up to 2 peer names; if more, append "+N".
   const visiblePeers = peerNames.slice(0, 2);
   const extraPeers = Math.max(peerNames.length - visiblePeers.length, 0);
@@ -243,12 +250,14 @@ function Row({
       className="group flex items-center gap-3 py-3"
     >
       <span
-        title={SEVERITY_RU[s.severity]}
+        title={t(SEVERITY_KEY[s.severity])}
         className={cn(
           'h-2 w-2 flex-none rounded-full',
           SEVERITY_DOT[s.severity],
         )}
-        aria-label={`важность ${SEVERITY_RU[s.severity]}`}
+        aria-label={t('suspicious.severity_aria', {
+          level: t(SEVERITY_KEY[s.severity]),
+        })}
         data-testid={`suspicious-row-${s.flag_id}-severity`}
       />
 
@@ -274,7 +283,9 @@ function Row({
           {dayjs(s.created_at).format('D MMM')}
         </span>
         {s.cleared_at && (
-          <span className="ml-1 text-muted-foreground italic">снято</span>
+          <span className="ml-1 text-muted-foreground italic">
+            {t('suspicious.cleared')}
+          </span>
         )}
       </div>
 
@@ -293,8 +304,8 @@ function Row({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          aria-label="Повысить важность"
-          title="Повысить важность"
+          aria-label={t('suspicious.bump')}
+          title={t('suspicious.bump')}
           disabled={s.severity === 'high' || bumpPending}
           onClick={onBump}
           data-testid={`suspicious-row-${s.flag_id}-bump`}
@@ -306,8 +317,8 @@ function Row({
             variant="ghost"
             size="icon"
             className="h-8 w-8 text-emerald-600 hover:text-emerald-700"
-            aria-label="Снять подозрение"
-            title="Снять подозрение"
+            aria-label={t('suspicious.dismiss')}
+            title={t('suspicious.dismiss')}
             disabled={dismissPending}
             onClick={onDismiss}
             data-testid={`suspicious-row-${s.flag_id}-dismiss`}
@@ -324,8 +335,8 @@ function Row({
           variant="ghost"
           size="icon"
           className="h-8 w-8"
-          aria-label="Открыть посылку"
-          title="Открыть посылку"
+          aria-label={t('suspicious.open_submission')}
+          title={t('suspicious.open_submission')}
         >
           <Link to={`/submissions/${s.submission_id}`}>
             <ExternalLink className="h-4 w-4" />
@@ -363,6 +374,7 @@ interface PairStat {
 }
 
 function TopPairs({ rows, userById }: TopPairsProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const stats = useMemo(
     () => buildPairStats(rows, userById),
@@ -382,10 +394,10 @@ function TopPairs({ rows, userById }: TopPairsProps) {
           continuous list. */}
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="text-base font-semibold text-foreground">
-          Повторяющиеся пары
+          {t('suspicious.repeat_pairs')}
         </h2>
         <span className="text-xs text-muted-foreground tabular-nums">
-          {totalPairs} {pluralPair(totalPairs)}
+          {t(pluralPairKey(totalPairs), { count: totalPairs })}
         </span>
       </div>
       <ol className="flex flex-col divide-y divide-border/60">
@@ -494,13 +506,13 @@ function buildPairStats(
     });
 }
 
-function pluralPair(n: number): string {
+function pluralPairKey(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'пар';
-  if (mod10 === 1) return 'пара';
-  if (mod10 >= 2 && mod10 <= 4) return 'пары';
-  return 'пар';
+  if (mod100 >= 11 && mod100 <= 14) return 'suspicious.pairs_many';
+  if (mod10 === 1) return 'suspicious.pairs_one';
+  if (mod10 >= 2 && mod10 <= 4) return 'suspicious.pairs_few';
+  return 'suspicious.pairs_many';
 }
 
 /* ----------------------------------------------------------------- */
@@ -544,16 +556,16 @@ function resolvePeers(
 
 function shortSubLabel(submissionId: string): string {
   const tail = submissionId.replace(/^sub_/, '').slice(-4);
-  return `Студент …${tail}`;
+  return translate('suspicious.student_fallback', { tail });
 }
 
-function pluralFlag(n: number): string {
+function pluralFlagKey(n: number): string {
   const mod10 = n % 10;
   const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return 'флагов';
-  if (mod10 === 1) return 'флаг';
-  if (mod10 >= 2 && mod10 <= 4) return 'флага';
-  return 'флагов';
+  if (mod100 >= 11 && mod100 <= 14) return 'suspicious.flags_many';
+  if (mod10 === 1) return 'suspicious.flags_one';
+  if (mod10 >= 2 && mod10 <= 4) return 'suspicious.flags_few';
+  return 'suspicious.flags_many';
 }
 
 /* ----------------------------------------------------------------- */

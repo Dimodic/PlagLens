@@ -199,6 +199,9 @@ export interface SubmissionFlag {
 // -------------------- Inputs --------------------
 
 export interface SubmissionListFilters extends ListParams {
+  /** Free-text search: author (ФИО/логин), ДЗ/задание title, verdict,
+   *  status, language. Server-side, respects course visibility. */
+  q?: string;
   author_id?: string;
   status?: SubmissionStatus;
   late?: boolean;
@@ -249,6 +252,7 @@ function appendFilters(
   base: Record<string, string | number>,
   f: SubmissionListFilters,
 ): Record<string, string | number> {
+  if (f.q && f.q.trim()) base.q = f.q.trim();
   if (f.author_id) base.author_id = f.author_id;
   if (f.assignment_id) base.assignment_id = f.assignment_id;
   if (f.status) base.status = f.status;
@@ -362,6 +366,16 @@ export const submissionsApi = {
         signal,
       })
       .then((r) => (typeof r.data === 'string' ? r.data : String(r.data ?? ''))),
+
+  // Binary-safe variant of /content for non-text files (PDF / scans):
+  // fetched as a Blob so the text decoder doesn't mangle it.
+  getFileBlob: (id: string, file_id: string, signal?: AbortSignal) =>
+    api
+      .get<Blob>(`/submissions/${id}/files/${file_id}/content`, {
+        responseType: 'blob',
+        signal,
+      })
+      .then((r) => r.data),
 
   // ---- write ----
   upload: (assignment_id: string, formData: FormData) =>

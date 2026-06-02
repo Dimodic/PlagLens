@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import dayjs from 'dayjs';
+import { shortId } from '@/utils/formatters';
 import {
   Ban,
   Key,
@@ -44,10 +45,11 @@ import {
 } from '@/components/ui/table';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { PageSkeleton } from '@/components/common/Skeleton';
 import { SessionsTable } from '@/components/me/SessionsTable';
 import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useAuditByActor } from '@/hooks/api/useAudit';
 import {
@@ -64,19 +66,13 @@ import {
   useUserOAuthIdentities,
   useUserSessions,
 } from '@/hooks/api/useUsers';
-import { roleLabel } from '@/lib/roles';
+import { RoleBadge } from '@/components/common/RoleBadge';
 import type { GlobalRole, Problem } from '@/api/types';
 
-const ROLE_LABEL_RU: Record<GlobalRole, string> = {
-  admin: 'Админ',
-  teacher: 'Преподаватель',
-  assistant: 'Ассистент',
-  student: 'Студент',
-};
-
 export function UserDetailPage() {
+  const { t } = useTranslation();
   const { id } = useParams<{ id: string }>();
-  useDocumentTitle('Пользователь');
+  useDocumentTitle(t('user_detail.doc_title'));
   const notify = useNotifications();
   const userQ = useUser(id);
   const sessionsQ = useUserSessions(id);
@@ -106,11 +102,9 @@ export function UserDetailPage() {
   }, [userQ.data]);
 
   if (userQ.isLoading && !userQ.data) {
-    return (
-      <div className="space-y-6">
-        <SkeletonList rows={5} rowHeight={48} />
-      </div>
-    );
+    // Mirror the loaded layout: regular-width page, title + meta row, the
+    // 7-tab strip, then a few rows echoing the default Профиль form fields.
+    return <PageSkeleton width="regular" rows={3} />;
   }
   if (userQ.error) {
     return <ProblemAlert problem={userQ.error as unknown as Problem} />;
@@ -127,68 +121,68 @@ export function UserDetailPage() {
         display_name: name,
         global_role: role,
       });
-      notify.success('Сохранено');
+      notify.success(t('user_detail.notify_saved'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось');
+      notify.error(p?.detail ?? p?.title ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleRevokeKey = async (keyId: string) => {
     try {
       await revokeKey.mutateAsync(keyId);
-      notify.success('Ключ отозван');
+      notify.success(t('user_detail.notify_key_revoked'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось');
+      notify.error(p?.detail ?? p?.title ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleDisable = async () => {
     try {
       await disable.mutateAsync(u.id);
-      notify.success('Пользователь заблокирован');
+      notify.success(t('user_detail.notify_disabled'));
       setConfirmDisable(false);
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleEnable = async () => {
     try {
       await enable.mutateAsync(u.id);
-      notify.success('Разблокирован');
+      notify.success(t('user_detail.notify_enabled'));
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleAnonymize = async () => {
     try {
       await anonymize.mutateAsync(u.id);
-      notify.success('Анонимизирован');
+      notify.success(t('user_detail.notify_anonymized'));
       setConfirmAnonymize(false);
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleResetPassword = async () => {
     try {
       await resetPassword.mutateAsync(u.id);
-      notify.success('Ссылка для сброса отправлена');
+      notify.success(t('user_detail.notify_reset_sent'));
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('user_detail.notify_failed'));
     }
   };
 
   const handleForceLogout = async () => {
     try {
       await forceLogout.mutateAsync(u.id);
-      notify.success('Сессии завершены');
+      notify.success(t('user_detail.notify_sessions_ended'));
       setConfirmForceLogout(false);
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('user_detail.notify_failed'));
     }
   };
 
@@ -197,33 +191,33 @@ export function UserDetailPage() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{u.display_name}</h1>
         <div className="mt-2 flex items-center gap-2">
-          <StatusPill tone="neutral">{roleLabel(u.global_role)}</StatusPill>
+          <RoleBadge role={u.global_role} />
           <StatusPill tone={u.status === 'active' ? 'success' : 'neutral'}>
-            {u.status === 'active' ? 'активен' : 'отключён'}
+            {u.status === 'active' ? t('user_detail.status_active') : t('user_detail.status_disabled')}
           </StatusPill>
-          <span className="font-mono text-xs text-muted-foreground">{u.id}</span>
+          <span className="font-mono text-xs text-muted-foreground">ID: {shortId(u.id)}</span>
         </div>
       </div>
 
       <Tabs defaultValue="profile">
         <TabsList>
-          <TabsTrigger value="profile" data-testid="user-tab-profile">Профиль</TabsTrigger>
-          <TabsTrigger value="bindings" data-testid="user-tab-bindings">Привязки</TabsTrigger>
+          <TabsTrigger value="profile" data-testid="user-tab-profile">{t('user_detail.tab_profile')}</TabsTrigger>
+          <TabsTrigger value="bindings" data-testid="user-tab-bindings">{t('user_detail.tab_bindings')}</TabsTrigger>
           <TabsTrigger value="oauth" data-testid="user-tab-oauth">OAuth</TabsTrigger>
-          <TabsTrigger value="sessions" data-testid="user-tab-sessions">Сессии</TabsTrigger>
-          <TabsTrigger value="api-keys" data-testid="user-tab-api-keys">API-ключи</TabsTrigger>
-          <TabsTrigger value="audit" data-testid="user-tab-audit">Аудит</TabsTrigger>
-          <TabsTrigger value="actions" data-testid="user-tab-actions">Действия</TabsTrigger>
+          <TabsTrigger value="sessions" data-testid="user-tab-sessions">{t('user_detail.tab_sessions')}</TabsTrigger>
+          <TabsTrigger value="api-keys" data-testid="user-tab-api-keys">{t('user_detail.tab_api_keys')}</TabsTrigger>
+          <TabsTrigger value="audit" data-testid="user-tab-audit">{t('user_detail.tab_audit')}</TabsTrigger>
+          <TabsTrigger value="actions" data-testid="user-tab-actions">{t('user_detail.tab_actions')}</TabsTrigger>
         </TabsList>
 
         {/* ===== Профиль ===== */}
         <TabsContent value="profile" className="space-y-4 pt-6">
           <div className="space-y-1.5">
-            <Label htmlFor="user-detail-email">Email</Label>
+            <Label htmlFor="user-detail-email">{t('user_detail.field_email')}</Label>
             <Input id="user-detail-email" value={u.email} disabled />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="user-detail-name">Имя</Label>
+            <Label htmlFor="user-detail-name">{t('user_detail.field_name')}</Label>
             <Input
               id="user-detail-name"
               value={name}
@@ -231,7 +225,7 @@ export function UserDetailPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="user-detail-role">Роль</Label>
+            <Label htmlFor="user-detail-role">{t('user_detail.field_role')}</Label>
             <Select
               value={role}
               onValueChange={(v) => setRole((v as GlobalRole) ?? 'student')}
@@ -240,10 +234,10 @@ export function UserDetailPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="student">{ROLE_LABEL_RU.student}</SelectItem>
-                <SelectItem value="assistant">{ROLE_LABEL_RU.assistant}</SelectItem>
-                <SelectItem value="teacher">{ROLE_LABEL_RU.teacher}</SelectItem>
-                <SelectItem value="admin">{ROLE_LABEL_RU.admin}</SelectItem>
+                <SelectItem value="student">{t('user_detail.role_student')}</SelectItem>
+                <SelectItem value="assistant">{t('user_detail.role_assistant')}</SelectItem>
+                <SelectItem value="teacher">{t('user_detail.role_teacher')}</SelectItem>
+                <SelectItem value="admin">{t('user_detail.role_admin')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -254,7 +248,7 @@ export function UserDetailPage() {
               data-testid="user-detail-save"
             >
               {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Сохранить
+              {t('common.save')}
             </Button>
           </div>
         </TabsContent>
@@ -286,7 +280,7 @@ export function UserDetailPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="Привязок к внешним системам нет" />
+            <EmptyState title={t('user_detail.bindings_empty')} />
           )}
         </TabsContent>
 
@@ -312,7 +306,7 @@ export function UserDetailPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="OAuth-провайдеры не привязаны" />
+            <EmptyState title={t('user_detail.oauth_empty')} />
           )}
         </TabsContent>
 
@@ -337,10 +331,10 @@ export function UserDetailPage() {
             <Table data-testid="user-api-keys-table">
               <TableHeader>
                 <TableRow className="border-y">
-                  <TableHead>Имя</TableHead>
-                  <TableHead>Префикс</TableHead>
-                  <TableHead>Последнее использование</TableHead>
-                  <TableHead>Истекает</TableHead>
+                  <TableHead>{t('user_detail.col_name')}</TableHead>
+                  <TableHead>{t('user_detail.col_prefix')}</TableHead>
+                  <TableHead>{t('user_detail.col_last_used')}</TableHead>
+                  <TableHead>{t('user_detail.col_expires')}</TableHead>
                   <TableHead className="w-14" />
                 </TableRow>
               </TableHeader>
@@ -353,7 +347,7 @@ export function UserDetailPage() {
                         <div className="flex flex-col gap-1">
                           <span className="text-sm font-medium">{k.name}</span>
                           {revoked && (
-                            <StatusPill tone="neutral">отозван</StatusPill>
+                            <StatusPill tone="neutral">{t('user_detail.key_revoked')}</StatusPill>
                           )}
                         </div>
                       </TableCell>
@@ -373,7 +367,7 @@ export function UserDetailPage() {
                         <span className="text-xs text-muted-foreground">
                           {k.expires_at
                             ? dayjs(k.expires_at).format('DD.MM.YYYY')
-                            : 'без срока'}
+                            : t('user_detail.no_expiry')}
                         </span>
                       </TableCell>
                       <TableCell>
@@ -383,7 +377,7 @@ export function UserDetailPage() {
                             size="icon"
                             onClick={() => handleRevokeKey(k.id)}
                             disabled={revokeKey.isPending}
-                            aria-label="Отозвать ключ"
+                            aria-label={t('user_detail.revoke_key_aria')}
                             data-testid={`user-api-key-revoke-${k.id}`}
                             className="text-destructive hover:text-destructive"
                           >
@@ -401,7 +395,7 @@ export function UserDetailPage() {
               </TableBody>
             </Table>
           ) : (
-            <EmptyState title="У пользователя нет API-ключей" />
+            <EmptyState title={t('user_detail.api_keys_empty')} />
           )}
         </TabsContent>
 
@@ -409,11 +403,11 @@ export function UserDetailPage() {
         <TabsContent value="audit" className="space-y-4 pt-6">
           <div className="flex items-baseline justify-between gap-3">
             <p className="text-sm text-muted-foreground">
-              Последние 50 действий, инициированных пользователем.
+              {t('user_detail.audit_caption')}
             </p>
             {auditQ.data && auditQ.data.data.length > 0 && (
               <span className="text-xs text-muted-foreground tabular-nums">
-                {auditQ.data.data.length} событий
+                {t('user_detail.audit_events_count', { count: auditQ.data.data.length })}
               </span>
             )}
           </div>
@@ -429,16 +423,16 @@ export function UserDetailPage() {
               ))}
             </div>
           ) : (
-            <EmptyState title="Этот пользователь ещё ничего не делал" />
+            <EmptyState title={t('user_detail.audit_empty')} />
           )}
         </TabsContent>
 
         {/* ===== Действия ===== */}
         <TabsContent value="actions" className="space-y-4 pt-6" data-testid="user-actions-panel">
           <div className="space-y-1">
-            <p className="text-sm font-medium">Сбросить пароль</p>
+            <p className="text-sm font-medium">{t('user_detail.reset_password_title')}</p>
             <p className="text-xs text-muted-foreground">
-              На email пользователя будет отправлена ссылка для сброса.
+              {t('user_detail.reset_password_desc')}
             </p>
             <div className="pt-1">
               <Button
@@ -452,7 +446,7 @@ export function UserDetailPage() {
                 ) : (
                   <Key className="mr-2 h-4 w-4" />
                 )}
-                Отправить ссылку
+                {t('user_detail.reset_password_btn')}
               </Button>
             </div>
           </div>
@@ -460,9 +454,9 @@ export function UserDetailPage() {
           <Separator />
 
           <div className="space-y-1">
-            <p className="text-sm font-medium">Завершить все сессии</p>
+            <p className="text-sm font-medium">{t('user_detail.force_logout_title')}</p>
             <p className="text-xs text-muted-foreground">
-              Пользователь будет принудительно разлогинен на всех устройствах.
+              {t('user_detail.force_logout_desc')}
             </p>
             <div className="pt-1">
               <Button
@@ -472,7 +466,7 @@ export function UserDetailPage() {
                 className="border-amber-600 text-amber-600 hover:text-amber-600"
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Завершить все
+                {t('user_detail.force_logout_btn')}
               </Button>
             </div>
           </div>
@@ -481,9 +475,9 @@ export function UserDetailPage() {
 
           {u.status === 'active' ? (
             <div className="space-y-1">
-              <p className="text-sm font-medium">Заблокировать</p>
+              <p className="text-sm font-medium">{t('user_detail.disable_title')}</p>
               <p className="text-xs text-muted-foreground">
-                Пользователь не сможет войти. Данные сохраняются.
+                {t('user_detail.disable_desc')}
               </p>
               <div className="pt-1">
                 <Button
@@ -493,15 +487,15 @@ export function UserDetailPage() {
                   className="border-destructive text-destructive hover:text-destructive"
                 >
                   <Ban className="mr-2 h-4 w-4" />
-                  Заблокировать
+                  {t('user_detail.disable_btn')}
                 </Button>
               </div>
             </div>
           ) : (
             <div className="space-y-1">
-              <p className="text-sm font-medium">Разблокировать</p>
+              <p className="text-sm font-medium">{t('user_detail.enable_title')}</p>
               <p className="text-xs text-muted-foreground">
-                Восстановит доступ пользователя.
+                {t('user_detail.enable_desc')}
               </p>
               <div className="pt-1">
                 <Button
@@ -516,7 +510,7 @@ export function UserDetailPage() {
                   ) : (
                     <UserCheck className="mr-2 h-4 w-4" />
                   )}
-                  Разблокировать
+                  {t('user_detail.enable_btn')}
                 </Button>
               </div>
             </div>
@@ -526,10 +520,10 @@ export function UserDetailPage() {
 
           <div className="space-y-1">
             <p className="text-sm font-medium text-destructive">
-              Анонимизировать (GDPR)
+              {t('user_detail.anonymize_title')}
             </p>
             <p className="text-xs text-muted-foreground">
-              Необратимо. Персональные данные удаляются, audit-события сохраняются.
+              {t('user_detail.anonymize_desc')}
             </p>
             <div className="pt-1">
               <Button
@@ -539,7 +533,7 @@ export function UserDetailPage() {
                 className="border-destructive text-destructive hover:text-destructive"
               >
                 <ShieldOff className="mr-2 h-4 w-4" />
-                Анонимизировать
+                {t('user_detail.anonymize_btn')}
               </Button>
             </div>
           </div>
@@ -550,9 +544,9 @@ export function UserDetailPage() {
         opened={confirmAnonymize}
         onClose={() => setConfirmAnonymize(false)}
         onConfirm={handleAnonymize}
-        title="Анонимизировать пользователя"
-        message="Это действие необратимо. Все персональные данные будут удалены, audit-события сохранятся."
-        confirmLabel="Анонимизировать"
+        title={t('user_detail.confirm_anonymize_title')}
+        message={t('user_detail.confirm_anonymize_message')}
+        confirmLabel={t('user_detail.anonymize_btn')}
         destructive
         loading={anonymize.isPending}
       />
@@ -560,9 +554,9 @@ export function UserDetailPage() {
         opened={confirmDisable}
         onClose={() => setConfirmDisable(false)}
         onConfirm={handleDisable}
-        title="Заблокировать пользователя"
-        message="Пользователь не сможет войти, пока не будет разблокирован."
-        confirmLabel="Заблокировать"
+        title={t('user_detail.confirm_disable_title')}
+        message={t('user_detail.confirm_disable_message')}
+        confirmLabel={t('user_detail.disable_btn')}
         destructive
         loading={disable.isPending}
       />
@@ -570,9 +564,9 @@ export function UserDetailPage() {
         opened={confirmForceLogout}
         onClose={() => setConfirmForceLogout(false)}
         onConfirm={handleForceLogout}
-        title="Завершить все сессии"
-        message="Все активные сессии пользователя будут отозваны. Пользователь будет разлогинен на всех устройствах."
-        confirmLabel="Завершить"
+        title={t('user_detail.confirm_force_logout_title')}
+        message={t('user_detail.confirm_force_logout_message')}
+        confirmLabel={t('user_detail.confirm_force_logout_btn')}
         loading={forceLogout.isPending}
       />
     </Page>

@@ -11,7 +11,6 @@ from submission_service.deps import CurrentUser, SessionDep
 from submission_service.events.producer import EventPublisher, get_publisher
 from submission_service.services.course_client import (
     CourseClient,
-    HttpCourseClient,
     InMemoryCourseClient,
 )
 from submission_service.services.file_storage_service import (
@@ -42,14 +41,13 @@ def set_storage(storage: FileStorage) -> None:
 def get_course_client() -> CourseClient:
     global _course_client
     if _course_client is None:
-        # Prefer the HTTP client when running inside the dev/test stack —
-        # COURSE_SERVICE_URL is provided via docker-compose. Fall back to
-        # in-memory for unit tests where the env var is unset.
-        import os
-        if os.environ.get("COURSE_SERVICE_URL") or os.environ.get("COURSE_BASE_URL"):
-            _course_client = HttpCourseClient()
-        else:
-            _course_client = InMemoryCourseClient()
+        # In the merged course-submission deployable the InProcessCourseClient
+        # is injected at startup via set_course_client(). If it wasn't (e.g.
+        # unit tests), fall back to the in-memory stub — we deliberately do NOT
+        # silently build an HTTP client here: that would re-introduce a network
+        # hop *inside* the merged process if startup wiring ever regressed.
+        # (HttpCourseClient remains available as the seam for a future re-split.)
+        _course_client = InMemoryCourseClient()
     return _course_client
 
 

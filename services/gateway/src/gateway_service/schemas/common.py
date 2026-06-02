@@ -36,6 +36,7 @@ class BackendHealth(BaseModel):
     status_code: int | None = None
     latency_ms: float | None = None
     error: str | None = None
+    checks: dict[str, str] | None = None  # per-dependency breakdown from /readyz
 
 
 class HealthAggregate(BaseModel):
@@ -43,8 +44,22 @@ class HealthAggregate(BaseModel):
     backends: list[BackendHealth]
 
 
+class ServiceStatusItem(BaseModel):
+    """Per-service health in the shape the admin SPA's System page renders
+    (status enum + last_checked_at), distinct from the boolean ``BackendHealth``
+    used by the /health aggregate."""
+
+    name: str
+    status: Literal["healthy", "degraded", "unhealthy", "unknown"]
+    latency_ms: float | None = None
+    last_checked_at: str
+    version: str | None = None
+    message: str | None = None
+    checks: dict[str, str] | None = None  # per-dependency breakdown (db/redis/…)
+
+
 class ServicesStatus(BaseModel):
-    backends: list[BackendHealth]
+    services: list[ServiceStatusItem]
     healthy_count: int
     total_count: int
 
@@ -77,6 +92,7 @@ __all__ = [
     "VersionInfo",
     "BackendHealth",
     "HealthAggregate",
+    "ServiceStatusItem",
     "ServicesStatus",
     "OperationDispatchInfo",
     "OperationListItem",

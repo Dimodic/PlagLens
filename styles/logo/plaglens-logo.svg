@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 92" width="300" height="92" role="img" aria-label="PlagLens">
+  
+  
+  <g transform="translate(8,6) scale(0.94)">
+    <path fill="#4F46E5" fill-rule="evenodd" d="M28 16 H50 a26 26 0 0 1 0 52 H42 V84 H28 Z M58 42 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0"></path>
+  </g>
+  <text class="wm" x="78" y="71" fill="#0E1116">lagLens</text>
+</svg>

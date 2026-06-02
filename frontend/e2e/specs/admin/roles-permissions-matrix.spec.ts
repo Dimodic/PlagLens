@@ -17,7 +17,7 @@ test.describe('Admin — roles/permissions matrix', () => {
   test('matrix lists all 4 roles in header', async ({ adminPage }) => {
     const po = new RolesPermissionsPo(adminPage);
     await po.goto();
-    for (const role of ['super_admin', 'admin', 'teacher', 'student']) {
+    for (const role of ['admin', 'teacher', 'assistant', 'student']) {
       await expect(adminPage.getByRole('columnheader', { name: role })).toBeVisible({
         timeout: 10_000,
       });

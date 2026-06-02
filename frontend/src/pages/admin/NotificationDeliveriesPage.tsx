@@ -32,6 +32,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { StatusPill, type StatusTone } from '@/components/common/StatusPill';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useDeliveries } from '@/hooks/api/useNotificationsAdmin';
 import type {
   DeliveryChannel,
@@ -48,7 +49,8 @@ const STATUS_TONES: Record<DeliveryStatus, StatusTone> = {
 };
 
 export function NotificationDeliveriesPage() {
-  useDocumentTitle('Доставка уведомлений');
+  const { t } = useTranslation();
+  useDocumentTitle(t('notif_deliveries.title'));
   const [channel, setChannel] = useState<DeliveryChannel | null>(null);
   const [status, setStatus] = useState<DeliveryStatus | null>(null);
   const [open, setOpen] = useState<NotificationDelivery | null>(null);
@@ -61,7 +63,7 @@ export function NotificationDeliveriesPage() {
 
   return (
     <Page width="wide">
-      <PageHeader title="Доставки" />
+      <PageHeader title={t('notif_deliveries.heading')} />
 
       <div className="flex items-center gap-3">
         <Select
@@ -74,7 +76,7 @@ export function NotificationDeliveriesPage() {
             <SelectValue placeholder="channel" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все channels</SelectItem>
+            <SelectItem value="all">{t('notif_deliveries.all_channels')}</SelectItem>
             <SelectItem value="email">email</SelectItem>
             <SelectItem value="telegram">telegram</SelectItem>
             <SelectItem value="in_app">in_app</SelectItem>
@@ -90,7 +92,7 @@ export function NotificationDeliveriesPage() {
             <SelectValue placeholder="status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все статусы</SelectItem>
+            <SelectItem value="all">{t('notif_deliveries.all_statuses')}</SelectItem>
             <SelectItem value="delivered">delivered</SelectItem>
             <SelectItem value="failed">failed</SelectItem>
             <SelectItem value="skipped">skipped</SelectItem>
@@ -106,7 +108,7 @@ export function NotificationDeliveriesPage() {
               setStatus(null);
             }}
           >
-            Сбросить
+            {t('notif_deliveries.reset')}
           </Button>
         )}
       </div>
@@ -118,14 +120,14 @@ export function NotificationDeliveriesPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Доставок не было" />
+        <EmptyState title={t('notif_deliveries.empty')} />
       ) : (
         <Card>
           <CardContent className="p-0">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Время</TableHead>
+                  <TableHead>{t('notif_deliveries.col_time')}</TableHead>
                   <TableHead>Channel</TableHead>
                   <TableHead>Recipient</TableHead>
                   <TableHead>Event</TableHead>
@@ -174,7 +176,7 @@ export function NotificationDeliveriesPage() {
       <Dialog open={open != null} onOpenChange={(o) => { if (!o) setOpen(null); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Детали доставки</DialogTitle>
+            <DialogTitle>{t('notif_deliveries.detail_title')}</DialogTitle>
           </DialogHeader>
           {open && (
             <div className="space-y-3">

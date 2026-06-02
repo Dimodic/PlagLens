@@ -173,6 +173,12 @@ export function useCourseMembers(
     queryFn: () =>
       coursesApi.listMembers(id as string, { role, limit: 200 }),
     enabled: !!id,
+    // Role change / add / remove happen on the Members tab, then the grader
+    // pool is read on the submissions page (a different mount) via the
+    // role-filtered variant of this query. With the global refetchOnMount:false
+    // that variant would serve stale cache; refetch on mount so a freshly
+    // promoted assistant shows up in «Распределить» without a hard reload.
+    refetchOnMount: true,
   });
 }
 
@@ -196,7 +202,10 @@ export function useAddMember(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: AddMemberInput) => coursesApi.addMember(id, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: courseKeys.members(id) }),
+    // Prefix-match so every members-list variant (all / student / assistant)
+    // is invalidated — the role-filtered 'assistant' list backs «Распределить».
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['courses', id, 'members'] }),
   });
 }
 
@@ -210,7 +219,8 @@ export function useRemoveMember(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (user_id: string) => coursesApi.removeMember(id, user_id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: courseKeys.members(id) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['courses', id, 'members'] }),
   });
 }
 
@@ -219,7 +229,8 @@ export function useChangeMemberRole(id: string) {
   return useMutation({
     mutationFn: ({ user_id, role }: { user_id: string; role: CourseRole }) =>
       coursesApi.changeMemberRole(id, user_id, role),
-    onSuccess: () => qc.invalidateQueries({ queryKey: courseKeys.members(id) }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ['courses', id, 'members'] }),
   });
 }
 

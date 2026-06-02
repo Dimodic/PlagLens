@@ -1,5 +1,5 @@
 /**
- * E2E: /admin/dashboard/global — GlobalDashboardPage (super_admin only)
+ * E2E: /admin/dashboard/global — GlobalDashboardPage (admin only)
  */
 import { expect, test } from '../../setup/fixtures';
 import { GlobalDashboardPagePo } from '../../pages/dashboards/GlobalDashboardPage.po';
@@ -7,22 +7,12 @@ import { ApiClient } from '../../helpers/api';
 import { getApiClient } from '../../helpers/token-cache';
 
 test.describe('Global Dashboard', () => {
-  test('admin (non-super) gets NotFound on /admin/dashboard/global', async ({
-    adminPage,
-  }) => {
-    await adminPage.goto('/admin/dashboard/global');
-    // RoleGuard requires super_admin only.
-    await expect(
-      adminPage.getByText(/Страница не найдена|Not Found|404/),
-    ).toBeVisible();
-  });
-
-  test('the GET /admin/dashboard/global API responds for super_admin', async () => {
-    const c = await getApiClient('super_admin');
+  test('the GET /admin/dashboard/global API responds for admin', async () => {
+    const c = await getApiClient('admin');
     try {
       const r = await c.get('/admin/dashboard/global');
-      // 200 if endpoint+seed; 404/501 if not implemented for SA — accept both
-      // shapes so the test is resilient. We at minimum want the auth path OK.
+      // 200 if endpoint+seed; 404/501 if not implemented for admin — accept
+      // both shapes so the test is resilient. We at minimum want auth OK.
       expect([200, 401, 403, 404, 500, 501]).toContain(r.status());
     } finally {
       await c.dispose();

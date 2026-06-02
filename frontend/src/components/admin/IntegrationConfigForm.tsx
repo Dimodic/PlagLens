@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/i18n';
 import type { IntegrationKind } from '@/api/endpoints/integrations';
 
 export interface IntegrationConfigFormValues {
@@ -40,6 +41,7 @@ interface TagsFieldProps {
 }
 
 function TagsField({ label, placeholder, value, onChange }: TagsFieldProps) {
+  const { t } = useTranslation();
   const [draft, setDraft] = useState('');
   const add = () => {
     const v = draft.trim();
@@ -62,7 +64,7 @@ function TagsField({ label, placeholder, value, onChange }: TagsFieldProps) {
               type="button"
               className="ml-1 rounded hover:bg-foreground/10"
               onClick={() => onChange(value.filter((x) => x !== v))}
-              aria-label={`Удалить ${v}`}
+              aria-label={t('integration_config.remove_tag', { value: v })}
             >
               <X className="h-3 w-3" />
             </button>
@@ -97,6 +99,7 @@ export function IntegrationConfigForm({
   onChange,
   readonlyCourse,
 }: Props) {
+  const { t } = useTranslation();
   const setField = (key: string, fieldValue: unknown) => {
     onChange({
       ...value,
@@ -122,7 +125,7 @@ export function IntegrationConfigForm({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="integration-course-id">
-          course_id (опционально, для tenant-wide оставьте пустым)
+          {t('integration_config.course_id_label')}
         </Label>
         <Input
           id="integration-course-id"
@@ -178,7 +181,7 @@ export function IntegrationConfigForm({
       {kind === 'yandex_contest' && (
         <>
           <div className="space-y-1.5">
-            <Label htmlFor="oauth-token">oauth_token (или env-var name)</Label>
+            <Label htmlFor="oauth-token">{t('integration_config.oauth_token_label')}</Label>
             <Input
               id="oauth-token"
               value={(settings.oauth_token as string) ?? ''}
@@ -201,7 +204,7 @@ export function IntegrationConfigForm({
             checked={Boolean(settings.allow_zip_upload ?? true)}
             onCheckedChange={(checked) => setField('allow_zip_upload', checked)}
           />
-          <Label htmlFor="allow-zip-upload">Разрешить bulk-upload через ZIP</Label>
+          <Label htmlFor="allow-zip-upload">{t('integration_config.allow_zip_upload')}</Label>
         </div>
       )}
 
@@ -233,7 +236,7 @@ export function IntegrationConfigForm({
       {kind === 'google_sheets' && (
         <>
           <div className="space-y-1.5">
-            <Label htmlFor="service-account">service_account_email (только display)</Label>
+            <Label htmlFor="service-account">{t('integration_config.service_account_email_label')}</Label>
             <Input
               id="service-account"
               value={(settings.service_account_email as string) ?? ''}

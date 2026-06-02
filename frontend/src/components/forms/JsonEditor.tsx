@@ -7,6 +7,7 @@ import { AlertCircle, Check } from 'lucide-react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 interface Props {
   label?: string;
@@ -35,6 +36,7 @@ export function JsonEditor({
   minRows = 6,
   required,
 }: Props) {
+  const { t } = useTranslation();
   const id = useId();
   const [text, setText] = useState<string>(format(value));
   const [err, setErr] = useState<string | null>(null);
@@ -46,7 +48,7 @@ export function JsonEditor({
   const validate = (raw: string) => {
     if (!raw.trim()) {
       if (required) {
-        setErr('JSON не может быть пустым');
+        setErr(t('json_editor.empty_error'));
         return;
       }
       setErr(null);
@@ -84,7 +86,7 @@ export function JsonEditor({
         </p>
       ) : (
         <p className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Check className="h-3 w-3" /> JSON валиден
+          <Check className="h-3 w-3" /> {t('json_editor.valid')}
         </p>
       )}
     </div>

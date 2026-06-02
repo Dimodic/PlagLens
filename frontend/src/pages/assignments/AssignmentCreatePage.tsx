@@ -26,6 +26,7 @@ import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import type { SelectionStrategy } from '@/api/endpoints/assignments';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 
 interface FormVals {
   // No slug — the backend auto-derives it from the title.
@@ -54,17 +55,18 @@ const LANGUAGE_OPTIONS = [
   { value: 'csharp', label: 'C#' },
   { value: 'kotlin', label: 'Kotlin' },
   { value: 'rust', label: 'Rust' },
-  { value: 'other', label: 'Другой' },
+  { value: 'other', labelKey: 'assignment_create.language_other' },
 ];
 
 const EXTERNAL_OPTIONS = [
-  { value: 'none', label: 'Нет' },
+  { value: 'none', labelKey: 'assignment_create.external_none' },
   { value: 'stepik', label: 'Stepik' },
-  { value: 'yandex_contest', label: 'Яндекс.Контест' },
+  { value: 'yandex_contest', labelKey: 'assignment_create.external_yandex_contest' },
 ];
 
 export default function AssignmentCreatePage() {
-  useDocumentTitle('Новое задание');
+  const { t } = useTranslation();
+  useDocumentTitle(t('assignment_create.title'));
   const { courseSlug } = useParams<{ courseSlug: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -97,7 +99,7 @@ export default function AssignmentCreatePage() {
 
   const validate = (): boolean => {
     if (vals.title.trim().length < 2) {
-      setTitleError('Не короче 2 символов');
+      setTitleError(t('assignment_create.title_too_short'));
       return false;
     }
     setTitleError(null);
@@ -132,7 +134,7 @@ export default function AssignmentCreatePage() {
               ]
             : [],
       });
-      notify.success('Задание создано');
+      notify.success(t('assignment_create.created'));
       navigate(`/assignments/${result.id}`);
     } catch (err) {
       setProblem(parseProblem(err));
@@ -142,7 +144,7 @@ export default function AssignmentCreatePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Новое задание</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('assignment_create.title')}</h1>
         {course?.name && (
           <p className="mt-1 text-sm text-muted-foreground">{course.name}</p>
         )}
@@ -154,7 +156,7 @@ export default function AssignmentCreatePage() {
         className="space-y-5"
       >
         <div className="space-y-1.5">
-          <Label htmlFor="assignment-form-title-input">Название *</Label>
+          <Label htmlFor="assignment-form-title-input">{t('assignment_create.field_title')}</Label>
           <Input
             id="assignment-form-title-input"
             data-testid="assignment-form-title"
@@ -169,7 +171,7 @@ export default function AssignmentCreatePage() {
 
         <div data-testid="assignment-form-description">
           <MarkdownEditor
-            label="Описание (Markdown)"
+            label={t('assignment_create.field_description')}
             value={vals.description}
             onChange={(v) => update('description', v)}
           />
@@ -177,7 +179,7 @@ export default function AssignmentCreatePage() {
 
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label>Язык</Label>
+            <Label>{t('assignment_create.field_language')}</Label>
             <Select
               value={vals.language_hint}
               onValueChange={(v) => update('language_hint', v)}
@@ -188,7 +190,7 @@ export default function AssignmentCreatePage() {
               <SelectContent>
                 {LANGUAGE_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {o.labelKey ? t(o.labelKey) : o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -196,7 +198,7 @@ export default function AssignmentCreatePage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="assignment-form-max-score-input">Макс. оценка</Label>
+            <Label htmlFor="assignment-form-max-score-input">{t('assignment_create.field_max_score')}</Label>
             <Input
               id="assignment-form-max-score-input"
               type="number"
@@ -211,7 +213,7 @@ export default function AssignmentCreatePage() {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="assignment-form-weight-input">Вес</Label>
+            <Label htmlFor="assignment-form-weight-input">{t('assignment_create.field_weight')}</Label>
             <Input
               id="assignment-form-weight-input"
               type="number"
@@ -238,7 +240,7 @@ export default function AssignmentCreatePage() {
 
         <div className="space-y-1.5">
           <Label htmlFor="assignment-form-late-multiplier-input">
-            Множитель для late submissions
+            {t('assignment_create.field_late_multiplier')}
           </Label>
           <Input
             id="assignment-form-late-multiplier-input"
@@ -253,12 +255,12 @@ export default function AssignmentCreatePage() {
             }
           />
           <p className="text-xs text-muted-foreground">
-            Применяется к оценке посылок после soft-дедлайна
+            {t('assignment_create.field_late_multiplier_hint')}
           </p>
         </div>
 
         <div className="space-y-2" data-testid="assignment-form-selection_strategy">
-          <Label>Стратегия выбора посылки</Label>
+          <Label>{t('assignment_create.field_selection_strategy')}</Label>
           <RadioGroup
             value={vals.selection_strategy}
             onValueChange={(v) =>
@@ -273,7 +275,7 @@ export default function AssignmentCreatePage() {
                 data-testid="assignment-form-selection_strategy-last"
               />
               <Label htmlFor="selection-last" className="font-normal">
-                Последняя
+                {t('assignment_create.selection_last')}
               </Label>
             </div>
             <div className="flex items-center gap-2">
@@ -283,7 +285,7 @@ export default function AssignmentCreatePage() {
                 data-testid="assignment-form-selection_strategy-best"
               />
               <Label htmlFor="selection-best" className="font-normal">
-                Лучшая
+                {t('assignment_create.selection_best')}
               </Label>
             </div>
             <div className="flex items-center gap-2">
@@ -293,7 +295,7 @@ export default function AssignmentCreatePage() {
                 data-testid="assignment-form-selection_strategy-manual"
               />
               <Label htmlFor="selection-manual" className="font-normal">
-                Вручную
+                {t('assignment_create.selection_manual')}
               </Label>
             </div>
           </RadioGroup>
@@ -311,13 +313,13 @@ export default function AssignmentCreatePage() {
               htmlFor="assignment-form-plagiarism-switch"
               className="font-normal"
             >
-              Авто-запуск проверки плагиата
+              {t('assignment_create.plagiarism_auto_run')}
             </Label>
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="assignment-form-plag-threshold-input">
-              Порог сходства
+              {t('assignment_create.plagiarism_threshold')}
             </Label>
             <Input
               id="assignment-form-plag-threshold-input"
@@ -343,13 +345,13 @@ export default function AssignmentCreatePage() {
             data-testid="assignment-form-ai_auto_run"
           />
           <Label htmlFor="assignment-form-ai-switch" className="font-normal">
-            Авто-запуск AI-анализа
+            {t('assignment_create.ai_auto_run')}
           </Label>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Внешняя интеграция</Label>
+            <Label>{t('assignment_create.field_external_system')}</Label>
             <Select
               value={vals.external_system}
               onValueChange={(v) =>
@@ -362,7 +364,7 @@ export default function AssignmentCreatePage() {
               <SelectContent>
                 {EXTERNAL_OPTIONS.map((o) => (
                   <SelectItem key={o.value} value={o.value}>
-                    {o.label}
+                    {o.labelKey ? t(o.labelKey) : o.label}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -371,7 +373,7 @@ export default function AssignmentCreatePage() {
 
           <div className="space-y-1.5">
             <Label htmlFor="assignment-form-external-id-input">
-              Внешний ID задания
+              {t('assignment_create.field_external_id')}
             </Label>
             <Input
               id="assignment-form-external-id-input"
@@ -391,7 +393,7 @@ export default function AssignmentCreatePage() {
             data-testid="assignment-form-cancel"
             onClick={() => navigate(`/courses/${courseSlug}`)}
           >
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             type="submit"
@@ -401,7 +403,7 @@ export default function AssignmentCreatePage() {
             {create.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Создать
+            {t('common.create')}
           </Button>
         </div>
       </form>

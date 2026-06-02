@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/components/ui/utils';
 import { useOperation } from '@/api/operation';
+import { useTranslation } from '@/i18n';
 import type { OperationStatus } from '@/api/types';
 
 const STATUS_CLASS: Record<OperationStatus, string> = {
@@ -13,14 +14,6 @@ const STATUS_CLASS: Record<OperationStatus, string> = {
   completed: 'bg-sev-low-bg text-sev-low hover:bg-sev-low-bg',
   failed: 'bg-sev-high-bg text-sev-high hover:bg-sev-high-bg',
   cancelled: 'bg-sev-mid-bg text-sev-mid hover:bg-sev-mid-bg',
-};
-
-const LABEL: Record<OperationStatus, string> = {
-  queued: 'В очереди',
-  running: 'Выполняется',
-  completed: 'Готово',
-  failed: 'Ошибка',
-  cancelled: 'Отменено',
 };
 
 interface AsyncOperationStatusProps {
@@ -32,6 +25,7 @@ export function AsyncOperationStatus({
   operationId,
   onComplete,
 }: AsyncOperationStatusProps) {
+  const { t } = useTranslation();
   const { operation } = useOperation(operationId, {
     onComplete: () => onComplete?.(),
   });
@@ -39,7 +33,9 @@ export function AsyncOperationStatus({
   if (!operationId) return null;
   if (!operation) {
     return (
-      <p className="text-sm text-muted-foreground">Запуск операции…</p>
+      <p className="text-sm text-muted-foreground">
+        {t('async_operation_status.starting')}
+      </p>
     );
   }
 
@@ -51,7 +47,7 @@ export function AsyncOperationStatus({
           variant="secondary"
           className={cn('font-normal', STATUS_CLASS[operation.status])}
         >
-          {LABEL[operation.status]}
+          {t(`async_operation_status.status_${operation.status}`)}
         </Badge>
       </div>
       {operation.progress && operation.status !== 'completed' && (

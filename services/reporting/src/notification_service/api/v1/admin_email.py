@@ -23,7 +23,11 @@ from notification_service.channels import (
 )
 from notification_service.common.email_secrets import (
     EmailSecretsUnavailable,
+)
+from notification_service.common.email_secrets import (
     decrypt as decrypt_secret,
+)
+from notification_service.common.email_secrets import (
     encrypt as encrypt_secret,
 )
 from notification_service.config import get_settings

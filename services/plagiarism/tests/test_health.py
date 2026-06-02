@@ -34,6 +34,9 @@ async def test_healthz_endpoint(client):
 async def test_readyz_endpoint(client):
     resp = await client.get("/readyz")
     assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["checks"] == {"db": "ok", "redis": "ok"}
 
 
 async def test_version_endpoint(client):

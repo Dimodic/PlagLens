@@ -15,6 +15,7 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { TenantInvitationsPanel } from '@/components/admin/TenantInvitationsPanel';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useActivateTenant,
   useSuspendTenant,
@@ -39,7 +40,8 @@ function Metric({ label, value }: { label: string; value: React.ReactNode }) {
 
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useDocumentTitle('Учреждение');
+  const { t } = useTranslation();
+  useDocumentTitle(t('tenant_detail.title'));
   const notify = useNotifications();
   const tenantQ = useTenant(id);
   const usageQ = useTenantUsage(id);
@@ -62,7 +64,7 @@ export function TenantDetailPage() {
     <Button asChild variant="ghost" size="sm" className="-ml-2 mb-2 text-muted-foreground">
       <Link to="/admin/tenants">
         <ArrowLeft className="mr-1.5 h-4 w-4" />
-        Учреждения
+        {t('tenant_detail.back_to_tenants')}
       </Link>
     </Button>
   );
@@ -105,30 +107,30 @@ export function TenantDetailPage() {
         cors_origins: corsOrigins,
         default_ai_provider: defaultProvider || null,
       });
-      notify.success('Сохранено');
+      notify.success(t('tenant_detail.saved'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось');
+      notify.error(p?.detail ?? p?.title ?? t('tenant_detail.failed'));
     }
   };
   const handleSuspend = async () => {
     if (!id) return;
     try {
       await suspend.mutateAsync(id);
-      notify.success('Учреждение приостановлено');
+      notify.success(t('tenant_detail.suspended'));
       tenantQ.refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('tenant_detail.failed'));
     }
   };
   const handleActivate = async () => {
     if (!id) return;
     try {
       await activate.mutateAsync(id);
-      notify.success('Учреждение активировано');
+      notify.success(t('tenant_detail.activated'));
       tenantQ.refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('tenant_detail.failed'));
     }
   };
 
@@ -145,7 +147,7 @@ export function TenantDetailPage() {
           </h1>
           <div className="mt-2" data-testid="tenant-status-badge">
             <StatusPill tone={tenant.status === 'active' ? 'success' : 'neutral'}>
-              {tenant.status === 'active' ? 'активно' : tenant.status}
+              {tenant.status === 'active' ? t('tenant_detail.status_active') : tenant.status}
             </StatusPill>
           </div>
         </div>
@@ -158,7 +160,7 @@ export function TenantDetailPage() {
             className="text-amber-600 border-amber-600 hover:text-amber-600"
           >
             {suspend.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Приостановить
+            {t('tenant_detail.suspend')}
           </Button>
         ) : (
           <Button
@@ -169,7 +171,7 @@ export function TenantDetailPage() {
             className="text-emerald-600 border-emerald-600 hover:text-emerald-600"
           >
             {activate.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Активировать
+            {t('tenant_detail.activate')}
           </Button>
         )}
       </div>
@@ -177,16 +179,16 @@ export function TenantDetailPage() {
       <Tabs defaultValue="settings">
         <TabsList>
           <TabsTrigger value="settings" data-testid="tenant-tab-settings">
-            Настройки
+            {t('tenant_detail.tab_settings')}
           </TabsTrigger>
           <TabsTrigger value="users" data-testid="tenant-tab-users">
-            Пользователи
+            {t('tenant_detail.tab_users')}
           </TabsTrigger>
           <TabsTrigger value="usage" data-testid="tenant-tab-usage">
-            Статистика
+            {t('tenant_detail.tab_usage')}
           </TabsTrigger>
           <TabsTrigger value="audit" data-testid="tenant-tab-audit">
-            Аудит
+            {t('tenant_detail.tab_audit')}
           </TabsTrigger>
         </TabsList>
 
@@ -196,14 +198,14 @@ export function TenantDetailPage() {
             <Input id="tenant-id" value={tenant.id} disabled />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tenant-cors">Разрешённые CORS-домены</Label>
+            <Label htmlFor="tenant-cors">{t('tenant_detail.cors_label')}</Label>
             <Input
               id="tenant-cors"
               value={corsInput}
               onChange={(e) => setCorsInput(e.currentTarget.value)}
               onKeyDown={handleCorsKey}
               onBlur={addCorsOrigin}
-              placeholder="https://example.com (Enter)"
+              placeholder={t('tenant_detail.cors_placeholder')}
               data-testid="tenant-cors-input"
             />
             {corsOrigins.length > 0 && (
@@ -215,7 +217,7 @@ export function TenantDetailPage() {
                       type="button"
                       onClick={() => removeCorsOrigin(i)}
                       className="ml-1 hover:text-destructive"
-                      aria-label={`Удалить ${origin}`}
+                      aria-label={t('tenant_detail.remove_origin', { origin })}
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -225,7 +227,7 @@ export function TenantDetailPage() {
             )}
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="tenant-provider">Провайдер ИИ по умолчанию</Label>
+            <Label htmlFor="tenant-provider">{t('tenant_detail.default_provider_label')}</Label>
             <Input
               id="tenant-provider"
               value={defaultProvider}
@@ -241,7 +243,7 @@ export function TenantDetailPage() {
               data-testid="tenant-save-button"
             >
               {update.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Сохранить
+              {t('common.save')}
             </Button>
           </div>
         </TabsContent>
@@ -249,11 +251,11 @@ export function TenantDetailPage() {
         <TabsContent value="users" className="space-y-6 pt-6">
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              Пользователи этого учреждения.
+              {t('tenant_detail.users_intro')}
             </p>
             <Button asChild variant="outline">
               <Link to={`/admin/users?tenant_id=${tenant.id}`}>
-                Открыть пользователей
+                {t('tenant_detail.open_users')}
               </Link>
             </Button>
           </div>
@@ -269,27 +271,27 @@ export function TenantDetailPage() {
             </div>
           ) : usageQ.data ? (
             <div className="grid grid-cols-2 gap-8 border-t py-6 md:grid-cols-4">
-              <Metric label="Пользователей" value={usageQ.data.users ?? 0} />
-              <Metric label="Активных сессий" value={usageQ.data.active_sessions ?? 0} />
-              <Metric label="Курсов" value={usageQ.data.courses ?? 0} />
-              <Metric label="Посылок · 30 дней" value={usageQ.data.submissions_30d ?? 0} />
+              <Metric label={t('tenant_detail.metric_users')} value={usageQ.data.users ?? 0} />
+              <Metric label={t('tenant_detail.metric_active_sessions')} value={usageQ.data.active_sessions ?? 0} />
+              <Metric label={t('tenant_detail.metric_courses')} value={usageQ.data.courses ?? 0} />
+              <Metric label={t('tenant_detail.metric_submissions_30d')} value={usageQ.data.submissions_30d ?? 0} />
               <Metric
-                label="LLM-токенов · 30 дней"
+                label={t('tenant_detail.metric_llm_tokens_30d')}
                 value={(usageQ.data.llm_tokens_30d ?? 0).toLocaleString('ru-RU')}
               />
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Нет данных</p>
+            <p className="text-sm text-muted-foreground">{t('tenant_detail.no_data')}</p>
           )}
         </TabsContent>
 
         <TabsContent value="audit" className="space-y-3 pt-6">
           <p className="text-sm text-muted-foreground">
-            Журнал аудита этого учреждения.
+            {t('tenant_detail.audit_intro')}
           </p>
           <Button asChild variant="outline">
             <Link to={`/admin/audit?tenant_id=${tenant.id}`}>
-              Открыть аудит учреждения
+              {t('tenant_detail.open_audit')}
             </Link>
           </Button>
         </TabsContent>

@@ -83,6 +83,32 @@ _FILE_TEMPLATE_DIRS: dict[str, str] = {
 }
 
 
+def _key_candidates(event_type: str) -> list[str]:
+    """Template-map lookup keys to try, most specific first.
+
+    Domain events are published with a ``plaglens.`` vendor prefix
+    (e.g. ``plaglens.course.member.added.v1``) while the bundled template
+    and default maps are keyed by the bare domain path
+    (``course.member.added.v1``). Try the full type first — so an exact
+    custom key still wins — then the prefix-stripped form. Without this,
+    *every* ``plaglens.*`` event (grades, feedback, course membership)
+    misses all templates and falls through to the generic
+    "Уведомление PlagLens" stub.
+    """
+    cands = [event_type]
+    if event_type.startswith("plaglens."):
+        cands.append(event_type[len("plaglens.") :])
+    return cands
+
+
+def _lookup(mapping: dict[str, str], event_type: str) -> str | None:
+    """First value in ``mapping`` matching any candidate key, else ``None``."""
+    for key in _key_candidates(event_type):
+        if key in mapping:
+            return mapping[key]
+    return None
+
+
 def _load_file_template(
     event_type: str, channel: str, locale: str
 ) -> tuple[str, str] | None:
@@ -98,7 +124,7 @@ def _load_file_template(
         templates/<event_dir>/<locale>.<channel>.txt.j2      (email plain)
         templates/<event_dir>/<locale>.<channel>.body.j2     (inapp)
     """
-    sub_dir = _FILE_TEMPLATE_DIRS.get(event_type)
+    sub_dir = _lookup(_FILE_TEMPLATE_DIRS, event_type)
     if not sub_dir:
         return None
     base = _TEMPLATES_DIR / sub_dir
@@ -120,7 +146,7 @@ def _load_file_template(
 def _render_file_template(
     event_type: str, channel: str, locale: str, data: dict[str, Any]
 ) -> tuple[str, str] | None:
-    sub_dir = _FILE_TEMPLATE_DIRS.get(event_type)
+    sub_dir = _lookup(_FILE_TEMPLATE_DIRS, event_type)
     if not sub_dir:
         return None
     pair = _load_file_template(event_type, channel, locale)
@@ -192,9 +218,9 @@ async def render(
     if file_pair is not None:
         return file_pair
 
-    # Fallback to baked-in defaults
-    subject = DEFAULT_SUBJECTS.get(event_type, "Уведомление PlagLens")
-    body_tmpl = DEFAULT_BODIES.get(event_type, "У вас новое уведомление.")
+    # Fallback to baked-in defaults (prefix-aware: plaglens.* → bare key).
+    subject = _lookup(DEFAULT_SUBJECTS, event_type) or "Уведомление PlagLens"
+    body_tmpl = _lookup(DEFAULT_BODIES, event_type) or "У вас новое уведомление."
     body = render_string(body_tmpl, data)
     return subject, body
 

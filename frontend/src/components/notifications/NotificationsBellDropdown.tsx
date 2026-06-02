@@ -1,14 +1,14 @@
 /**
  * Header bell dropdown — shows unread count badge + recent 10 notifications.
  *
- * Wires the SSE stream and pushes new notifications into the React Query
- * cache (so the badge stays in sync without polling).
+ * The unread count polls every 15s and refetches on tab focus (see
+ * useUnreadCount); opening the dropdown also forces a refresh. We don't use
+ * SSE: the gateway buffers responses, so a live stream would hang there.
  */
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bell, RefreshCw } from 'lucide-react';
-import { toast } from 'sonner';
+import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   Popover,
@@ -24,11 +24,12 @@ import {
 import { cn } from '@/components/ui/utils';
 import {
   useMarkAllRead,
+  useMarkRead,
   useNotifications,
   useUnreadCount,
   notificationKeys,
 } from '@/hooks/api/useNotificationsApi';
-import { useSSE } from '@/api/sse';
+import { useTranslation } from '@/i18n';
 import { NotificationItem } from './NotificationItem';
 import type { NotificationItem as NotificationModel } from '@/api/endpoints/notifications';
 
@@ -36,26 +37,10 @@ interface NotificationsBellDropdownProps {
   enabled?: boolean;
 }
 
-function showNotificationToast(n: NotificationModel) {
-  const description = n.body;
-  switch (n.severity) {
-    case 'error':
-      toast.error(n.title, { description });
-      break;
-    case 'warning':
-      toast.warning(n.title, { description });
-      break;
-    case 'success':
-      toast.success(n.title, { description });
-      break;
-    default:
-      toast(n.title, { description });
-  }
-}
-
 export function NotificationsBellDropdown({
   enabled = true,
 }: NotificationsBellDropdownProps) {
+  const { t } = useTranslation();
   const [opened, setOpened] = useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -63,15 +48,18 @@ export function NotificationsBellDropdown({
   const filter = useMemo(() => ({ limit: 10, archived: false }), []);
   const { data, isLoading } = useNotifications(filter);
   const markAllRead = useMarkAllRead();
-  const { lastNotification, isConnected } = useSSE({ enabled });
-
-  // When a new notification arrives via SSE — show toast + invalidate caches.
-  useEffect(() => {
-    if (!lastNotification) return;
-    showNotificationToast(lastNotification);
-    void qc.invalidateQueries({ queryKey: notificationKeys.all });
-  }, [lastNotification, qc]);
-
+  const markRead = useMarkRead();
+  // Dedupe hover-reads so a single unread item fires the mutation once even
+  // if the pointer re-enters before the cache refreshes.
+  const markedRef = useRef<Set<string>>(new Set());
+  const onMarkRead = useCallback(
+    (id: string) => {
+      if (markedRef.current.has(id)) return;
+      markedRef.current.add(id);
+      markRead.mutate([id]);
+    },
+    [markRead],
+  );
   const handleClick = useCallback(
     (n: NotificationModel) => {
       setOpened(false);
@@ -84,7 +72,14 @@ export function NotificationsBellDropdown({
   const showBadge = unread > 0;
 
   return (
-    <Popover open={opened} onOpenChange={setOpened}>
+    <Popover
+      open={opened}
+      onOpenChange={(o) => {
+        setOpened(o);
+        // Opening the bell forces a fresh fetch so the list is never stale.
+        if (o) void qc.invalidateQueries({ queryKey: notificationKeys.all });
+      }}
+    >
       <Tooltip>
         <TooltipTrigger asChild>
           <PopoverTrigger asChild>
@@ -96,7 +91,7 @@ export function NotificationsBellDropdown({
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Уведомления"
+                aria-label={t('notif_bell.aria_label')}
                 data-testid="bell-icon"
               >
                 <Bell className="h-5 w-5" />
@@ -114,7 +109,7 @@ export function NotificationsBellDropdown({
             </div>
           </PopoverTrigger>
         </TooltipTrigger>
-        <TooltipContent>Уведомления</TooltipContent>
+        <TooltipContent>{t('notif_bell.tooltip')}</TooltipContent>
       </Tooltip>
       <PopoverContent
         align="end"
@@ -123,16 +118,8 @@ export function NotificationsBellDropdown({
       >
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between px-1">
-            <span className="font-semibold">Уведомления</span>
+            <span className="font-semibold">{t('notif_bell.heading')}</span>
             <div className="flex items-center gap-1">
-              {!isConnected && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <RefreshCw className="h-3.5 w-3.5 text-muted-foreground" />
-                  </TooltipTrigger>
-                  <TooltipContent>SSE отключён</TooltipContent>
-                </Tooltip>
-              )}
               {unread > 0 && (
                 <Button
                   variant="ghost"
@@ -141,7 +128,7 @@ export function NotificationsBellDropdown({
                   onClick={() => markAllRead.mutate()}
                   data-testid="mark-all-read-btn"
                 >
-                  Прочитать все
+                  {t('notif_bell.mark_all_read')}
                 </Button>
               )}
             </div>
@@ -150,11 +137,11 @@ export function NotificationsBellDropdown({
           <div className="max-h-[420px] overflow-y-auto">
             {isLoading ? (
               <p className="px-2 py-2 text-sm text-muted-foreground">
-                Загрузка…
+                {t('common.loading')}
               </p>
             ) : items.length === 0 ? (
               <p className="px-2 py-2 text-sm text-muted-foreground">
-                Нет уведомлений.
+                {t('notif_bell.empty')}
               </p>
             ) : (
               items.map((n) => (
@@ -162,6 +149,7 @@ export function NotificationsBellDropdown({
                   key={n.id}
                   notification={n}
                   onClick={handleClick}
+                  onMarkRead={onMarkRead}
                   compact
                 />
               ))
@@ -178,7 +166,7 @@ export function NotificationsBellDropdown({
               data-testid="open-all-link"
               className="text-sm text-primary hover:underline"
             >
-              Открыть все
+              {t('notif_bell.open_all')}
             </button>
           </div>
         </div>

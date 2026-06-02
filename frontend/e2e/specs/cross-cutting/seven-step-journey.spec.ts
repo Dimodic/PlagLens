@@ -1,7 +1,7 @@
 /**
  * Seven-step user journey — end-to-end through the real public stand.
  *
- * 1. super-admin creates a teacher invitation in tenant HSE
+ * 1. admin creates a teacher invitation in tenant HSE
  * 2. teacher registers + redeems → global_role becomes teacher
  * 3. teacher creates a course + opens the Yandex.Contest integration wizard
  * 4. teacher creates an assistant invitation tied to the course
@@ -17,17 +17,15 @@
  * Run against the public stand:
  *   E2E_BASE_URL=https://85.192.48.223.nip.io \
  *   E2E_API_HOST=https://85.192.48.223.nip.io \
- *   E2E_SUPER_ADMIN_EMAIL=admin@plaglens.local \
- *   E2E_SUPER_ADMIN_PASSWORD=<from infra/.env> \
  *   npx playwright test specs/cross-cutting/seven-step-journey.spec.ts \
  *     --project=chromium-headless --workers=1
  */
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
+import { DEMO_USERS } from '../../helpers/api';
 
 const API_HOST = process.env.E2E_API_HOST ?? process.env.E2E_BASE_URL ?? 'http://localhost:5173';
 const API_PREFIX = process.env.E2E_API_PREFIX ?? '/api/v1';
-const SUPER_ADMIN_EMAIL = process.env.E2E_SUPER_ADMIN_EMAIL ?? 'admin@plaglens.local';
-const SUPER_ADMIN_PASSWORD = process.env.E2E_SUPER_ADMIN_PASSWORD ?? 'changeme';
+const ADMIN = DEMO_USERS.admin;
 const TARGET_TENANT_SLUG = process.env.E2E_TARGET_TENANT_SLUG ?? 'hse';
 
 const STAMP = Date.now();
@@ -121,7 +119,7 @@ test.beforeAll(async ({ playwright }) => {
     baseURL: API_HOST,
     ignoreHTTPSErrors: true,
   });
-  adminToken = await login(SUPER_ADMIN_EMAIL, SUPER_ADMIN_PASSWORD);
+  adminToken = await login(ADMIN.email, ADMIN.password, ADMIN.tenantSlug);
   // Resolve target tenant id from slug — admin listing returns every tenant
   // wrapped in the standard paginated envelope.
   const resp = (await getJson('/tenants', adminToken)) as

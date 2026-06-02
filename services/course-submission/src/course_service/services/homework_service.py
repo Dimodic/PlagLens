@@ -81,6 +81,7 @@ class HomeworkService:
             description=payload.description,
             position=payload.position,
             status=payload.status,
+            kind=payload.kind,
             due_at=payload.due_at,
         )
         try:

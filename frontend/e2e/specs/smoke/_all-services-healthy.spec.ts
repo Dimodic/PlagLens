@@ -26,14 +26,14 @@ test.describe('@smoke gateway health', () => {
     }
   });
 
-  test('Gateway accepts demo super_admin login', async () => {
+  test('Gateway issues a well-formed access token for demo admin login', async () => {
     const ctx = await request.newContext({ baseURL: API_HOST, ignoreHTTPSErrors: true });
     try {
-      const c = DEMO_USERS.super_admin;
+      const c = DEMO_USERS.admin;
       const resp = await ctx.post(`${API_PREFIX}/auth/login`, {
         data: { email: c.email, password: c.password, tenant_slug: c.tenantSlug },
       });
-      expect(resp.ok(), `Super-admin login failed (${resp.status()})`).toBeTruthy();
+      expect(resp.ok(), `Admin login failed (${resp.status()})`).toBeTruthy();
       const body = await resp.json();
       expect(body).toHaveProperty('access_token');
       expect(typeof body.access_token).toBe('string');

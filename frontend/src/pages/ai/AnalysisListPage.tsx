@@ -19,6 +19,7 @@ import { AnalysisStatusBadge } from '@/components/ai/AnalysisStatusBadge';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { CostFormatter } from '@/components/ai/CostFormatter';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useAnalysesForAssignment } from '@/hooks/api/useAi';
 import type { Problem } from '@/api/types';
 
@@ -27,13 +28,14 @@ function fmt(d: string | null): string {
 }
 
 export function AnalysisListPage() {
+  const { t } = useTranslation();
   const { assignmentId = '' } = useParams<{ assignmentId: string }>();
-  useDocumentTitle('AI-анализы задания');
+  useDocumentTitle(t('analysis_list.document_title'));
   const { data, isLoading, error } = useAnalysesForAssignment(assignmentId, { limit: 200 });
 
   return (
     <Page width="wide">
-      <PageHeader title="AI-анализы" />
+      <PageHeader title={t('analysis_list.title')} />
 
       {error && <ProblemAlert problem={error as unknown as Problem} />}
 
@@ -43,8 +45,8 @@ export function AnalysisListPage() {
         </div>
       ) : data && data.data.length === 0 ? (
         <EmptyState
-          title="Анализов ещё не было"
-          message="Запустите анализ из деталей конкретной отправки."
+          title={t('analysis_list.empty_title')}
+          message={t('analysis_list.empty_message')}
         />
       ) : (
         <div className="rounded-md border overflow-x-auto">
@@ -52,13 +54,13 @@ export function AnalysisListPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Submission</TableHead>
-                <TableHead>Автор</TableHead>
-                <TableHead>Статус</TableHead>
+                <TableHead>{t('analysis_list.col_author')}</TableHead>
+                <TableHead>{t('analysis_list.col_status')}</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Model</TableHead>
                 <TableHead>Tokens</TableHead>
                 <TableHead>Cost</TableHead>
-                <TableHead>Завершено</TableHead>
+                <TableHead>{t('analysis_list.col_finished')}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>

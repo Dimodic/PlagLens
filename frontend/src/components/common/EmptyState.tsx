@@ -7,6 +7,7 @@
 import { ReactNode } from 'react';
 import { Inbox } from 'lucide-react';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 interface EmptyStateProps {
   /** Single short line shown in muted text. Required. */
@@ -31,7 +32,8 @@ export function EmptyState({
   className,
   ...rest
 }: EmptyStateProps) {
-  const line = title ?? message ?? 'Пусто';
+  const { t } = useTranslation();
+  const line = title ?? message ?? t('empty_state.fallback');
   return (
     <div
       data-testid={rest['data-testid']}

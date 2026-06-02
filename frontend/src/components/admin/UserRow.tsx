@@ -7,15 +7,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { TableCell, TableRow } from '@/components/ui/table';
 import type { UserDetail } from '@/api/endpoints/users';
-import type { GlobalRole } from '@/api/types';
-import { roleLabel } from '@/lib/roles';
-
-const ROLE_CLASS: Record<GlobalRole, string> = {
-  admin: 'bg-accent text-accent-foreground hover:bg-accent',
-  teacher: 'bg-sev-low-bg text-sev-low hover:bg-sev-low-bg',
-  assistant: 'bg-sev-low-bg text-sev-low hover:bg-sev-low-bg',
-  student: '',
-};
+import { RoleBadge } from '@/components/common/RoleBadge';
 
 interface UserRowProps {
   user: UserDetail;
@@ -39,9 +31,7 @@ export function UserRow({ user, actions }: UserRowProps) {
         </div>
       </TableCell>
       <TableCell>
-        <Badge variant="outline" className={`font-normal ${ROLE_CLASS[user.global_role] ?? ''}`}>
-          {roleLabel(user.global_role)}
-        </Badge>
+        <RoleBadge role={user.global_role} />
       </TableCell>
       <TableCell>
         {user.status === 'active' ? (

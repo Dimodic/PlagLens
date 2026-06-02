@@ -17,6 +17,7 @@ import {
 } from '@/hooks/api/useNotificationsApi';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import type {
   ChannelsEnabled,
   DigestFrequency,
@@ -38,7 +39,8 @@ import {
 import { Switch } from '@/components/ui/switch';
 
 export default function PreferencesPage() {
-  useDocumentTitle('Настройки уведомлений');
+  const { t } = useTranslation();
+  useDocumentTitle(t('preferences_page.document_title'));
   const prefs = useNotificationPreferences();
   const perEvent = usePerEventPreferences();
   const events = useAvailableEvents();
@@ -84,9 +86,12 @@ export default function PreferencesPage() {
         timezone: tz || null,
       },
       {
-        onSuccess: () => notify.success('Сохранено'),
+        onSuccess: () => notify.success(t('preferences_page.notify_saved')),
         onError: (p) =>
-          notify.error((p as unknown as Problem).title || 'Не удалось сохранить'),
+          notify.error(
+            (p as unknown as Problem).title ||
+              t('preferences_page.notify_save_failed'),
+          ),
       },
     );
     updatePerEvent.mutate(matrix);
@@ -98,10 +103,17 @@ export default function PreferencesPage() {
       {
         onSuccess: (r) =>
           r.delivered
-            ? notify.success(`Тестовое отправлено (${channel})`)
-            : notify.error(`Не удалось отправить (${channel})`),
+            ? notify.success(
+                t('preferences_page.notify_test_sent', { channel }),
+              )
+            : notify.error(
+                t('preferences_page.notify_test_failed', { channel }),
+              ),
         onError: (p) =>
-          notify.error((p as unknown as Problem).title || 'Ошибка теста'),
+          notify.error(
+            (p as unknown as Problem).title ||
+              t('preferences_page.notify_test_error'),
+          ),
       },
     );
   };
@@ -118,12 +130,14 @@ export default function PreferencesPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title="Уведомления" />
+      <PageHeader title={t('preferences_page.page_title')} />
       <div className="space-y-4">
           <Card>
             <CardContent className="p-4">
               <div className="space-y-4">
-                <h2 className="text-xl font-bold">Каналы</h2>
+                <h2 className="text-xl font-bold">
+                  {t('preferences_page.channels_heading')}
+                </h2>
                 <div className="flex flex-wrap items-center gap-6">
                   <div className="flex items-center gap-2">
                     <Switch
@@ -166,7 +180,7 @@ export default function PreferencesPage() {
                     onClick={() => onTest('inapp')}
                     data-testid="test-inapp"
                   >
-                    Тест in-app
+                    {t('preferences_page.test_inapp')}
                   </Button>
                   <Button
                     variant="outline"
@@ -174,7 +188,7 @@ export default function PreferencesPage() {
                     onClick={() => onTest('email')}
                     data-testid="test-email"
                   >
-                    Тест email
+                    {t('preferences_page.test_email')}
                   </Button>
                   <Button
                     variant="outline"
@@ -182,7 +196,7 @@ export default function PreferencesPage() {
                     onClick={() => onTest('telegram')}
                     data-testid="test-telegram"
                   >
-                    Тест telegram
+                    {t('preferences_page.test_telegram')}
                   </Button>
                 </div>
               </div>
@@ -192,9 +206,13 @@ export default function PreferencesPage() {
           <Card>
             <CardContent className="p-4">
               <div className="space-y-4">
-                <h2 className="text-xl font-bold">Дайджест и тишина</h2>
+                <h2 className="text-xl font-bold">
+                  {t('preferences_page.digest_quiet_heading')}
+                </h2>
                 <div className="space-y-1.5">
-                  <Label htmlFor="digest-select">Частота email-дайджеста</Label>
+                  <Label htmlFor="digest-select">
+                    {t('preferences_page.digest_frequency_label')}
+                  </Label>
                   <Select
                     value={digest}
                     onValueChange={(v) => v && setDigest(v as DigestFrequency)}
@@ -203,17 +221,25 @@ export default function PreferencesPage() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="instant">Мгновенно</SelectItem>
-                      <SelectItem value="hourly">Раз в час</SelectItem>
-                      <SelectItem value="daily">Раз в день</SelectItem>
-                      <SelectItem value="never">Никогда</SelectItem>
+                      <SelectItem value="instant">
+                        {t('preferences_page.digest_instant')}
+                      </SelectItem>
+                      <SelectItem value="hourly">
+                        {t('preferences_page.digest_hourly')}
+                      </SelectItem>
+                      <SelectItem value="daily">
+                        {t('preferences_page.digest_daily')}
+                      </SelectItem>
+                      <SelectItem value="never">
+                        {t('preferences_page.digest_never')}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-1.5">
                     <Label htmlFor="quiet-start">
-                      Тихие часы — начало (HH:MM)
+                      {t('preferences_page.quiet_start_label')}
                     </Label>
                     <Input
                       id="quiet-start"
@@ -224,7 +250,7 @@ export default function PreferencesPage() {
                   </div>
                   <div className="space-y-1.5">
                     <Label htmlFor="quiet-end">
-                      Тихие часы — конец (HH:MM)
+                      {t('preferences_page.quiet_end_label')}
                     </Label>
                     <Input
                       id="quiet-end"
@@ -235,7 +261,9 @@ export default function PreferencesPage() {
                   </div>
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="prefs-tz">Часовой пояс</Label>
+                  <Label htmlFor="prefs-tz">
+                    {t('preferences_page.timezone_label')}
+                  </Label>
                   <Input
                     id="prefs-tz"
                     value={tz}
@@ -250,7 +278,9 @@ export default function PreferencesPage() {
           <Card>
             <CardContent className="p-4">
               <div className="space-y-4">
-                <h2 className="text-base font-semibold tracking-tight">Матрица событий</h2>
+                <h2 className="text-base font-semibold tracking-tight">
+                  {t('preferences_page.event_matrix_heading')}
+                </h2>
                 <PreferencesMatrix
                   events={events.data ?? []}
                   value={matrix}
@@ -270,7 +300,7 @@ export default function PreferencesPage() {
               {reset.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Сбросить к дефолту
+              {t('preferences_page.reset_button')}
             </Button>
             <Button
               onClick={save}
@@ -280,7 +310,7 @@ export default function PreferencesPage() {
               {(update.isPending || updatePerEvent.isPending) && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Сохранить
+              {t('preferences_page.save_button')}
             </Button>
           </div>
         </div>

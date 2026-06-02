@@ -115,17 +115,21 @@ async def test_tenant_dashboard_other_tenant_forbidden(client_factory, admin_pri
 
 
 @pytest.mark.asyncio
-async def test_global_dashboard_super_admin(client_factory, super_admin_principal):
-    async with client_factory(super_admin_principal) as cli:
+async def test_global_dashboard_admin(client_factory, admin_principal):
+    async with client_factory(admin_principal) as cli:
         r = await cli.get("/api/v1/admin/dashboard/global")
         assert r.status_code == 200
 
 
 @pytest.mark.asyncio
-async def test_global_dashboard_forbids_admin(client_factory, admin_principal):
-    async with client_factory(admin_principal) as cli:
+async def test_global_dashboard_forbids_non_admin(
+    client_factory, teacher_principal, student_principal
+):
+    async with client_factory(teacher_principal) as cli:
         r = await cli.get("/api/v1/admin/dashboard/global")
-        # admin without super_admin must be 403
+        assert r.status_code == 403
+    async with client_factory(student_principal) as cli:
+        r = await cli.get("/api/v1/admin/dashboard/global")
         assert r.status_code == 403
 
 

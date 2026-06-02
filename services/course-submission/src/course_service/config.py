@@ -45,7 +45,9 @@ class Settings(BaseSettings):
     jwt_audience: str = "plaglens"
 
     integration_service_url: str = "http://integration:8000"
-    submission_service_url: str = "http://submission:8000"
+    # NOTE: submission stats are read in-process (merged course+submission
+    # service), so there is no ``submission_service_url`` — that self-HTTP hop
+    # was removed. plagiarism/ai remain separate services, reached over HTTP.
     plagiarism_service_url: str = "http://plagiarism:8000"
     ai_service_url: str = "http://ai:8000"
     http_client_timeout_s: float = 5.0

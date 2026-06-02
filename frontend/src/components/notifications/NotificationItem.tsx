@@ -17,6 +17,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type {
   NotificationItem as NotificationModel,
   NotificationSeverity,
@@ -58,12 +59,18 @@ export function NotificationItem({
   onArchive,
   compact,
 }: NotificationItemProps) {
+  const { t } = useTranslation();
   const severity: NotificationSeverity = n.severity ?? 'info';
   return (
     <div
       data-testid={`notification-item-${n.id}`}
       data-notification-id={n.id}
       data-read={n.read ? 'true' : 'false'}
+      // Read-on-hover: moving the pointer over an unread item marks it read
+      // (the parent dedupes the call so it fires once).
+      onMouseEnter={() => {
+        if (!n.read) onMarkRead?.(n.id);
+      }}
       className={cn(
         'mb-2 border-l-[3px] pl-2',
         SEVERITY_BORDER[severity],
@@ -74,7 +81,7 @@ export function NotificationItem({
         <button
           type="button"
           onClick={() => onClick?.(n)}
-          aria-label="Открыть"
+          aria-label={t('notification_item.open')}
           className="flex-1 min-w-0 text-left rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
         >
           <div className="flex items-start gap-2">
@@ -120,12 +127,12 @@ export function NotificationItem({
                     onMarkRead(n.id);
                   }}
                   data-testid={`mark-read-${n.id}`}
-                  aria-label="Отметить прочитанным"
+                  aria-label={t('notification_item.mark_read')}
                 >
                   <Check className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Отметить прочитанным</TooltipContent>
+              <TooltipContent>{t('notification_item.mark_read')}</TooltipContent>
             </Tooltip>
           )}
           {onArchive && (
@@ -140,12 +147,12 @@ export function NotificationItem({
                     onArchive(n.id);
                   }}
                   data-testid={`archive-${n.id}`}
-                  aria-label="Архивировать"
+                  aria-label={t('notification_item.archive')}
                 >
                   <Archive className="h-3.5 w-3.5" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Архивировать</TooltipContent>
+              <TooltipContent>{t('notification_item.archive')}</TooltipContent>
             </Tooltip>
           )}
         </div>

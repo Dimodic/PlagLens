@@ -104,7 +104,7 @@ CurrentUser = Annotated[AuthContext, Depends(current_user)]
 
 def require_global_role(*roles: str):
     async def _checker(user: CurrentUser) -> AuthContext:
-        if user.global_role in set(roles) or user.is_super_admin:
+        if user.global_role in set(roles) or user.is_admin:
             return user
         raise forbidden(f"Global role required: {', '.join(roles)}")
 

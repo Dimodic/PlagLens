@@ -3,6 +3,7 @@
  */
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type { RunStatus } from '@/api/endpoints/plagiarism';
 
 const CLASS: Record<RunStatus, string> = {
@@ -13,22 +14,15 @@ const CLASS: Record<RunStatus, string> = {
   cancelled: 'bg-sev-mid-bg text-sev-mid hover:bg-sev-mid-bg',
 };
 
-const LABEL: Record<RunStatus, string> = {
-  queued: 'В очереди',
-  running: 'Выполняется',
-  completed: 'Готово',
-  failed: 'Ошибка',
-  cancelled: 'Отменено',
-};
-
 interface RunStatusBadgeProps {
   status: RunStatus;
 }
 
 export function RunStatusBadge({ status }: RunStatusBadgeProps) {
+  const { t } = useTranslation();
   return (
     <Badge variant="secondary" className={cn('font-normal', CLASS[status])}>
-      {LABEL[status]}
+      {t(`run_status_badge.${status}`)}
     </Badge>
   );
 }

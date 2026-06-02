@@ -8,9 +8,11 @@ import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuditAccessDenied } from '@/hooks/api/useAudit';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function AuditAccessDeniedPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Access denied');
   const { data, isLoading, error } = useAuditAccessDenied({ limit: 50 });
 
@@ -25,7 +27,7 @@ export function AuditAccessDeniedPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Отказов нет" />
+        <EmptyState title={t('audit_access_denied.empty')} />
       ) : (
         <div className="space-y-3">
           {data?.data.map((e) => <AuditEventCard key={e.id} event={e} />)}

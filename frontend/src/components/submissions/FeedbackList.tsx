@@ -3,6 +3,7 @@
  */
 import { Eye, EyeOff, Trash2 } from 'lucide-react';
 import type { SubmissionFeedback } from '@/api/endpoints/submissions';
+import { useTranslation } from '@/i18n';
 import { formatDateTime } from '@/utils/formatters';
 import { EmptyState } from '@/components/common/EmptyState';
 import { Badge } from '@/components/ui/badge';
@@ -22,11 +23,12 @@ export function FeedbackList({
   onTogglePublish,
   onDelete,
 }: FeedbackListProps) {
+  const { t } = useTranslation();
   if (items.length === 0) {
     return (
       <EmptyState
-        title="Нет комментариев"
-        message="Добавьте первый комментарий ниже."
+        title={t('feedback_list.empty_title')}
+        message={t('feedback_list.empty_message')}
       />
     );
   }
@@ -47,14 +49,16 @@ export function FeedbackList({
                       variant="outline"
                       className="font-normal text-xs bg-accent/40 border-accent"
                     >
-                      из LLM
+                      {t('feedback_list.from_llm')}
                     </Badge>
                   )}
                   <Badge
                     variant={fb.visible_to_student ? 'default' : 'secondary'}
                     className="font-normal text-xs"
                   >
-                    {fb.visible_to_student ? 'видно студенту' : 'скрыто'}
+                    {fb.visible_to_student
+                      ? t('feedback_list.visible_to_student')
+                      : t('feedback_list.hidden')}
                   </Badge>
                 </div>
                 {canManage && (
@@ -65,7 +69,9 @@ export function FeedbackList({
                         size="icon"
                         onClick={() => onTogglePublish(fb)}
                         aria-label={
-                          fb.visible_to_student ? 'Скрыть' : 'Опубликовать'
+                          fb.visible_to_student
+                            ? t('feedback_list.hide')
+                            : t('feedback_list.publish')
                         }
                       >
                         {fb.visible_to_student ? (
@@ -80,7 +86,7 @@ export function FeedbackList({
                         variant="ghost"
                         size="icon"
                         onClick={() => onDelete(fb)}
-                        aria-label="Удалить"
+                        aria-label={t('common.delete')}
                         className="text-destructive hover:text-destructive"
                       >
                         <Trash2 className="h-4 w-4" />

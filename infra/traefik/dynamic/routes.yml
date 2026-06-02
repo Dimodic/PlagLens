@@ -1,7 +1,10 @@
 # PlagLens — Traefik dynamic config.
-# Most routes are derived from container labels (`traefik.enable=true` on the
-# gateway). This file holds non-Docker routes (Grafana, Jaeger UI, kafka-ui,
-# mailhog, MinIO console, Vault) plus middlewares used by the gateway labels.
+# Most routes are derived from container labels (`traefik.enable=true`). The
+# gateway/frontend and the observability panels (Grafana/Prometheus/Jaeger) are
+# routed via labels (they need `${PUBLIC_HOSTNAME}`, which the file provider does
+# NOT expand). This file holds the dev-only `*.localhost` routes for the
+# remaining infra UIs (kafka-ui, mailhog, MinIO console, Vault) plus the shared
+# middlewares referenced from labels (`secure-headers@file`, `obs-auth@file`).
 
 http:
   middlewares:
@@ -19,23 +22,19 @@ http:
         average: 100
         burst: 200
 
+    # Admin-only gate for the observability panels (Grafana/Prometheus/Jaeger),
+    # referenced from their container labels as `obs-auth@file`. The password is
+    # stored ONLY as this apr1 hash; the plaintext is held by the admin.
+    obs-auth:
+      basicAuth:
+        # Strip the Authorization header after validating, so it does NOT leak
+        # into the upstream — otherwise Grafana tries to use admin:<gate-pw> as
+        # its OWN credentials, fails, and (with anonymous on) drops to Viewer.
+        removeHeader: true
+        users:
+          - "admin:$apr1$/q617WnV$iC7lG3OvLcVcLb0bLphm.0"
+
   routers:
-    grafana:
-      rule: "Host(`grafana.localhost`)"
-      entryPoints: [websecure]
-      service: grafana
-      tls: {}
-
-      middlewares: [secure-headers]
-
-    jaeger:
-      rule: "Host(`jaeger.localhost`)"
-      entryPoints: [websecure]
-      service: jaeger
-      tls: {}
-
-      middlewares: [secure-headers]
-
     kafka-ui:
       rule: "Host(`kafka.localhost`)"
       entryPoints: [websecure]
@@ -69,14 +68,6 @@ http:
       middlewares: [secure-headers]
 
   services:
-    grafana:
-      loadBalancer:
-        servers:
-          - url: "http://grafana:3000"
-    jaeger:
-      loadBalancer:
-        servers:
-          - url: "http://jaeger:16686"
     kafka-ui:
       loadBalancer:
         servers:

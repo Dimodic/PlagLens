@@ -129,6 +129,40 @@ class ClaimExternalResult(BaseModel):
     claimed: int
 
 
+class MigrateAuthorRemap(BaseModel):
+    """One ``yc:<participantId>`` → ``yc:<login>`` author-id rename."""
+
+    from_: str = Field(min_length=1, alias="from")
+    to: str = Field(min_length=1)
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class MigrateAuthorClaim(BaseModel):
+    """One ``yc:<login>`` → ``usr_…`` claim (an identity binding)."""
+
+    external_id: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+
+
+class MigrateExternalAuthorsRequest(BaseModel):
+    """Body of POST /submissions:migrate-external-authors (admin/service token).
+
+    Reconciles Yandex.Contest author ids after a contest-scoped participant id
+    was swapped for a stable login. ``remaps`` rewrite the unstable keys;
+    ``claims`` reattribute the now-stable keys to bound PlagLens users. The
+    tenant is taken from the caller's token, NEVER the body.
+    """
+
+    remaps: list[MigrateAuthorRemap] = Field(default_factory=list)
+    claims: list[MigrateAuthorClaim] = Field(default_factory=list)
+
+
+class MigrateExternalAuthorsResult(BaseModel):
+    submissions_updated: int
+    claimed: int
+
+
 class ExternalParticipantOut(BaseModel):
     external_id: str
     display_name: str | None = None

@@ -2,6 +2,7 @@
  * Coloured status badge for an AI Analysis.
  */
 import { Badge } from '@/components/ui/badge';
+import { useTranslation } from '@/i18n';
 import type { AnalysisStatus } from '@/api/endpoints/ai';
 
 const CLASSES: Record<AnalysisStatus, string> = {
@@ -12,12 +13,12 @@ const CLASSES: Record<AnalysisStatus, string> = {
   cancelled: 'bg-sev-mid-bg text-sev-mid border-transparent',
 };
 
-const LABEL: Record<AnalysisStatus, string> = {
-  queued: 'В очереди',
-  running: 'Анализирует',
-  completed: 'Готово',
-  failed: 'Ошибка',
-  cancelled: 'Отменено',
+const LABEL_KEY: Record<AnalysisStatus, string> = {
+  queued: 'analysis_status_badge.queued',
+  running: 'analysis_status_badge.running',
+  completed: 'analysis_status_badge.completed',
+  failed: 'analysis_status_badge.failed',
+  cancelled: 'analysis_status_badge.cancelled',
 };
 
 interface AnalysisStatusBadgeProps {
@@ -25,9 +26,10 @@ interface AnalysisStatusBadgeProps {
 }
 
 export function AnalysisStatusBadge({ status }: AnalysisStatusBadgeProps) {
+  const { t } = useTranslation();
   return (
     <Badge variant="outline" className={`font-normal ${CLASSES[status]}`}>
-      {LABEL[status]}
+      {t(LABEL_KEY[status])}
     </Badge>
   );
 }

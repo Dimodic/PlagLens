@@ -12,6 +12,7 @@ import { coursesApi } from '@/api/endpoints/courses';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useNotifications } from '@/hooks/useNotifications';
 import { parseProblem } from '@/api/problem';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -30,6 +31,7 @@ interface JoinByCodeDialogProps {
 }
 
 export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const notify = useNotifications();
   const join = useJoinByCode();
@@ -54,13 +56,13 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
     e.preventDefault();
     setProblem(null);
     if (code.trim().length < 4) {
-      setCodeError('Слишком короткий код');
+      setCodeError(t('join_by_code.code_too_short'));
       return;
     }
     setCodeError(null);
     try {
       const res = await join.mutateAsync(code.trim());
-      notify.success('Вы присоединились к курсу');
+      notify.success(t('join_by_code.joined_success'));
       onOpenChange(false);
       setCode('');
       const maybeSlug =
@@ -90,11 +92,11 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Присоединиться к курсу</DialogTitle>
+          <DialogTitle>{t('join_by_code.title')}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4" noValidate>
           <div className="space-y-1.5">
-            <Label htmlFor="join-code">Код приглашения</Label>
+            <Label htmlFor="join-code">{t('join_by_code.code_label')}</Label>
             <Input
               id="join-code"
               value={code}
@@ -115,7 +117,7 @@ export function JoinByCodeDialog({ open, onOpenChange }: JoinByCodeDialogProps) 
           <DialogFooter>
             <Button type="submit" disabled={join.isPending} data-testid="join-submit">
               {join.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Присоединиться
+              {t('join_by_code.submit')}
             </Button>
           </DialogFooter>
         </form>

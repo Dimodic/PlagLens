@@ -19,13 +19,21 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import httpx
+from plaglens_common.errors import NotFoundError, PlagLensError
+from plaglens_common.service_client import ServiceClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...config import get_settings
 from ...models.reporting import AssignmentStats, UserGradesSummary
 from .base import BuilderResult
+
+
+def _upstream_msg(service: str, exc: PlagLensError) -> str:
+    """Reproduce the old ``f"{service} {status}: {body}"`` RuntimeError text
+    from a ServiceClient ``PlagLensError`` (which carries the mapped status
+    and the upstream Problem detail)."""
+    return f"{service} {getattr(exc, 'status', 502)}: {exc.detail or ''}"[:220]
 
 DEFAULT_COLUMNS = [
     "user_id",
@@ -90,7 +98,18 @@ async def _build_homework_matrix(
     anonymize = bool(options.get("anonymize", False))
     headers = {"Authorization": bearer_token}
 
-    async with httpx.AsyncClient(timeout=_HTTP_TIMEOUT_S) as client:
+    async with (
+        ServiceClient(
+            settings.course_service_base_url,
+            provider="course",
+            timeout=_HTTP_TIMEOUT_S,
+        ) as course,
+        ServiceClient(
+            settings.submission_service_base_url,
+            provider="submission",
+            timeout=_HTTP_TIMEOUT_S,
+        ) as submission,
+    ):
         # 1. Per-homework meta — title (cosmetic, for the export title)
         #    AND its assignment list (stable order matters → sequential).
         homework_titles: list[str] = []
@@ -98,30 +117,24 @@ async def _build_homework_matrix(
         seen_labels: set[str] = set()
         for hw_id in homework_ids:
             try:
-                hr = await client.get(
-                    f"{settings.course_service_base_url}"
-                    f"/api/v1/homeworks/{hw_id}",
-                    headers=headers,
+                hr = await course.get(
+                    f"/api/v1/homeworks/{hw_id}", headers=headers
                 )
-                hw_title = (
-                    str(hr.json().get("title") or f"ДЗ {hw_id}")
-                    if hr.status_code < 400
-                    else f"ДЗ {hw_id}"
-                )
-            except httpx.HTTPError:
+                hw_title = str(hr.json().get("title") or f"ДЗ {hw_id}")
+            except PlagLensError:
+                # Transport *or* any non-2xx — both fell through to the
+                # default title before (the old ``status_code < 400`` guard).
                 hw_title = f"ДЗ {hw_id}"
             homework_titles.append(hw_title)
 
-            ar = await client.get(
-                f"{settings.course_service_base_url}"
-                f"/api/v1/homeworks/{hw_id}/assignments",
-                headers=headers,
-                params={"limit": 500},
-            )
-            if ar.status_code >= 400:
-                raise RuntimeError(
-                    f"course service {ar.status_code}: {ar.text[:200]}"
+            try:
+                ar = await course.get(
+                    f"/api/v1/homeworks/{hw_id}/assignments",
+                    headers=headers,
+                    params={"limit": 500},
                 )
+            except PlagLensError as exc:
+                raise RuntimeError(_upstream_msg("course service", exc)) from exc
             raw_assignments = ar.json().get("data", []) or []
             for a in raw_assignments:
                 aid = str(a.get("id"))
@@ -140,17 +153,16 @@ async def _build_homework_matrix(
         # 2. Per-assignment grades, fetched concurrently across all
         #    homeworks at once.
         async def _fetch(aid: str) -> list[dict[str, Any]]:
-            gr = await client.get(
-                f"{settings.submission_service_base_url}"
-                f"/api/v1/assignments/{aid}/grades",
-                headers=headers,
-            )
-            if gr.status_code == 404:
-                return []
-            if gr.status_code >= 400:
-                raise RuntimeError(
-                    f"submission service {gr.status_code}: {gr.text[:200]}"
+            try:
+                gr = await submission.get(
+                    f"/api/v1/assignments/{aid}/grades", headers=headers
                 )
+            except NotFoundError:
+                return []
+            except PlagLensError as exc:
+                raise RuntimeError(
+                    _upstream_msg("submission service", exc)
+                ) from exc
             payload = gr.json()
             return payload if isinstance(payload, list) else []
 

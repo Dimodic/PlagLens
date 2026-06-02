@@ -18,6 +18,7 @@ import {
 } from '@/hooks/api/useHomeworks';
 import { useDebounce } from '@/hooks/useDebounce';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { CourseBrief } from '@/api/endpoints/courses';
 import type { Homework } from '@/api/endpoints/homeworks';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,8 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { cn } from '@/components/ui/utils';
 
 export default function CoursesListPage() {
-  useDocumentTitle('Курсы');
+  const { t } = useTranslation();
+  useDocumentTitle(t('courses_list.title'));
   const { user } = useAuth();
   // Archive view is a toggle, not a tab: default off (показываем активные).
   // The full-width "Все / Активные / В архиве" tab strip read as too heavy
@@ -79,7 +81,7 @@ export default function CoursesListPage() {
   return (
     <Page width="regular" data-testid="courses-list-page">
       <PageHeader
-        title={<span data-testid="courses-list-title">Курсы</span>}
+        title={<span data-testid="courses-list-title">{t('courses_list.title')}</span>}
         action={
           // Three icon-style controls + create button. Search expands
           // in place (width animates 36 → 240px) so the surrounding
@@ -104,8 +106,8 @@ export default function CoursesListPage() {
                     ref={searchInputRef}
                     value={q}
                     onChange={(e) => setQ(e.currentTarget.value)}
-                    placeholder="Поиск"
-                    aria-label="Поиск"
+                    placeholder={t('courses_list.search_placeholder')}
+                    aria-label={t('courses_list.search_placeholder')}
                     // Override shadcn's default 3px focus ring — it stacks
                     // with the rounded-full pill and reads as a fat double
                     // border. We keep just a single-color border that
@@ -118,7 +120,7 @@ export default function CoursesListPage() {
                   <button
                     type="button"
                     onClick={() => setSearchOpen(false)}
-                    aria-label="Закрыть поиск"
+                    aria-label={t('courses_list.search_close')}
                     className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-4 w-4" />
@@ -129,7 +131,7 @@ export default function CoursesListPage() {
                   variant="ghost"
                   size="icon"
                   onClick={() => setSearchOpen(true)}
-                  aria-label="Поиск"
+                  aria-label={t('courses_list.search_placeholder')}
                   data-testid="courses-list-search-toggle"
                 >
                   <Search className="h-4 w-4" />
@@ -141,22 +143,30 @@ export default function CoursesListPage() {
               size="icon"
               onClick={() => setShowArchived((v) => !v)}
               aria-pressed={showArchived}
-              aria-label={showArchived ? 'Скрыть архив' : 'Показать архив'}
-              title={showArchived ? 'Скрыть архив' : 'Показать архив'}
+              aria-label={
+                showArchived
+                  ? t('courses_list.archive_hide')
+                  : t('courses_list.archive_show')
+              }
+              title={
+                showArchived
+                  ? t('courses_list.archive_hide')
+                  : t('courses_list.archive_show')
+              }
               data-testid="courses-list-archive-toggle"
             >
               <Archive className="h-4 w-4" />
             </Button>
             {!canCreate && (
               <Button asChild variant="outline" data-testid="courses-list-join-button">
-                <Link to="/courses/join">Присоединиться</Link>
+                <Link to="/courses/join">{t('courses_list.join')}</Link>
               </Button>
             )}
             {canCreate && (
               <Button asChild data-testid="courses-list-create-button">
                 <Link to="/courses/new">
                   <Plus className="mr-2 h-4 w-4" />
-                  Создать
+                  {t('common.create')}
                 </Link>
               </Button>
             )}
@@ -172,12 +182,12 @@ export default function CoursesListPage() {
           data-testid="courses-list-empty"
           title={
             showArchived
-              ? 'В архиве пусто.'
+              ? t('courses_list.empty_archived')
               : debouncedQ
-                ? 'Ничего не нашлось.'
+                ? t('courses_list.empty_search')
                 : canCreate
-                  ? 'У вас пока нет курсов.'
-                  : 'Используйте код приглашения.'
+                  ? t('courses_list.empty_teacher')
+                  : t('courses_list.empty_student')
           }
         />
       ) : (
@@ -205,6 +215,7 @@ function formatDueShort(iso: string | null): string | null {
  * dividers (`divide-y` on the parent). Each homework can be expanded to
  * show its assignments inline. */
 function CourseSection({ course }: { course: CourseBrief }) {
+  const { t } = useTranslation();
   const hwQ = useHomeworksForCourse(course.id, { limit: 100 });
   const homeworks = hwQ.data?.data ?? [];
   return (
@@ -240,7 +251,7 @@ function CourseSection({ course }: { course: CourseBrief }) {
               data-testid="course-card-status"
               className="text-xs text-muted-foreground/70"
             >
-              в архиве
+              {t('courses_list.archived_marker')}
             </span>
           )}
           {typeof course.members_count === 'number' && (
@@ -255,10 +266,10 @@ function CourseSection({ course }: { course: CourseBrief }) {
       <div className="mt-5 pl-10">
         {hwQ.isLoading ? (
           <div className="py-2 text-sm text-muted-foreground">
-            Загрузка ДЗ…
+            {t('courses_list.homeworks_loading')}
           </div>
         ) : homeworks.length === 0 ? (
-          <div className="py-2 text-sm text-muted-foreground">Нет ДЗ</div>
+          <div className="py-2 text-sm text-muted-foreground">{t('courses_list.homeworks_empty')}</div>
         ) : (
           <div className="divide-y divide-border/30">
             {homeworks.map((hw) => (
@@ -271,21 +282,82 @@ function CourseSection({ course }: { course: CourseBrief }) {
   );
 }
 
-/** One row inside a CourseSection. Whole row toggles a lazily-fetched
- * assignments list inline — there is no standalone homework page any
- * more. Click anywhere on the row → expand / collapse. */
+/** One row inside a CourseSection.
+ *
+ * A *collection* ДЗ (kind === 'collection') toggles a lazily-fetched
+ * assignments list inline — the whole row expands / collapses.
+ *
+ * A *single* ДЗ (kind === 'single') has exactly one assignment and no
+ * inner list, so it renders flat: no chevron, the whole row links
+ * straight to that assignment. We eager-fetch its one assignment to know
+ * the link target; the chevron is never shown (kind is known up-front),
+ * so it can't flicker in while the fetch resolves. */
 function HomeworkSubrow({ hw }: { hw: Homework }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
-  const asgQ = useHomeworkAssignments(open ? hw.id : undefined, { limit: 50 });
+  const isSingleKind = hw.kind === 'single';
+  const asgQ = useHomeworkAssignments(
+    isSingleKind || open ? hw.id : undefined,
+    { limit: isSingleKind ? 1 : 50 },
+  );
   const assignments = asgQ.data?.data ?? [];
   const due = formatDueShort(hw.due_at);
+
+  // Structural single-ДЗ row: flat, chevron-less, links to the lone
+  // assignment. Fall back to the collection toggle only if the kind says
+  // single but the data disagrees (no/many assignments) — shouldn't
+  // happen, but keeps the row reachable.
+  if (isSingleKind && (asgQ.isLoading || assignments.length === 1)) {
+    const target = assignments[0]
+      ? `/assignments/${assignments[0].id}`
+      : undefined;
+    const inner = (
+      <>
+        {/* spacer where the collection chevron would sit, so single and
+            collection rows align */}
+        <span className="h-5 w-5 flex-none" aria-hidden />
+        <span className="flex-1 min-w-0 flex items-center justify-between gap-4">
+          <span className="text-base font-medium text-foreground truncate">
+            {hw.title}
+          </span>
+          {due && (
+            <span className="text-sm text-muted-foreground shrink-0">
+              {t('courses_list.due', { date: due })}
+            </span>
+          )}
+        </span>
+      </>
+    );
+    return (
+      <div data-testid={`course-hw-${hw.id}`}>
+        {target ? (
+          <Link
+            to={target}
+            data-testid={`asg-row-${assignments[0].id}`}
+            className="w-full flex items-center gap-3 py-3.5 text-left hover:text-foreground"
+          >
+            {inner}
+          </Link>
+        ) : (
+          <div className="w-full flex items-center gap-3 py-3.5 text-left text-muted-foreground">
+            {inner}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div data-testid={`course-hw-${hw.id}`}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        aria-label={open ? 'Свернуть задания' : 'Развернуть задания'}
+        aria-label={
+          open
+            ? t('courses_list.assignments_collapse')
+            : t('courses_list.assignments_expand')
+        }
         className="w-full flex items-center gap-3 py-3.5 text-left hover:text-foreground"
       >
         <span className="text-muted-foreground" aria-hidden>
@@ -301,7 +373,7 @@ function HomeworkSubrow({ hw }: { hw: Homework }) {
           </span>
           {due && (
             <span className="text-sm text-muted-foreground shrink-0">
-              до {due}
+              {t('courses_list.due', { date: due })}
             </span>
           )}
         </span>
@@ -310,11 +382,11 @@ function HomeworkSubrow({ hw }: { hw: Homework }) {
         <div className="pl-9 pb-3">
           {asgQ.isLoading ? (
             <div className="text-sm text-muted-foreground py-1.5">
-              Загрузка…
+              {t('common.loading')}
             </div>
           ) : assignments.length === 0 ? (
             <div className="text-sm text-muted-foreground py-1.5">
-              Заданий нет
+              {t('courses_list.assignments_empty')}
             </div>
           ) : (
             <ul className="space-y-1">

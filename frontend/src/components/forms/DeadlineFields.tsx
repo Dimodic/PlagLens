@@ -8,6 +8,7 @@
 import { useId } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/i18n';
 
 interface DeadlineFieldsProps {
   softAt: string | null;
@@ -37,12 +38,13 @@ export function DeadlineFields({
   onChange,
   error,
 }: DeadlineFieldsProps) {
+  const { t } = useTranslation();
   const softId = useId();
   const hardId = useId();
   return (
     <div className="grid gap-3 sm:grid-cols-2">
       <div className="space-y-1.5">
-        <Label htmlFor={softId}>Мягкий дедлайн</Label>
+        <Label htmlFor={softId}>{t('deadline_fields.soft_label')}</Label>
         <Input
           id={softId}
           type="datetime-local"
@@ -52,11 +54,11 @@ export function DeadlineFields({
           }
         />
         <p className="text-xs text-muted-foreground">
-          После — посылки оцениваются с понижающим множителем
+          {t('deadline_fields.soft_hint')}
         </p>
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor={hardId}>Жёсткий дедлайн</Label>
+        <Label htmlFor={hardId}>{t('deadline_fields.hard_label')}</Label>
         <Input
           id={hardId}
           type="datetime-local"
@@ -70,7 +72,7 @@ export function DeadlineFields({
           <p className="text-sm text-destructive">{error}</p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            После — оценка автоматически 0
+            {t('deadline_fields.hard_hint')}
           </p>
         )}
       </div>

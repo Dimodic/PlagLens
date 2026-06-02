@@ -8,6 +8,7 @@ import { RetentionPolicyForm } from '@/components/admin/RetentionPolicyForm';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useRetentionPolicy,
   useUpdateRetentionPolicy,
@@ -15,14 +16,15 @@ import {
 import type { Problem } from '@/api/types';
 
 export function AuditRetentionPolicyPage() {
-  useDocumentTitle('Retention policy');
+  const { t } = useTranslation();
+  useDocumentTitle(t('audit_retention.title'));
   const notify = useNotifications();
   const { data, isLoading, error } = useRetentionPolicy();
   const update = useUpdateRetentionPolicy();
 
   return (
     <Page width="narrow">
-      <PageHeader title="Retention policy" />
+      <PageHeader title={t('audit_retention.title')} />
 
       {error && <ProblemAlert problem={error as unknown as Problem} />}
 
@@ -39,9 +41,9 @@ export function AuditRetentionPolicyPage() {
               onSubmit={async (body) => {
                 try {
                   await update.mutateAsync(body);
-                  notify.success('Сохранено');
+                  notify.success(t('audit_retention.saved'));
                 } catch (e) {
-                  notify.error((e as Problem)?.detail ?? 'Не удалось');
+                  notify.error((e as Problem)?.detail ?? t('audit_retention.save_failed'));
                 }
               }}
             />

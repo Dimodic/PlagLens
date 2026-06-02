@@ -99,22 +99,33 @@ export interface GoogleSheetsLink {
 }
 
 /** One ДЗ's proposed placement into a sheet column (grades-match). */
-export interface GradesMatchColumn {
+/** How a homework's grades land in the sheet, computed server-side from
+ *  the live structure. ``tasks`` = each task in its own A…J column;
+ *  ``total`` = one summed column; ``none`` = couldn't place. */
+export interface GradesHomeworkPlan {
   homework_id: string;
   title: string;
   number: number | null;
-  column_index: number | null;
-  header_text?: string | number | null;
-  source: 'number' | 'llm' | 'none';
-  confidence: 'high' | 'medium' | 'none';
+  mode: 'tasks' | 'total' | 'none';
+  /** 0-based column indices that will be written. */
+  columns: number[];
+  task_count: number;
+  placed_cells: number;
+}
+
+/** One concrete cell to paint/write — backend already matched the student
+ *  to a row and the task to a column. */
+export interface GradesPlacement {
+  author_id: string;
+  row: number;
+  col: number;
+  value: number;
 }
 
 export interface GradesMatchStudent {
   author_id: string;
   name: string;
   row_index: number | null;
-  /** homework_id → aggregated grade for that ДЗ (null = not graded). */
-  values: Record<string, number | null>;
 }
 
 export interface GradesMatchResult {
@@ -122,11 +133,17 @@ export interface GradesMatchResult {
   sheet_name: string;
   header_row: number;
   name_col: number;
+  login_col: number | null;
   header: (string | number | null)[];
-  columns: GradesMatchColumn[];
+  /** Per-homework placement plan (mode + target columns + counts). */
+  homeworks: GradesHomeworkPlan[];
+  /** Flat list of cells to fill — ready to paint and to write. */
+  placements: GradesPlacement[];
   students: GradesMatchStudent[];
-  unmatched_homeworks: string[];
+  matched_students: number;
+  total_students: number;
   unmatched_students: string[];
+  unplaced_homeworks: string[];
 }
 
 export interface GradesWriteResult {
@@ -141,6 +158,12 @@ export interface GradesWriteResult {
 export interface PreviewCell {
   v: string | number | boolean | null;
   note?: string;
+  /** Source cell background as ``#rrggbb`` (omitted when it's the default
+   *  white / no-fill) — lets the preview mirror conditional-format colours. */
+  bg?: string;
+  /** Source text colour as ``#rrggbb`` (when not default black). */
+  fg?: string;
+  bold?: boolean;
 }
 
 /** One worksheet (tab) in a previewed spreadsheet. ``rows`` is a 2D
@@ -153,6 +176,9 @@ export interface PreviewWorksheet {
   row_count: number;
   col_count: number;
   rows: PreviewCell[][];
+  /** Per-column pixel widths from the source sheet (index-aligned to
+   *  columns, capped to the previewed window). */
+  col_widths?: number[];
 }
 
 /** Compact JSON rendering of a Google spreadsheet for the interactive
@@ -288,13 +314,6 @@ export interface TenantDashboard {
   plagiarism_runs_total: number;
   storage_used_bytes: number;
   cached?: boolean;
-}
-
-export interface IntegrationsHealthItem {
-  integration: string;
-  status: 'healthy' | 'degraded' | 'down';
-  last_check_at: string;
-  error?: string | null;
 }
 
 export interface GlobalDashboard {
@@ -487,16 +506,16 @@ export const reportingApi = {
       )
       .then((r) => r.data),
 
-  /** Commit the write using the teacher-confirmed column/row map.
-   *  Values are re-fetched server-side. */
+  /** Commit the write. If ``cells`` (from «Предзаписать») are passed they
+   *  are written verbatim — no recompute. Otherwise the server recomputes
+   *  the placement from the live sheet. */
   gradesWrite: (
     courseId: string,
     body: {
       homework_ids: string[];
       spreadsheet_id: string;
       sheet_name: string;
-      column_map: Record<string, number>;
-      row_map: Record<string, number>;
+      cells?: { row: number; col: number; value: number }[];
     },
   ) =>
     api
@@ -522,12 +541,12 @@ export const reportingApi = {
       )
       .then((r) => r.data),
 
-  /** Fetch a Google spreadsheet's contents (all tabs + cells + notes)
-   *  for the interactive export picker. The service account must have
-   *  read access to the spreadsheet — share it with the SA email first. */
+  /** Fetch a Google spreadsheet's contents for the interactive export
+   *  picker. Pass ``sheet_name`` to fetch just one tab (much faster on a
+   *  20-tab gradebook). The service account must have read access. */
   previewSpreadsheet: (
     spreadsheetId: string,
-    opts?: { max_rows?: number; max_cols?: number },
+    opts?: { max_rows?: number; max_cols?: number; sheet_name?: string },
   ) =>
     api
       .get<PreviewSpreadsheet>(
@@ -675,27 +694,11 @@ export const reportingApi = {
       .get<TenantDashboard>(`/tenants/${tenantId}/dashboard`)
       .then((r) => r.data),
 
-  tenantIntegrationsHealth: (tenantId: string) =>
-    api
-      .get<{ tenant_id: string; integrations: IntegrationsHealthItem[] }>(
-        `/tenants/${tenantId}/dashboard/integrations-health`,
-      )
-      // The endpoint wraps the list in an envelope; unwrap so callers get
-      // a plain array (the hook + component map over it directly).
-      .then((r) => r.data.integrations ?? []),
-
   // ---- F2. Whole-instance roll-up (admin default «all orgs» view) ----
   instanceOverview: () =>
     api
       .get<TenantDashboard>('/admin/dashboard/overview')
       .then((r) => r.data),
-
-  instanceIntegrationsHealth: () =>
-    api
-      .get<{ tenant_id: string; integrations: IntegrationsHealthItem[] }>(
-        '/admin/dashboard/integrations-health',
-      )
-      .then((r) => r.data.integrations ?? []),
 
   // ---- G. Global ----
   globalDashboard: () =>

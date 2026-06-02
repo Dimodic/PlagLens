@@ -26,6 +26,7 @@ import {
 } from '@/hooks/api/useIntegrations';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 interface GoogleSheetsSetupPageProps {
@@ -37,16 +38,17 @@ interface GoogleSheetsSetupPageProps {
 export default function GoogleSheetsSetupPage({
   mode = 'admin',
 }: GoogleSheetsSetupPageProps = {}) {
+  const { t } = useTranslation();
   useDocumentTitle(
     mode === 'personal'
-      ? 'Мой Google Sheets — подключение'
-      : 'Google Sheets — подключение',
+      ? t('gsheets_setup.doc_title_personal')
+      : t('gsheets_setup.doc_title_admin'),
   );
   const notify = useNotifications();
   const navigate = useNavigate();
 
   const [displayName, setDisplayName] = useState(
-    mode === 'personal' ? 'Мой Google SA' : 'Google Sheets',
+    mode === 'personal' ? t('gsheets_setup.default_name_personal') : 'Google Sheets',
   );
   const [saJson, setSaJson] = useState('');
   const [saved, setSaved] = useState<
@@ -65,7 +67,7 @@ export default function GoogleSheetsSetupPage({
   const onSave = () => {
     const json = saJson.trim();
     if (!json) {
-      notify.error('Вставьте JSON сервисного аккаунта');
+      notify.error(t('gsheets_setup.error_paste_json'));
       return;
     }
     setup.mutate(
@@ -77,13 +79,13 @@ export default function GoogleSheetsSetupPage({
             client_email: res.client_email,
             display_name: res.display_name,
           });
-          notify.success('Google Sheets подключён');
+          notify.success(t('gsheets_setup.success_connected'));
         },
         onError: (p) => {
           notify.error(
             (p as unknown as Problem).detail ||
               (p as unknown as Problem).title ||
-              'Не удалось сохранить',
+              t('gsheets_setup.error_save_failed'),
           );
         },
       },
@@ -93,34 +95,33 @@ export default function GoogleSheetsSetupPage({
   const copy = (text: string) => {
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       void navigator.clipboard.writeText(text);
-      notify.info('Скопировано');
+      notify.info(t('gsheets_setup.copied'));
     }
   };
 
   return (
     <Page width="regular">
       <PageHeader
-        title={mode === 'personal' ? 'Мой Google Sheets' : 'Google Sheets'}
+        title={mode === 'personal' ? t('gsheets_setup.header_personal') : 'Google Sheets'}
       />
 
       <section className="space-y-4 border-y border-border/50 py-6">
         <div className="space-y-1">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
             {mode === 'personal'
-              ? 'Мой Service Account'
-              : 'Подключение через Service Account (общее на тенант)'}
+              ? t('gsheets_setup.sa_section_personal')
+              : t('gsheets_setup.sa_section_admin')}
           </h2>
           <p className="text-sm text-muted-foreground">
             {mode === 'personal'
-              ? 'Загрузите JSON-ключ ВАШЕГО сервисного аккаунта Google Cloud. Используется только вашими экспортами; общую тенантскую интеграцию не трогает.'
-              : 'Загрузите JSON-ключ сервисного аккаунта Google Cloud — он станет общим для всего тенанта. Reporting-сервис будет использовать его для предпросмотра таблиц и записи оценок.'}
-            {' '}Чтобы открыть конкретную таблицу — поделитесь ею с e-mail
-            сервисного аккаунта (он покажется ниже после сохранения).
+              ? t('gsheets_setup.sa_intro_personal')
+              : t('gsheets_setup.sa_intro_admin')}
+            {' '}{t('gsheets_setup.sa_share_hint')}
           </p>
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sa-display-name">Название подключения</Label>
+          <Label htmlFor="sa-display-name">{t('gsheets_setup.name_label')}</Label>
           <Input
             id="sa-display-name"
             placeholder="Google Sheets"
@@ -131,7 +132,7 @@ export default function GoogleSheetsSetupPage({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="sa-json">JSON сервисного аккаунта</Label>
+          <Label htmlFor="sa-json">{t('gsheets_setup.json_label')}</Label>
           <Textarea
             id="sa-json"
             rows={14}
@@ -144,8 +145,7 @@ export default function GoogleSheetsSetupPage({
             data-testid="sa-json"
           />
           <p className="text-xs text-muted-foreground">
-            Google Cloud → IAM &amp; Admin → Service Accounts → ваш SA → Keys →
-            Add Key → Create new key → JSON. Скопируйте всё содержимое сюда.
+            {t('gsheets_setup.json_hint')}
           </p>
         </div>
 
@@ -155,7 +155,7 @@ export default function GoogleSheetsSetupPage({
             variant="outline"
             onClick={() => navigate('/integrations')}
           >
-            К списку интеграций
+            {t('gsheets_setup.back_to_integrations')}
           </Button>
           <Button
             onClick={onSave}
@@ -165,7 +165,7 @@ export default function GoogleSheetsSetupPage({
             {setup.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Сохранить подключение
+            {t('gsheets_setup.save')}
           </Button>
         </div>
       </section>
@@ -177,11 +177,11 @@ export default function GoogleSheetsSetupPage({
         >
           <div className="flex items-center gap-2 text-sm text-foreground">
             <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-            Подключение «{saved.display_name}» сохранено.
+            {t('gsheets_setup.saved_confirm', { name: saved.display_name })}
           </div>
           {saved.client_email && (
             <div className="space-y-1.5">
-              <Label>E-mail сервисного аккаунта</Label>
+              <Label>{t('gsheets_setup.client_email_label')}</Label>
               <div className="flex items-center gap-2">
                 <Input
                   readOnly
@@ -194,15 +194,13 @@ export default function GoogleSheetsSetupPage({
                   size="icon"
                   variant="outline"
                   onClick={() => copy(saved.client_email!)}
-                  title="Скопировать"
+                  title={t('gsheets_setup.copy')}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                Откройте нужную Google-таблицу → «Настройки доступа» →
-                добавьте этот e-mail как редактора. После этого таблица
-                станет видна в «Экспорт».
+                {t('gsheets_setup.share_instructions')}
               </p>
             </div>
           )}

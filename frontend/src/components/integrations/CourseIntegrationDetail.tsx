@@ -1,23 +1,24 @@
 /**
- * CourseIntegrationDetail — the right-hand pane of the teacher's
- * integrations master-detail (mirrors the admin OAuth detail layout).
+ * CourseIntegrationDetail — the right-hand pane for a PULL source
+ * (Yandex.Contest / Stepik / eJudge), where PlagLens fetches submissions
+ * from the provider. (Manual upload is a push source and has its own
+ * pane — see ManualUploadPanel.)
  *
- * Teachers connect via OAuth, so they never see Client ID / Secret. This
- * pane instead holds what they actually need for a connected source:
- *   • «Синхронизировать сейчас» — pull fresh submissions into the
- *     already-imported homeworks (sync-all).
- *   • Автосинхрон — toggle + interval + per-ДЗ checkboxes, stored on
- *     ``settings.autosync`` where the scheduler reads them.
- *   • «Отключить интеграцию» — destructive, bottom-left (like the admin
- *     «Удалить приложение»).
- *
- * The «import a NEW contest as a homework» flow stays on the course page.
+ * Layout:
+ *   • Курс — which course's homeworks to act on.
+ *   • ДЗ — a searchable multi-select. This one selection drives BOTH:
+ *       – «Синхронизировать сейчас» — one-shot pull, scoped to the
+ *         picked ДЗ (or all imported ДЗ when nothing is picked).
+ *       – «Автосинхронизация» — periodic version of the same scope,
+ *         persisted on ``settings.autosync``.
+ *   • «Отключить интеграцию» — destructive, bottom-left.
  */
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { Loader2, RefreshCw } from 'lucide-react';
+import { t, useTranslation } from '@/i18n';
 import type { IntegrationConfig } from '@/api/endpoints/integrations';
 import { useMyCourses } from '@/hooks/api/useCourses';
-import { useHomeworksForCourse } from '@/hooks/api/useHomeworks';
 import {
   useDeleteIntegration,
   useSyncNow,
@@ -26,10 +27,10 @@ import {
 import { useNotifications } from '@/hooks/useNotifications';
 import type { Problem } from '@/api/types';
 import { ProviderIcon } from '@/components/integrations/ProviderIcon';
+import { HomeworkSelect } from '@/components/integrations/HomeworkSelect';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
-import { Checkbox } from '@/components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -43,7 +44,9 @@ const KIND_TITLES: Record<string, string> = {
   stepik: 'Stepik',
   google_sheets: 'Google Sheets',
   ejudge: 'eJudge',
-  manual: 'Ручная загрузка',
+  get manual() {
+    return t('course_integration.kind_manual');
+  },
 };
 
 interface AutosyncPrefs {
@@ -72,6 +75,7 @@ interface Props {
 }
 
 export function CourseIntegrationDetail({ integration, onChanged }: Props) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const coursesQ = useMyCourses();
   const courses = coursesQ.data?.data ?? [];
@@ -81,59 +85,55 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
     if (!courseId && courses.length > 0) setCourseId(String(courses[0].id));
   }, [courseId, courses]);
 
-  const homeworksQ = useHomeworksForCourse(courseId || undefined, { limit: 100 });
-  const homeworks = homeworksQ.data?.data ?? [];
-
   const settings = (integration.settings ?? {}) as Record<string, unknown>;
   const autosync = useMemo(() => readAutosync(settings), [settings]);
+  const picked = autosync.homework_ids;
 
   const update = useUpdateIntegration(integration.id);
   const syncNow = useSyncNow(integration.id);
   const remove = useDeleteIntegration();
   const [confirmRemove, setConfirmRemove] = useState(false);
 
-  const selected = useMemo(
-    () => new Set(autosync.homework_ids),
-    [autosync.homework_ids],
-  );
-
   const save = async (next: AutosyncPrefs) => {
     try {
       await update.mutateAsync({ settings: { ...settings, autosync: next } });
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось сохранить');
+      notify.error((e as Problem)?.detail ?? t('course_integration.save_failed'));
     }
-  };
-
-  const toggleHomework = (hwId: string) => {
-    const set = new Set(selected);
-    if (set.has(hwId)) set.delete(hwId);
-    else set.add(hwId);
-    void save({ ...autosync, homework_ids: [...set] });
   };
 
   const onSyncNow = async () => {
     try {
-      await syncNow.mutateAsync({});
-      notify.success('Синхронизация запущена — посылки подтянутся в фоне');
+      await syncNow.mutateAsync(
+        picked.length ? { scope: { homework_ids: picked } } : {},
+      );
+      notify.success(
+        picked.length
+          ? t('course_integration.sync_started_picked')
+          : t('course_integration.sync_started_all'),
+      );
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось запустить');
+      notify.error((e as Problem)?.detail ?? t('course_integration.sync_failed'));
     }
   };
 
   const onRemove = async () => {
     try {
       await remove.mutateAsync(integration.id);
-      notify.success('Интеграция отключена');
+      notify.success(t('course_integration.disconnected'));
       setConfirmRemove(false);
       onChanged();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось отключить');
+      notify.error((e as Problem)?.detail ?? t('course_integration.disconnect_failed'));
     }
   };
 
   const title = KIND_TITLES[integration.kind] ?? integration.kind;
   const isActive = integration.status === 'active';
+  // Google Sheets is an *export target*, not a pull source — there's
+  // nothing to «синхронизировать». It just enables writing grades into
+  // a course's Google-таблицу from the «Экспорт» page.
+  const isExportTarget = integration.kind === 'google_sheets';
 
   return (
     <div className="space-y-6">
@@ -143,18 +143,33 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
         <span
           className={`ml-auto text-xs ${isActive ? 'text-muted-foreground' : 'text-sev-mid font-medium'}`}
         >
-          {isActive ? 'подключено' : 'ожидает авторизации'}
+          {isActive
+            ? t('course_integration.status_connected')
+            : t('course_integration.status_pending')}
         </span>
       </header>
 
-      {/* Course picker */}
+      {isExportTarget ? (
+        <div className="space-y-4">
+          <p className="max-w-md text-sm text-muted-foreground">
+            {t('course_integration.export_target_hint')}
+          </p>
+          <Button asChild variant="outline">
+            <Link to="/reports" data-testid="course-integration-to-export">
+              {t('course_integration.to_export')}
+            </Link>
+          </Button>
+        </div>
+      ) : (
+      <>
+      {/* Course */}
       <div className="space-y-1.5">
         <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Курс
+          {t('course_integration.course_label')}
         </label>
         <Select value={courseId} onValueChange={setCourseId}>
           <SelectTrigger className="max-w-sm" data-testid="course-sync-course">
-            <SelectValue placeholder="Выберите курс" />
+            <SelectValue placeholder={t('course_integration.course_placeholder')} />
           </SelectTrigger>
           <SelectContent>
             {courses.map((c) => (
@@ -166,14 +181,29 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
         </Select>
       </div>
 
+      {/* ДЗ — one selection used by both manual sync and autosync */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          {t('course_integration.homeworks_label')}
+        </label>
+        <HomeworkSelect
+          multiple
+          courseId={courseId || undefined}
+          value={picked}
+          allLabel={t('course_integration.all_homeworks')}
+          onChange={(ids) => void save({ ...autosync, homework_ids: ids })}
+          testId="course-sync-homeworks"
+        />
+      </div>
+
       {/* Sync now */}
       <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-5">
         <div className="min-w-0">
           <div className="text-sm font-medium text-foreground">
-            Синхронизировать сейчас
+            {t('course_integration.sync_now_title')}
           </div>
           <p className="text-xs text-muted-foreground">
-            Разово подтянуть свежие посылки во все импортированные ДЗ.
+            {t('course_integration.sync_now_desc')}
           </p>
         </div>
         <Button
@@ -187,7 +217,7 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
           )}
-          Синхронизировать
+          {t('course_integration.sync_button')}
         </Button>
       </div>
 
@@ -195,9 +225,11 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
       <div className="space-y-3 border-t border-border/50 pt-5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-foreground">Автосинхрон</div>
+            <div className="text-sm font-medium text-foreground">
+              {t('course_integration.autosync_title')}
+            </div>
             <p className="text-xs text-muted-foreground">
-              Периодически тянуть новые посылки по выбранным ДЗ.
+              {t('course_integration.autosync_desc')}
             </p>
           </div>
           <Switch
@@ -209,61 +241,28 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
         </div>
 
         {autosync.enabled && (
-          <>
-            <div className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground">Каждые</span>
-              <input
-                type="number"
-                min={1}
-                max={24}
-                value={autosync.hours}
-                onChange={(e) =>
-                  void save({
-                    ...autosync,
-                    hours: Math.min(24, Math.max(1, Number(e.target.value) || 6)),
-                  })
-                }
-                className="h-8 w-16 rounded-md border border-border bg-input-background px-2 text-center tabular-nums"
-                data-testid="course-sync-hours"
-              />
-              <span className="text-muted-foreground">ч.</span>
-            </div>
-
-            <div className="space-y-1.5">
-              <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Какие ДЗ
-              </div>
-              {homeworksQ.isLoading ? (
-                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-              ) : homeworks.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  В этом курсе нет домашних заданий.
-                </p>
-              ) : (
-                <ul className="max-w-sm space-y-1">
-                  {homeworks.map((hw) => {
-                    const hwId = String(hw.id);
-                    return (
-                      <li key={hwId}>
-                        <label className="flex cursor-pointer items-center gap-2.5 rounded-md px-1 py-1.5 text-sm hover:bg-muted/30">
-                          <Checkbox
-                            checked={selected.has(hwId)}
-                            onCheckedChange={() => toggleHomework(hwId)}
-                            data-testid={`course-sync-hw-${hwId}`}
-                          />
-                          <span className="min-w-0 flex-1 truncate text-foreground">
-                            {hw.title}
-                          </span>
-                        </label>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </>
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{t('course_integration.every')}</span>
+            <input
+              type="number"
+              min={1}
+              max={24}
+              value={autosync.hours}
+              onChange={(e) =>
+                void save({
+                  ...autosync,
+                  hours: Math.min(24, Math.max(1, Number(e.target.value) || 6)),
+                })
+              }
+              className="h-8 w-16 rounded-md border border-border bg-input-background px-2 text-center tabular-nums"
+              data-testid="course-sync-hours"
+            />
+            <span className="text-muted-foreground">{t('course_integration.hours_unit')}</span>
+          </div>
         )}
       </div>
+      </>
+      )}
 
       <div className="border-t border-border/50 pt-5">
         <button
@@ -273,15 +272,15 @@ export function CourseIntegrationDetail({ integration, onChanged }: Props) {
           className="text-sm font-medium text-destructive hover:underline disabled:opacity-50"
           data-testid="course-integration-remove"
         >
-          Отключить интеграцию
+          {t('course_integration.disconnect')}
         </button>
       </div>
 
       <ConfirmDialog
         opened={confirmRemove}
-        title={`Отключить интеграцию «${title}»?`}
-        message="Импортированные посылки останутся, но синхронизация прекратится."
-        confirmLabel="Отключить"
+        title={t('course_integration.confirm_title', { title })}
+        message={t('course_integration.confirm_message')}
+        confirmLabel={t('course_integration.confirm_label')}
         destructive
         loading={remove.isPending}
         onConfirm={onRemove}

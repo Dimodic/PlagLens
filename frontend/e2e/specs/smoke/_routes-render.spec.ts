@@ -5,7 +5,7 @@
 /**
  * Smoke: every public + protected route renders without 500/404.
  *
- * For protected routes we sign in as super_admin (most permissive) so that
+ * For protected routes we sign in as admin (most permissive) so that
  * RoleGuard does not redirect us to a 404 placeholder.
  *
  * A route is OK if:
@@ -23,7 +23,7 @@ const PUBLIC_ROUTES = [
   '/demo',
 ];
 
-// Routes that are protected but should be reachable as super_admin.
+// Routes that are protected but should be reachable as admin.
 const PROTECTED_ROUTES = [
   '/',
   '/me',
@@ -67,7 +67,7 @@ const test = base.extend<{ authedPage: Page }>({
   authedPage: async ({ browser }, use) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
-    const c = DEMO_USERS.super_admin;
+    const c = DEMO_USERS.admin;
     await page.goto('/login');
     await page.locator('[data-testid="login-email"] input').fill(c.email);
     await page.locator('[data-testid="login-password"] input').fill(c.password);
@@ -96,7 +96,7 @@ test.describe('@smoke public routes', () => {
   }
 });
 
-test.describe('@smoke protected routes (super_admin)', () => {
+test.describe('@smoke protected routes (admin)', () => {
   for (const route of PROTECTED_ROUTES) {
     test(`renders ${route}`, async ({ authedPage }) => {
       const errors: string[] = [];

@@ -7,7 +7,7 @@
  * navigates to the matching nested route. Existing data-testids on every
  * tab and row are preserved so Playwright specs continue to pass.
  */
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Link,
   Outlet,
@@ -58,6 +58,7 @@ import {
 } from '@/lib/studentTaskStatus';
 import { useAuth } from '@/auth/useAuth';
 import { hasCourseRole, hasGlobalRole } from '@/auth/RoleGuard';
+import { useTranslation, type TParams } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { parseProblem } from '@/api/problem';
@@ -83,15 +84,17 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { ExpandableSearch } from '@/components/common/ExpandableSearch';
 import { Label } from '@/components/ui/label';
 import { integrationsApi } from '@/api/endpoints/integrations';
 import { formatDate, formatDateTime } from '@/utils/formatters';
+import { HomeworkCreateDialog } from '@/components/courses/HomeworkCreateDialog';
 
 // Archive-only lifecycle: draft + active/published collapse into one state.
-function statusBadge(status: string) {
+function statusBadge(status: string, t: (key: string, params?: TParams) => string) {
   if (status === 'archived')
-    return <StatusPill tone="neutral">В архиве</StatusPill>;
-  return <StatusPill tone="success">Активен</StatusPill>;
+    return <StatusPill tone="neutral">{t('course_detail.status_archived')}</StatusPill>;
+  return <StatusPill tone="success">{t('course_detail.status_active')}</StatusPill>;
 }
 
 type CourseTab = 'homeworks' | 'members' | 'stats' | 'suspicious';
@@ -110,6 +113,7 @@ function toDateInput(iso: string | null | undefined): string {
 }
 
 export default function CourseDetailPage() {
+  const { t } = useTranslation();
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -138,7 +142,7 @@ export default function CourseDetailPage() {
   const onSaveCourse = async () => {
     if (!course) return;
     if (!edit.name.trim()) {
-      notify.error('Название не может быть пустым');
+      notify.error(t('course_detail.name_required'));
       return;
     }
     try {
@@ -148,10 +152,10 @@ export default function CourseDetailPage() {
         start_date: edit.start || null,
         end_date: edit.end || null,
       });
-      notify.success('Сохранено');
+      notify.success(t('course_detail.saved'));
       setEditing(false);
     } catch (e) {
-      notify.error(parseProblem(e).detail || 'Не удалось сохранить');
+      notify.error(parseProblem(e).detail || t('course_detail.save_failed'));
     }
   };
   const startEditing = () => {
@@ -232,6 +236,20 @@ export default function CourseDetailPage() {
   // drawer is a singleton overlay.
   const [drawerHwId, setDrawerHwId] = useState<string | null>(null);
 
+  // In-page task/ДЗ search: filters the homeworks list to matches, force-
+  // expands them, highlights the matching task and scrolls to the first.
+  const [taskQuery, setTaskQuery] = useState('');
+  const tq = taskQuery.trim().toLowerCase();
+  const firstMatchRef = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    if (!tq) return;
+    const id = setTimeout(
+      () => firstMatchRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
+      120,
+    );
+    return () => clearTimeout(id);
+  }, [tq]);
+
   useDocumentTitle(course?.name);
 
   const isOwner = useMemo(() => {
@@ -305,6 +323,7 @@ export default function CourseDetailPage() {
   // contest + import every problem as an assignment inside it. Triggered
   // from the "+ Новое ДЗ" dropdown.
   const [ycImportOpen, setYcImportOpen] = useState(false);
+  const [createHwOpen, setCreateHwOpen] = useState(false);
   const [ycContestId, setYcContestId] = useState('');
   // YC integration is tenant-wide: one connection in /integrations is
   // shared across every course in the tenant. We list all YC configs
@@ -360,13 +379,13 @@ export default function CourseDetailPage() {
     const op = opQ.data;
     if (!op || !activeOpId) return;
     if (op.status === 'completed' && op.homework_slug) {
-      const title = op.homework_title ?? 'ДЗ';
+      const title = op.homework_title ?? t('course_detail.hw_fallback');
       const created = op.problems_done ?? 0;
       const subs = op.submissions_imported ?? 0;
       notify.success(
         op.resync
-          ? `ДЗ «${title}» досинхронизировано · посылок: ${subs}`
-          : `ДЗ «${title}». Задач: ${created} · посылок: ${subs}`,
+          ? t('course_detail.import_resynced', { title, subs })
+          : t('course_detail.import_done', { title, created, subs }),
       );
       setActiveOpId(null);
       setYcImportOpen(false);
@@ -387,12 +406,32 @@ export default function CourseDetailPage() {
       // invalidate.
       navigate(`/courses/${course?.slug ?? slug}`);
     } else if (op.status === 'failed') {
-      const msg = (op.errors ?? []).join('; ') || 'Импорт упал';
+      const msg = (op.errors ?? []).join('; ') || t('course_detail.import_failed');
       notify.error(msg);
       setActiveOpId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opQ.data]);
+
+  const assignments = assignmentsQ.data?.data ?? [];
+
+  // First task matching the in-page search (document order) — its row gets
+  // the scroll ref so we can bring it into view. MUST stay above the loading
+  // guards below: a useMemo after an early return changes the hook count
+  // between the loading and loaded renders → React error #310 (crash on a
+  // cold, uncached open of the course page).
+  const firstMatchAsgId = useMemo(() => {
+    if (!tq) return null;
+    for (const hw of homeworksQ.data?.data ?? []) {
+      const hwId = String(hw.id);
+      const m = assignments
+        .filter((a) => a.homework_id != null && String(a.homework_id) === hwId)
+        .sort((a, b) => Number(a.id) - Number(b.id))
+        .find((a) => (a.title ?? '').toLowerCase().includes(tq));
+      if (m) return String(m.id);
+    }
+    return null;
+  }, [tq, homeworksQ.data, assignments]);
 
   // Header / tabs / actions all branch on the loaded course — keep an early
   // return, but show a skeleton instead of "Загрузка курса…" text. After the
@@ -409,7 +448,7 @@ export default function CourseDetailPage() {
     setConfirmArchive(false);
     try {
       await archive.mutateAsync();
-      notify.success('Курс архивирован');
+      notify.success(t('course_detail.archived'));
     } catch (e) {
       setProblem(parseProblem(e));
     }
@@ -419,7 +458,7 @@ export default function CourseDetailPage() {
     setConfirmDelete(false);
     try {
       await deleteCourse.mutateAsync();
-      notify.success('Курс удалён');
+      notify.success(t('course_detail.deleted'));
       navigate('/courses');
     } catch (e) {
       setProblem(parseProblem(e));
@@ -429,7 +468,7 @@ export default function CourseDetailPage() {
   const handleDuplicate = async () => {
     try {
       const clone = await duplicate.mutateAsync();
-      notify.success('Курс скопирован');
+      notify.success(t('course_detail.duplicated'));
       // Synchronous clone — go straight to it instead of polling a
       // (non-existent) async operation.
       navigate(`/courses/${clone.slug}`);
@@ -441,13 +480,11 @@ export default function CourseDetailPage() {
   const handleUnarchive = async () => {
     try {
       await unarchive.mutateAsync();
-      notify.success('Курс восстановлен');
+      notify.success(t('course_detail.unarchived'));
     } catch (e) {
       setProblem(parseProblem(e));
     }
   };
-
-  const assignments = assignmentsQ.data?.data ?? [];
 
   // Tab switching is pure URL state now — no navigate() to sub-routes.
   // Old sub-routes (members/stats/groups/…) redirect to ``?tab=…`` so
@@ -484,7 +521,7 @@ export default function CourseDetailPage() {
               onChange={(e) =>
                 setEdit((v) => ({ ...v, name: e.target.value }))
               }
-              placeholder="Название курса"
+              placeholder={t('course_detail.name_placeholder')}
               size={Math.max(12, edit.name.length + 2)}
               className={`max-w-full rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1 text-2xl font-semibold tracking-tight outline-none focus:border-solid focus:border-primary ${course.semester ? 'mt-2' : ''}`}
             />
@@ -525,7 +562,7 @@ export default function CourseDetailPage() {
               <div className="mt-2 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
                 {course.status === 'archived' && (
                   <span data-testid="course-detail-status">
-                    {statusBadge(course.status)}
+                    {statusBadge(course.status, t)}
                   </span>
                 )}
                 {course.start_date && (
@@ -535,7 +572,11 @@ export default function CourseDetailPage() {
                   </span>
                 )}
                 {typeof course.members_count === 'number' && (
-                  <span>{course.members_count} участников</span>
+                  <span>
+                    {t('course_detail.members_count', {
+                      count: course.members_count,
+                    })}
+                  </span>
                 )}
               </div>
             )
@@ -549,7 +590,7 @@ export default function CourseDetailPage() {
               disabled={updateCourse.isPending}
               data-testid="course-edit-cancel"
             >
-              Отмена
+              {t('course_detail.cancel')}
             </Button>
             <Button
               onClick={onSaveCourse}
@@ -559,7 +600,7 @@ export default function CourseDetailPage() {
               {updateCourse.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Сохранить
+              {t('course_detail.save')}
             </Button>
           </div>
         ) : isOwner ? (
@@ -568,8 +609,8 @@ export default function CourseDetailPage() {
               variant="ghost"
               size="icon"
               onClick={startEditing}
-              title="Редактировать"
-              aria-label="Редактировать"
+              title={t('course_detail.edit')}
+              aria-label={t('course_detail.edit')}
               data-testid="course-detail-settings-button"
             >
               <Pencil className="h-4 w-4" />
@@ -579,7 +620,7 @@ export default function CourseDetailPage() {
                 <Button
                   variant="outline"
                   size="icon"
-                  aria-label="Ещё"
+                  aria-label={t('course_detail.more')}
                   data-testid="course-detail-menu-trigger"
                 >
                   <MoreHorizontal className="h-4 w-4" />
@@ -593,7 +634,7 @@ export default function CourseDetailPage() {
                   onSelect={() => void handleDuplicate()}
                   data-testid="course-detail-duplicate"
                 >
-                  Дублировать структуру
+                  {t('course_detail.duplicate_structure')}
                 </DropdownMenuItem>
                 {course.status !== 'archived' ? (
                   <DropdownMenuItem
@@ -601,7 +642,7 @@ export default function CourseDetailPage() {
                     className="text-amber-600 focus:text-amber-600"
                     data-testid="course-detail-archive"
                   >
-                    Архивировать
+                    {t('course_detail.archive')}
                   </DropdownMenuItem>
                 ) : (
                   <DropdownMenuItem
@@ -609,7 +650,7 @@ export default function CourseDetailPage() {
                     className="text-emerald-600 focus:text-emerald-600"
                     data-testid="course-detail-unarchive"
                   >
-                    Восстановить
+                    {t('course_detail.unarchive')}
                   </DropdownMenuItem>
                 )}
                 <DropdownMenuItem
@@ -617,7 +658,7 @@ export default function CourseDetailPage() {
                   className="text-destructive focus:text-destructive"
                   data-testid="course-detail-delete"
                 >
-                  Удалить
+                  {t('course_detail.delete')}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -635,7 +676,7 @@ export default function CourseDetailPage() {
           onChange={(e) =>
             setEdit((v) => ({ ...v, description: e.target.value }))
           }
-          placeholder="Описание курса…"
+          placeholder={t('course_detail.description_placeholder')}
           className="w-full max-w-2xl resize-none rounded-md border border-dashed border-muted-foreground/40 bg-transparent px-2 py-1.5 text-sm leading-relaxed text-muted-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground/50 focus:border-solid focus:border-primary"
         />
       ) : (
@@ -660,7 +701,9 @@ export default function CourseDetailPage() {
         <Tabs value={tab} onValueChange={handleTabChange}>
           <TabsList className="flex flex-wrap h-auto">
             <TabsTrigger value="homeworks">
-              <span data-testid="course-detail-tab-homeworks">ДЗ</span>
+              <span data-testid="course-detail-tab-homeworks">
+                {t('course_detail.tab_homeworks')}
+              </span>
               {(homeworksQ.data?.data ?? []).length > 0 && (
                 <span className="ml-2 text-xs tabular-nums text-muted-foreground">
                   {(homeworksQ.data?.data ?? []).length}
@@ -668,14 +711,18 @@ export default function CourseDetailPage() {
               )}
             </TabsTrigger>
             <TabsTrigger value="members">
-              <span data-testid="course-detail-tab-members">Участники</span>
+              <span data-testid="course-detail-tab-members">
+                {t('course_detail.tab_members')}
+              </span>
             </TabsTrigger>
             <TabsTrigger value="stats">
-              <span data-testid="course-detail-tab-stats">Статистика</span>
+              <span data-testid="course-detail-tab-stats">
+                {t('course_detail.tab_stats')}
+              </span>
             </TabsTrigger>
             <TabsTrigger value="suspicious">
               <span data-testid="course-detail-tab-suspicious">
-                Подозрительные
+                {t('course_detail.tab_suspicious')}
               </span>
             </TabsTrigger>
           </TabsList>
@@ -685,35 +732,43 @@ export default function CourseDetailPage() {
       {/* Homeworks list (default tab content) */}
       {tab === 'homeworks' && (
         <div className="space-y-4">
-          {isOwner && (
-            <div className="flex justify-end">
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button data-testid="course-detail-create-homework">
-                    <Plus className="mr-2 h-4 w-4" />
-                    Новое ДЗ
-                    <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem
-                    onClick={() =>
-                      navigate(`/courses/${course.slug}/homeworks/new`)
-                    }
-                    data-testid="course-detail-create-homework-manual"
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Вручную
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => setYcImportOpen(true)}
-                    data-testid="course-detail-create-homework-yc"
-                  >
-                    <Download className="mr-2 h-4 w-4" />
-                    Из Yandex.Contest
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+          {(isOwner || (homeworksQ.data?.data ?? []).length > 0) && (
+            <div className="flex items-center justify-end gap-2">
+              {(homeworksQ.data?.data ?? []).length > 0 && (
+                <ExpandableSearch
+                  value={taskQuery}
+                  onChange={setTaskQuery}
+                  placeholder={t('course_detail.task_search_placeholder')}
+                  data-testid="course-detail-task-search"
+                />
+              )}
+              {isOwner && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button data-testid="course-detail-create-homework">
+                      <Plus className="mr-2 h-4 w-4" />
+                      {t('course_detail.new_homework')}
+                      <ChevronDown className="ml-2 h-4 w-4 opacity-70" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => setCreateHwOpen(true)}
+                      data-testid="course-detail-create-homework-manual"
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      {t('course_detail.create_manual')}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={() => setYcImportOpen(true)}
+                      data-testid="course-detail-create-homework-yc"
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      {t('course_detail.create_from_yc')}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           )}
           {homeworksQ.isLoading && !homeworksQ.data ? (
@@ -723,7 +778,7 @@ export default function CourseDetailPage() {
               className="py-16 text-center text-sm text-muted-foreground"
               data-testid="course-detail-homeworks-empty"
             >
-              Нет домашних заданий
+              {t('course_detail.homeworks_empty')}
             </div>
           ) : (
             <div
@@ -732,25 +787,11 @@ export default function CourseDetailPage() {
             >
               <div className="contents">
                 {(homeworksQ.data?.data ?? []).map((hw) => {
-                  const hwAsgCount = assignments.filter(
-                    (a) =>
-                      a.homework_id != null &&
-                      String(a.homework_id) === String(hw.id),
-                  ).length;
-                  const meta = [
-                    hw.due_at ? `Дедлайн ${formatDateTime(hw.due_at)}` : null,
-                    `${hwAsgCount} заданий`,
-                  ]
-                    .filter(Boolean)
-                    .join(' · ');
                   const hwId = String(hw.id);
-                  const isOpen = expandedHws.has(hwId);
                   // Filter+sort the assignments that belong to THIS hw —
                   // the parent already loaded all course assignments
-                  // (limit 500) so no extra fetch. Assignment ids are
-                  // sequential ints; sort ascending reproduces the
-                  // import order (A → Z for YC contests, oldest-first
-                  // for manual creates).
+                  // (limit 500) so no extra fetch. Sequential int ids; sort
+                  // ascending reproduces import order (A→Z YC, oldest-first).
                   const hwAssignments = assignments
                     .filter(
                       (a) =>
@@ -758,6 +799,60 @@ export default function CourseDetailPage() {
                         String(a.homework_id) === hwId,
                     )
                     .sort((a, b) => Number(a.id) - Number(b.id));
+                  // «Простое ДЗ» — само ДЗ и есть задание. Driven by the
+                  // backend ``kind`` flag (NOT a title-match heuristic). We
+                  // still require the one task to be present so the row has
+                  // something to open. Renders as a single leaf row — no
+                  // expand, no nested self-duplicate, no «1 заданий».
+                  const isSimple =
+                    hw.kind === 'single' && hwAssignments.length === 1;
+                  const meta = [
+                    hw.due_at
+                      ? t('course_detail.hw_deadline', {
+                          date: formatDateTime(hw.due_at),
+                        })
+                      : null,
+                    isSimple
+                      ? null
+                      : t('course_detail.hw_assignments_count', {
+                          count: hwAssignments.length,
+                        }),
+                  ]
+                    .filter(Boolean)
+                    .join(' · ');
+                  // In-page search: hide non-matching ДЗ, force-open the
+                  // matches, and (below) highlight the matching task.
+                  const hwTitleMatch =
+                    !!tq && (hw.title ?? '').toLowerCase().includes(tq);
+                  const matchingAsgIds = tq
+                    ? new Set(
+                        hwAssignments
+                          .filter((a) =>
+                            (a.title ?? '').toLowerCase().includes(tq),
+                          )
+                          .map((a) => String(a.id)),
+                      )
+                    : new Set<string>();
+                  if (tq && !hwTitleMatch && matchingAsgIds.size === 0)
+                    return null;
+                  // Simple ДЗ never expands — it's a single openable row.
+                  const isOpen =
+                    !isSimple &&
+                    (expandedHws.has(hwId) || matchingAsgIds.size > 0);
+                  // Where the simple-ДЗ row leads: straight to its one task
+                  // (staff → assignment detail; student → latest readable
+                  // submission, same rule as the nested rows below).
+                  const simpleAsg = isSimple ? hwAssignments[0] : null;
+                  const simpleTarget = simpleAsg
+                    ? isStaff
+                      ? `/assignments/${simpleAsg.id}`
+                      : taskLinkTarget(
+                          simpleAsg.id,
+                          statusForAssignment(
+                            mySubsByAsgId.get(String(simpleAsg.id)) ?? [],
+                          ),
+                        )
+                    : null;
                   return (
                     <div
                       key={hw.id}
@@ -765,31 +860,53 @@ export default function CourseDetailPage() {
                       className="flex flex-col"
                     >
                       <div className="group flex items-center gap-2 rounded-md px-1 py-3 transition-colors hover:bg-muted/30">
-                        <button
-                          type="button"
-                          onClick={() => toggleHw(hwId)}
-                          aria-expanded={isOpen}
-                          data-testid={`course-hw-toggle-${hw.id}`}
-                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                        >
-                          <ChevronRight
-                            className={cn(
-                              'h-4 w-4 flex-none text-muted-foreground transition-transform duration-150',
-                              isOpen && 'rotate-90',
-                            )}
-                          />
-                          <div className="min-w-0">
-                            <div className="text-sm font-medium text-foreground truncate">
-                              {hw.title}
+                        {isSimple && simpleTarget ? (
+                          <Link
+                            to={simpleTarget}
+                            data-testid={`course-hw-toggle-${hw.id}`}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            {/* No chevron — a simple ДЗ is a leaf (opens its
+                                one task), so an expand arrow would mislead.
+                                Keep a spacer so the title still lines up with
+                                the expandable ДЗ above/below. */}
+                            <span className="h-4 w-4 flex-none" aria-hidden />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {hw.title}
+                              </div>
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {meta}
+                              </div>
                             </div>
-                            <div className="mt-0.5 text-xs text-muted-foreground">
-                              {meta}
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => toggleHw(hwId)}
+                            aria-expanded={isOpen}
+                            data-testid={`course-hw-toggle-${hw.id}`}
+                            className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                          >
+                            <ChevronRight
+                              className={cn(
+                                'h-4 w-4 flex-none text-muted-foreground transition-transform duration-150',
+                                isOpen && 'rotate-90',
+                              )}
+                            />
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-foreground truncate">
+                                {hw.title}
+                              </div>
+                              <div className="mt-0.5 text-xs text-muted-foreground">
+                                {meta}
+                              </div>
                             </div>
-                          </div>
-                        </button>
+                          </button>
+                        )}
                         {hw.status === 'archived' && (
                           <span className="text-xs text-muted-foreground/70">
-                            в архиве
+                            {t('course_detail.archived_badge')}
                           </span>
                         )}
                         {/* Single per-row action: open the drawer. Delete +
@@ -805,7 +922,7 @@ export default function CourseDetailPage() {
                               e.stopPropagation();
                               setDrawerHwId(hwId);
                             }}
-                            aria-label="Просмотр и настройки ДЗ"
+                            aria-label={t('course_detail.hw_settings')}
                             data-testid={`course-hw-settings-${hw.id}`}
                             className="text-muted-foreground hover:text-foreground p-1 -m-1 rounded opacity-60 group-hover:opacity-100 transition-opacity"
                           >
@@ -820,7 +937,7 @@ export default function CourseDetailPage() {
                         >
                           {hwAssignments.length === 0 ? (
                             <p className="px-3 py-2 text-xs text-muted-foreground">
-                              В этом ДЗ ещё нет заданий
+                              {t('course_detail.hw_no_assignments')}
                             </p>
                           ) : (
                             <ul className="flex flex-col">
@@ -838,12 +955,24 @@ export default function CourseDetailPage() {
                                 const target = isStaff
                                   ? `/assignments/${a.id}`
                                   : taskLinkTarget(a.id, status);
+                                const isMatch = matchingAsgIds.has(String(a.id));
                                 return (
-                                  <li key={a.id}>
+                                  <li
+                                    key={a.id}
+                                    ref={
+                                      String(a.id) === firstMatchAsgId
+                                        ? firstMatchRef
+                                        : undefined
+                                    }
+                                  >
                                     <Link
                                       to={target}
                                       data-testid={`course-hw-assignment-${a.id}`}
-                                      className="flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/30"
+                                      className={cn(
+                                        'flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors hover:bg-muted/30',
+                                        isMatch &&
+                                          'bg-primary/10 ring-1 ring-primary/30',
+                                      )}
                                     >
                                       <span className="min-w-0 flex-1 truncate text-foreground">
                                         {a.title}
@@ -854,7 +983,7 @@ export default function CourseDetailPage() {
                                           list it's repeat noise. */}
                                       {a.status === 'archived' && (
                                         <span className="text-xs text-muted-foreground/70">
-                                          в архиве
+                                          {t('course_detail.archived_badge')}
                                         </span>
                                       )}
                                       <ChevronRight className="h-3 w-3 flex-none text-muted-foreground" />
@@ -922,9 +1051,9 @@ export default function CourseDetailPage() {
 
       <ConfirmDialog
         opened={confirmArchive}
-        title="Архивировать курс?"
-        message="Курс перестанет быть активным. Это можно отменить."
-        confirmLabel="Архивировать"
+        title={t('course_detail.archive_confirm_title')}
+        message={t('course_detail.archive_confirm_message')}
+        confirmLabel={t('course_detail.archive')}
         destructive
         loading={archive.isPending}
         onConfirm={handleArchive}
@@ -933,14 +1062,24 @@ export default function CourseDetailPage() {
 
       <ConfirmDialog
         opened={confirmDelete}
-        title="Удалить курс?"
-        message={`Курс «${course.name}» будет удалён без возможности восстановления. Все ДЗ, задания и посылки внутри будут потеряны.`}
-        confirmLabel="Удалить"
+        title={t('course_detail.delete_confirm_title')}
+        message={t('course_detail.delete_confirm_message', {
+          name: course.name,
+        })}
+        confirmLabel={t('course_detail.delete')}
         destructive
         loading={deleteCourse.isPending}
         onConfirm={handleDelete}
         onClose={() => setConfirmDelete(false)}
       />
+
+      {course && (
+        <HomeworkCreateDialog
+          open={createHwOpen}
+          onClose={() => setCreateHwOpen(false)}
+          courseId={course.id}
+        />
+      )}
 
       <Dialog
         open={ycImportOpen}
@@ -950,15 +1089,16 @@ export default function CourseDetailPage() {
       >
         <DialogContent data-testid="course-detail-yc-import-modal">
           <DialogHeader>
-            <DialogTitle>Импорт ДЗ из Yandex.Contest</DialogTitle>
+            <DialogTitle>{t('course_detail.yc_import_title')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              Создаст новое ДЗ с названием контеста и импортирует все задачи
-              как задания внутри него (условия, ограничения времени/памяти).
+              {t('course_detail.yc_import_description')}
             </p>
             <div className="space-y-1.5">
-              <Label htmlFor="course-yc-import-contest-id">ID контеста</Label>
+              <Label htmlFor="course-yc-import-contest-id">
+                {t('course_detail.yc_contest_id')}
+              </Label>
               <Input
                 id="course-yc-import-contest-id"
                 value={ycContestId}
@@ -970,12 +1110,12 @@ export default function CourseDetailPage() {
               />
               {ycConfigsQ.isLoading && (
                 <p className="text-xs text-muted-foreground">
-                  Ищу подключение Yandex.Contest…
+                  {t('course_detail.yc_searching_connection')}
                 </p>
               )}
               {!ycConfigsQ.isLoading && ycConfigs.length === 0 && (
                 <p className="text-xs text-destructive">
-                  Yandex.Contest не подключён. Подключи в{' '}
+                  {t('course_detail.yc_not_connected')}{' '}
                   <Link to="/integrations" className="underline">
                     /integrations
                   </Link>
@@ -984,8 +1124,13 @@ export default function CourseDetailPage() {
               )}
               {ycConfigs.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Подключение: {ycConfigs[0].display_name ?? ycConfigs[0].id}
-                  {ycConfigs.length > 1 && ` (+${ycConfigs.length - 1} ещё)`}
+                  {t('course_detail.yc_connection', {
+                    name: ycConfigs[0].display_name ?? ycConfigs[0].id,
+                  })}
+                  {ycConfigs.length > 1 &&
+                    t('course_detail.yc_connection_more', {
+                      count: ycConfigs.length - 1,
+                    })}
                 </p>
               )}
             </div>
@@ -999,7 +1144,7 @@ export default function CourseDetailPage() {
                 disabled={ycImportMut.isPending || !!activeOpId}
                 data-testid="course-yc-import-cancel"
               >
-                Отмена
+                {t('course_detail.cancel')}
               </Button>
               <Button
                 onClick={() => ycImportMut.mutate()}
@@ -1016,7 +1161,7 @@ export default function CourseDetailPage() {
                 ) : (
                   <Download className="mr-2 h-4 w-4" />
                 )}
-                Импортировать
+                {t('course_detail.yc_import_submit')}
               </Button>
             </div>
           </div>
@@ -1037,15 +1182,17 @@ const STAGE_ORDER: string[] = [
   'importing_submissions',
   'done',
 ];
-const STAGE_LABELS: Record<string, string> = {
-  starting: 'Запускаюсь…',
-  fetching_contest: 'Подключаюсь к Yandex.Contest…',
-  creating_homework: 'Создаю ДЗ…',
-  creating_assignments: 'Создаю задания…',
-  fetching_submissions: 'Загружаю посылки студентов…',
-  importing_submissions: 'Импортирую посылки в систему…',
-  done: 'Готово',
-  already_imported: 'Контест уже импортирован',
+// Stage → i18n key suffix. Resolved through t() inside ImportProgress so
+// the labels follow the active locale.
+const STAGE_LABEL_KEYS: Record<string, string> = {
+  starting: 'course_detail.stage_starting',
+  fetching_contest: 'course_detail.stage_fetching_contest',
+  creating_homework: 'course_detail.stage_creating_homework',
+  creating_assignments: 'course_detail.stage_creating_assignments',
+  fetching_submissions: 'course_detail.stage_fetching_submissions',
+  importing_submissions: 'course_detail.stage_importing_submissions',
+  done: 'course_detail.stage_done',
+  already_imported: 'course_detail.stage_already_imported',
 };
 
 type YcImportOp = {
@@ -1068,8 +1215,12 @@ function ImportProgress({
   op?: YcImportOp;
   pending: boolean;
 }) {
+  const { t } = useTranslation();
   const stage = op?.stage ?? 'starting';
-  const label = STAGE_LABELS[stage] ?? `Импорт идёт… (${stage})`;
+  const labelKey = STAGE_LABEL_KEYS[stage];
+  const label = labelKey
+    ? t(labelKey)
+    : t('course_detail.stage_generic', { stage });
   const problemsTotal = op?.problems_total ?? 0;
   const problemsDone = op?.problems_done ?? 0;
   const subsFetched = op?.submissions_fetched ?? 0;
@@ -1112,14 +1263,17 @@ function ImportProgress({
         )}
         <span className={isFailed ? 'text-destructive' : undefined}>
           {pending && !op
-            ? 'Запускаюсь…'
+            ? t('course_detail.stage_starting')
             : isFailed
-              ? 'Импорт упал'
+              ? t('course_detail.import_failed')
               : label}
         </span>
         {showSteps && (
           <span className="ml-auto text-xs tabular-nums text-muted-foreground">
-            шаг {Math.min(stepIdx + 1, totalSteps)} / {totalSteps}
+            {t('course_detail.step_counter', {
+              current: Math.min(stepIdx + 1, totalSteps),
+              total: totalSteps,
+            })}
           </span>
         )}
       </div>
@@ -1131,7 +1285,7 @@ function ImportProgress({
       {problemsTotal > 0 && (
         <div className="space-y-1 pl-5">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Задания</span>
+            <span>{t('course_detail.progress_assignments')}</span>
             <span className="tabular-nums">
               {problemsDone} / {problemsTotal}
             </span>
@@ -1142,7 +1296,7 @@ function ImportProgress({
       {subsFetched > 0 && (
         <div className="space-y-1 pl-5">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>Посылки</span>
+            <span>{t('course_detail.progress_submissions')}</span>
             <span className="tabular-nums">
               {isFetching
                 ? subsFetched
@@ -1164,7 +1318,9 @@ function ImportProgress({
           surface it we can do it as a colour shift, not a warning string. */}
       {op?.updated_at !== undefined && op?.updated_at !== null && !isCompleted && (
         <div className="pl-5 text-xs text-muted-foreground/60 tabular-nums">
-          обновлено {Math.max(0, Math.round(lastUpdateSec ?? 0))} с назад
+          {t('course_detail.updated_ago', {
+            seconds: Math.max(0, Math.round(lastUpdateSec ?? 0)),
+          })}
         </div>
       )}
       {isFailed && (op?.errors?.length ?? 0) > 0 && (

@@ -5,8 +5,9 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 import structlog
+from plaglens_common.errors import PlagLensError, UpstreamFailedError, UpstreamTimeoutError
+from plaglens_common.service_client import ServiceClient
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +34,7 @@ from ..schemas.assignment import (
     GradingConfigUpdate,
 )
 from .integration_client import IntegrationClient
+from .submission_stats_client import get_submission_stats_client
 
 logger = structlog.get_logger(__name__)
 
@@ -360,21 +362,55 @@ class AssignmentService:
     ) -> AssignmentGradingConfig:
         return await self.repo.upsert_grading_config(assignment.id, rubric=rubric)
 
+    async def _submission_aggregate(
+        self, assignment: Assignment, *, tenant_id: str
+    ) -> dict[str, Any] | None:
+        """Submission-side aggregate, read in-process (no self-HTTP).
+
+        Submission lives in the same process, so we go through the wired
+        ``SubmissionStatsClient`` instead of calling its HTTP endpoint. Returns
+        ``None`` — the same best-effort signal the old HTTP ``_get`` used — when
+        the client isn't wired (course-only app / unit tests) or the read fails,
+        so ``stats()`` degrades to zeros exactly as before.
+        """
+        client = get_submission_stats_client()
+        if client is None:
+            return None
+        try:
+            return await client.aggregate_stats(
+                assignment_id=str(assignment.id), tenant_id=tenant_id
+            )
+        except Exception as exc:  # noqa: BLE001 — best-effort, mirrors HTTP path
+            logger.warning(
+                "assignment.stats.submission_in_process_failed",
+                assignment_id=assignment.id,
+                error=str(exc),
+            )
+            return None
+
     async def stats(
         self,
         assignment: Assignment,
         *,
+        tenant_id: str,
         bearer_token: str | None = None,
     ) -> dict[str, Any]:
-        """Proxy the assignment-stats query to the services that own the
-        underlying data: submission_service for counts/grades, plagiarism
-        for alerts, ai for analysis count. Each downstream call is
-        best-effort — if a service is down we fall back to zero so the
-        UI degrades gracefully instead of 500-ing.
+        """Assemble assignment stats from the data owners: submission for
+        counts/grades, plagiarism for alerts, ai for analysis count. Each
+        source is best-effort — if it fails we fall back to zero so the UI
+        degrades gracefully instead of 500-ing.
 
-        Auth: we pass through the caller's bearer token rather than
-        minting a service JWT. The downstream services already check
-        course-staff role on the same identity, so RBAC stays consistent.
+        Submission runs in the SAME process (merged course+submission
+        deployable), so its aggregate is read in-process via the wired
+        ``SubmissionStatsClient`` — no self-HTTP. Plagiarism and ai ARE
+        separate services and stay HTTP via the shared ``ServiceClient``.
+
+        Auth: the HTTP calls pass through the caller's bearer token rather
+        than minting a service JWT; those services check course-staff role on
+        the same identity. The in-process submission read needs no token —
+        the course ``/stats`` endpoint already gated on course-staff before
+        calling us — but it does need the caller's ``tenant_id`` (the value
+        the old proxy read from the bearer) to scope the aggregate.
         """
         settings = get_settings()
         headers: dict[str, str] = {}
@@ -383,22 +419,24 @@ class AssignmentService:
         # Downstream services pick up tenant_id from the bearer JWT, so
         # we don't need to forward an X-Tenant-Id header explicitly.
 
-        async def _get(base: str, path: str) -> dict[str, Any] | None:
+        async def _get(base: str, path: str, *, provider: str) -> dict[str, Any] | None:
+            # Same endpoints/method/timeout/auth as before; transport is now
+            # the shared ServiceClient (retry + circuit-breaker + request-id).
+            # ServiceClient *raises* on transport failure (UpstreamFailed/
+            # Timeout) and on >=400 (typed PlagLensError) where the old code
+            # returned None — so we swallow those to keep the best-effort
+            # degradation (the /stats endpoint must not 500 when a downstream
+            # is down). 4xx/5xx → downstream_error; transport → unreachable.
             try:
-                async with httpx.AsyncClient(
-                    base_url=base, timeout=settings.http_client_timeout_s
+                async with ServiceClient(
+                    base_url=base,
+                    provider=provider,
+                    timeout=settings.http_client_timeout_s,
+                    default_headers=headers or None,
                 ) as client:
-                    r = await client.get(path, headers=headers)
-                if r.status_code >= 400:
-                    logger.warning(
-                        "assignment.stats.downstream_error",
-                        base=base,
-                        path=path,
-                        status=r.status_code,
-                    )
-                    return None
+                    r = await client.get(path)
                 return r.json() if r.content else None
-            except httpx.HTTPError as exc:
+            except (UpstreamTimeoutError, UpstreamFailedError) as exc:
                 logger.warning(
                     "assignment.stats.downstream_unreachable",
                     base=base,
@@ -406,18 +444,25 @@ class AssignmentService:
                     error=str(exc),
                 )
                 return None
+            except PlagLensError as exc:
+                logger.warning(
+                    "assignment.stats.downstream_error",
+                    base=base,
+                    path=path,
+                    error=str(exc),
+                )
+                return None
 
-        sub = await _get(
-            settings.submission_service_url,
-            f"/api/v1/assignments/{assignment.id}/aggregate-stats",
-        )
+        sub = await self._submission_aggregate(assignment, tenant_id=tenant_id)
         plag = await _get(
             settings.plagiarism_service_url,
             f"/api/v1/assignments/{assignment.id}/plagiarism-runs?limit=1",
+            provider="plagiarism",
         )
         ai = await _get(
             settings.ai_service_url,
             f"/api/v1/assignments/{assignment.id}/ai-analyses?limit=1",
+            provider="ai",
         )
 
         # Extract plagiarism_alerts from the latest completed run.

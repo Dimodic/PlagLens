@@ -1,6 +1,7 @@
 """Batch endpoints (per-assignment)."""
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from fastapi import APIRouter, Query, Response, status
@@ -9,9 +10,13 @@ from sqlalchemy import func, select
 from ..common.auth import require_teacher_or_assistant
 from ..common.ids import gen_id
 from ..common.pagination import Page, PageInfo, decode_cursor, encode_cursor
+from ..db import get_session_factory
 from ..deps import (
-    OrchestratorDep,
+    CacheDep,
     PrincipalDep,
+    PromptLoaderDep,
+    ProviderFactoryDep,
+    PublisherDep,
     SessionDep,
 )
 from ..models import AIAnalysis
@@ -21,12 +26,16 @@ from ..schemas import (
     BatchStats,
     OperationCreated,
 )
-from ..services.orchestrator import AnalysisRequest
+from ..services.orchestrator import AnalysisRequest, Orchestrator
 from ._helpers import to_analysis_out
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1")
+
+# Hold references to in-flight background batches so the event loop doesn't
+# garbage-collect them mid-run.
+_BG_TASKS: set[asyncio.Task] = set()
 
 
 @router.post(
@@ -38,41 +47,67 @@ async def batch_create(
     assignment_id: str,
     body: BatchCreateRequest,
     principal: PrincipalDep,
-    session: SessionDep,
-    orchestrator: OrchestratorDep,
     response: Response,
+    cache: CacheDep,
+    publisher: PublisherDep,
+    factory: ProviderFactoryDep,
+    loader: PromptLoaderDep,
     course_id: str | None = Query(default=None),
 ) -> OperationCreated:
     require_teacher_or_assistant(principal, course_id)
     op_id = gen_id("op")
+    status_url = f"/api/v1/operations/{op_id}"
     submission_ids = body.submission_ids or []
     if not submission_ids:
-        return OperationCreated(
-            operation_id=op_id, status_url=f"/api/v1/operations/{op_id}"
-        )
-    for sid in submission_ids:
-        req = AnalysisRequest(
-            tenant_id=principal.tenant_id,
-            course_id=course_id,
-            assignment_id=assignment_id,
-            submission_id=sid,
-            code="",
-            language="plain",
-            prompt_version=body.prompt_version,
-            provider=body.provider,
-            force_no_cache=False,
-            trigger="auto",
-            actor_id=principal.user_id,
-        )
-        try:
-            await orchestrator.run_analysis(req)
-        except Exception:
-            # Soft-fail per submission inside a batch.
-            logger.exception("batch analysis failed for submission=%s", sid)
-            continue
-    await session.commit()
-    response.headers["Location"] = f"/api/v1/operations/{op_id}"
-    return OperationCreated(operation_id=op_id, status_url=f"/api/v1/operations/{op_id}")
+        return OperationCreated(operation_id=op_id, status_url=status_url)
+
+    # Capture plain values — the request scope (and its session) is gone once
+    # we return 202 below.
+    tenant_id = principal.tenant_id
+    actor_id = principal.user_id
+    prompt_version = body.prompt_version
+    provider = body.provider
+
+    async def _run() -> None:
+        # Fresh session on its own task. Commit per-submission so the analyses
+        # surface in the list one-by-one (live progress) and a single failure
+        # never loses the rest.
+        async with get_session_factory()() as bg:
+            orch = Orchestrator(
+                session=bg,
+                cache=cache,
+                publisher=publisher,
+                provider_factory=factory,
+                prompt_loader=loader,
+            )
+            for sid in submission_ids:
+                try:
+                    await orch.run_analysis(
+                        AnalysisRequest(
+                            tenant_id=tenant_id,
+                            course_id=course_id,
+                            assignment_id=assignment_id,
+                            submission_id=sid,
+                            code="",
+                            language="plain",
+                            prompt_version=prompt_version,
+                            provider=provider,
+                            force_no_cache=False,
+                            trigger="auto",
+                            actor_id=actor_id,
+                        )
+                    )
+                    await bg.commit()
+                except Exception:
+                    logger.exception("batch analysis failed for submission=%s", sid)
+                    await bg.rollback()
+
+    task = asyncio.create_task(_run())
+    _BG_TASKS.add(task)
+    task.add_done_callback(_BG_TASKS.discard)
+
+    response.headers["Location"] = status_url
+    return OperationCreated(operation_id=op_id, status_url=status_url)
 
 
 @router.get(

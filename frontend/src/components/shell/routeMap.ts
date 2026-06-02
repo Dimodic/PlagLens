@@ -10,6 +10,7 @@
  * so the i18n keys (title.<screen>) line up 1:1 with the design's t() calls.
  */
 import type { GlobalRole } from '@/api/types';
+import type { PageWidth } from '@/components/layout/Page';
 
 export type Screen =
   // teacher
@@ -124,7 +125,6 @@ export function resolveScreen(pathname: string, role: GlobalRole | undefined): S
   if (p === '/imports') return 'imports';
   if (p === '/activity') return 'activity';
   if (p === '/integrations') return 'integrations';
-  if (p === '/llm') return 'llm';
   if (p === '/settings') return 'settings';
 
   if (p === '/admin' || p === '/admin/overview') return 'a_home';
@@ -137,7 +137,6 @@ export function resolveScreen(pathname: string, role: GlobalRole | undefined): S
   if (/^\/admin\/integrations\/(?!new$|webhooks$)[^/]+$/.test(p)) return 'integration';
   if (p.startsWith('/admin/integrations')) return 'a_integrations';
   if (p.startsWith('/admin/notifications')) return 'notifications';
-  if (p.startsWith('/admin/ai')) return 'llm';
   if (p.startsWith('/admin/plagiarism-corpus')) return 'similarity';
   if (p.startsWith('/admin/system') || p.startsWith('/admin/settings')) return 'a_settings';
   if (p.startsWith('/admin/roles')) return 'a_settings';
@@ -146,6 +145,67 @@ export function resolveScreen(pathname: string, role: GlobalRole | undefined): S
   if (p.startsWith('/admin/dashboard')) return 'a_home';
 
   return isStudent ? 's_home' : role === 'admin' ? 'a_home' : 'workspace';
+}
+
+/**
+ * Expected `<Page width>` for a route, derived from its pathname.
+ *
+ * Used by the AppShell route-level <Suspense> fallback so the chunk-loading
+ * skeleton matches the width of the page that's about to mount (otherwise a
+ * narrow page like Profile briefly shows a 1080px skeleton, then snaps to
+ * 760px — a visible width jump). Mirror this with each page's real
+ * `<Page width=…>`; checks are ordered specific → general (first match wins).
+ */
+export function pageWidthForPath(
+  pathname: string,
+  role?: GlobalRole,
+): PageWidth {
+  const p = pathname.replace(/\/+$/, '') || '/';
+
+  // ---- WIDE (1440): tables, code/diff detail, dashboards ----
+  if (/^\/submissions(\/|$)/.test(p)) return 'wide'; // list + detail + ai-report
+  if (/^\/assignments\/[^/]+/.test(p)) return 'wide'; // assignment detail + sub-tabs
+  if (/^\/plagiarism-runs(\/|$)/.test(p)) return 'wide';
+  if (p === '/ai' || p.startsWith('/ai/')) return 'wide';
+  if (p === '/activity') return 'wide';
+  if (/^\/courses\/[^/]+\/(stats|dashboard|suspicious)$/.test(p)) return 'wide';
+
+  // ---- admin: mostly WIDE tables, with narrow exceptions handled below ----
+  if (p.startsWith('/admin/audit')) return /retention/.test(p) ? 'narrow' : 'wide';
+  if (p === '/admin/users' || p === '/admin/tenants') return 'wide'; // lists (…/{id} → regular)
+  if (p === '/admin/webhooks' || p === '/admin/metrics') return 'wide';
+  if (p === '/admin/notifications' || /^\/admin\/notifications\//.test(p)) return 'wide';
+  if (p.startsWith('/admin/roles') || p === '/admin/settings/roles') return 'wide';
+
+  // ---- NARROW (760): forms, settings, student self-service ----
+  if (p === '/admin/email-config') return 'narrow';
+  if (p === '/admin/settings/system' || p.startsWith('/admin/system')) return 'narrow';
+  if (/^\/admin\/(users|tenants|integrations)\/new$/.test(p)) return 'narrow';
+  if (p === '/me/exports') return 'regular'; // export page is regular
+  if (p === '/me' && role === 'student') return 'regular'; // student dashboard
+  if (/^\/me(\/|$)/.test(p)) return 'narrow'; // profile/settings/security/grades/etc.
+  if (p.startsWith('/notifications')) return 'narrow'; // center/preferences/web-push
+  if (/\/(new|create)$/.test(p)) return 'narrow'; // course/homework/assignment create forms
+  if (/^\/integrations\/(ejudge|stepik|yandex)/.test(p)) return 'narrow';
+  if (/\b2fa\b/.test(p) || /two-factor/.test(p)) return 'narrow';
+
+  // ---- everything else: REGULAR (1080) ----
+  return 'regular';
+}
+
+/**
+ * Whether a route renders a top tab strip (so the loading skeleton should
+ * include a tabs row). Only the true tabbed *detail* pages do; lists, forms,
+ * settings, dashboards and Profile do not — showing phantom tabs there is its
+ * own mismatch.
+ */
+export function pathHasTabs(pathname: string): boolean {
+  const p = pathname.replace(/\/+$/, '');
+  if (/^\/courses\/[^/]+$/.test(p)) return true; // CourseDetail
+  if (/^\/assignments\/[^/]+$/.test(p)) return true; // AssignmentDetail
+  if (/^\/admin\/users\/(?!new$)[^/]+$/.test(p)) return true; // UserDetail
+  if (/^\/admin\/tenants\/(?!new$)[^/]+$/.test(p)) return true; // TenantDetail
+  return false;
 }
 
 /**

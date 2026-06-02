@@ -8,19 +8,21 @@
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { SubmissionAIReportView } from '@/components/ai/SubmissionAIReportView';
 import { CurateAsFeedbackModal } from './CurateAsFeedbackModal';
 import type { AIAnalysis } from '@/api/endpoints/ai';
 
 export function SubmissionAIReportPage() {
+  const { t } = useTranslation();
   const { id = '' } = useParams<{ id: string }>();
-  useDocumentTitle('AI-отчёт');
+  useDocumentTitle(t('ai_report_page.title'));
   const [curateAnalysis, setCurateAnalysis] = useState<AIAnalysis | null>(null);
 
   return (
     <div data-testid="ai-report-page" className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">AI-отчёт</h1>
+        <h1 className="text-3xl font-bold tracking-tight">{t('ai_report_page.title')}</h1>
         {id && (
           <p className="mt-1 text-sm text-muted-foreground">{id}</p>
         )}

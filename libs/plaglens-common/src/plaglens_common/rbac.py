@@ -14,9 +14,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from .auth import CurrentUser
 from .errors import ForbiddenError, TenantMismatchError, UnauthenticatedError
 
-GLOBAL_ROLES: tuple[str, ...] = ("super_admin", "admin", "teacher", "student")
+GLOBAL_ROLES: tuple[str, ...] = ("admin", "teacher", "assistant", "student")
 COURSE_ROLES: tuple[str, ...] = ("owner", "co_owner", "assistant", "student")
-SUPER_ADMIN: str = "super_admin"
 
 class AuthzContext(BaseModel):
     """Context object passed through dependencies for authz decisions."""
@@ -106,7 +105,7 @@ def require_global_role(*allowed: str) -> Callable[[Callable[..., Any]], Callabl
         def make_check(_sig: inspect.Signature) -> Callable[[tuple[Any, ...], dict[str, Any]], None]:
             def check(args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
                 user = _extract_user(args, kwargs)
-                if user.global_role == SUPER_ADMIN:
+                if user.global_role == "admin":
                     return
                 if user.global_role not in allowed_roles:
                     raise ForbiddenError(
@@ -123,7 +122,7 @@ def require_global_role(*allowed: str) -> Callable[[Callable[..., Any]], Callabl
 def require_course_role(*allowed: str) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     """Decorator factory: pass if user has any of `allowed` roles in the course.
 
-    `super_admin` always passes (kross-tenant operator). Tenant mismatches are
+    `admin` always passes (cross-tenant top role). Tenant mismatches are
     flagged separately via `TenantMismatchError` if `AuthzContext.tenant_id_of_resource`
     is provided.
     """
@@ -134,7 +133,7 @@ def require_course_role(*allowed: str) -> Callable[[Callable[..., Any]], Callabl
         def make_check(sig: inspect.Signature) -> Callable[[tuple[Any, ...], dict[str, Any]], None]:
             def check(args: tuple[Any, ...], kwargs: dict[str, Any]) -> None:
                 user = _extract_user(args, kwargs)
-                if user.global_role == SUPER_ADMIN:
+                if user.global_role == "admin":
                     return
 
                 ctx = kwargs.get("authz") or kwargs.get("ctx")
@@ -177,7 +176,6 @@ def _normalise(roles: Iterable[str], universe: Iterable[str]) -> set[str]:
 __all__ = [
     "COURSE_ROLES",
     "GLOBAL_ROLES",
-    "SUPER_ADMIN",
     "AuthzContext",
     "require_course_role",
     "require_global_role",

@@ -1,5 +1,5 @@
 /**
- * /admin/tenants/new — super_admin creates a tenant.
+ * /admin/tenants/new — admin creates a tenant.
  */
 import { test, expect } from '../../setup/fixtures';
 import { TenantCreatePo, TenantsListPo, TenantDetailPo } from '../../pages/admin/TenantsPage.po';
@@ -8,11 +8,11 @@ import { uniqueSlug } from '../../helpers/factories';
 import { waitForToast } from '../../helpers/waits';
 
 test.describe('Admin tenants — create / suspend / activate', () => {
-  test('super_admin creates a new tenant and lands on detail page', async ({ browser }) => {
+  test('admin creates a new tenant and lands on detail page', async ({ browser }) => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       const slug = uniqueSlug('e2e-tenant');
       const create = new TenantCreatePo(page);
       await create.goto();
@@ -31,7 +31,7 @@ test.describe('Admin tenants — create / suspend / activate', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       const slug = uniqueSlug('e2e-conflict');
       const create = new TenantCreatePo(page);
 
@@ -54,7 +54,7 @@ test.describe('Admin tenants — create / suspend / activate', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       const slug = uniqueSlug('e2e-toggle');
       const create = new TenantCreatePo(page);
       await create.goto();
@@ -80,7 +80,7 @@ test.describe('Admin tenants — create / suspend / activate', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       const slug = uniqueSlug('e2e-listed');
       const create = new TenantCreatePo(page);
       await create.goto();

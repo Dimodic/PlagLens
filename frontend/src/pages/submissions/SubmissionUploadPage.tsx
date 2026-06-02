@@ -27,6 +27,7 @@ import { formatBytes } from '@/utils/formatters';
 import type { Problem } from '@/api/types';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuth } from '@/auth/useAuth';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/components/ui/utils';
 
 const LANGUAGE_OPTIONS = [
@@ -38,13 +39,14 @@ const LANGUAGE_OPTIONS = [
   { value: 'csharp', label: 'C#' },
   { value: 'kotlin', label: 'Kotlin' },
   { value: 'rust', label: 'Rust' },
-  { value: 'other', label: 'Другой' },
+  { value: 'other', label: 'Other' },
 ];
 
 const MAX_TOTAL_SIZE = 50 * 1024 * 1024;
 
 export default function SubmissionUploadPage() {
-  useDocumentTitle('Загрузить посылку');
+  const { t } = useTranslation();
+  useDocumentTitle(t('upload.title'));
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const notify = useNotifications();
@@ -53,6 +55,9 @@ export default function SubmissionUploadPage() {
 
   const { data: assignment } = useAssignment(id);
   const upload = useUploadSubmission(id ?? '');
+  // PDF-type tasks (created via the simple-ДЗ modal with type=PDF) store
+  // language_hint='pdf' — restrict the dropzone to PDF and hide the language.
+  const pdfOnly = assignment?.language_hint === 'pdf';
 
   const [files, setFiles] = useState<File[]>([]);
   const [language, setLanguage] = useState<string>('python');
@@ -70,12 +75,28 @@ export default function SubmissionUploadPage() {
 
   const addFiles = (added: File[]) => {
     if (added.length === 0) return;
-    const next = [...files, ...added];
+    let incoming = added;
+    if (pdfOnly) {
+      incoming = added.filter(
+        (f) =>
+          f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'),
+      );
+      if (incoming.length !== added.length) {
+        setProblem({
+          title: t('upload.error.rejected_title'),
+          detail: t('upload.error.pdf_only'),
+          status: 0,
+          code: 'CLIENT_ERROR',
+        });
+        if (incoming.length === 0) return;
+      }
+    }
+    const next = [...files, ...incoming];
     const totalSize = next.reduce((acc, f) => acc + f.size, 0);
     if (totalSize > MAX_TOTAL_SIZE) {
       setProblem({
-        title: 'Не удалось принять файлы',
-        detail: 'Превышен максимальный размер 50 МБ.',
+        title: t('upload.error.rejected_title'),
+        detail: t('upload.error.too_large'),
         status: 0,
         code: 'CLIENT_ERROR',
       });
@@ -106,7 +127,7 @@ export default function SubmissionUploadPage() {
     setProblem(null);
     if (files.length === 0) {
       setProblem({
-        title: 'Выберите хотя бы один файл',
+        title: t('upload.error.no_files'),
         status: 0,
         code: 'CLIENT_ERROR',
       });
@@ -121,7 +142,7 @@ export default function SubmissionUploadPage() {
     try {
       const res = await upload.mutateAsync(formData);
       setProgress(100);
-      notify.success('Посылка отправлена');
+      notify.success(t('upload.notify.submitted'));
       // Result is either a Submission (with `id`) or an Operation. Students
       // are routed to the student-facing detail page; teachers stay on the
       // teacher namespace.
@@ -141,7 +162,7 @@ export default function SubmissionUploadPage() {
     <Page width="regular">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Загрузить посылку
+          {t('upload.title')}
         </h1>
         {assignment?.title && (
           <p className="mt-1 text-sm text-muted-foreground">
@@ -152,21 +173,25 @@ export default function SubmissionUploadPage() {
 
       <Card>
         <CardContent className="p-6 space-y-4">
-          <div className="space-y-1.5">
-            <Label>Язык</Label>
-            <Select value={language} onValueChange={(v) => setLanguage(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LANGUAGE_OPTIONS.map((o) => (
-                  <SelectItem key={o.value} value={o.value}>
-                    {o.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!pdfOnly && (
+            <div className="space-y-1.5">
+              <Label>{t('upload.language')}</Label>
+              <Select value={language} onValueChange={(v) => setLanguage(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {LANGUAGE_OPTIONS.map((o) => (
+                    <SelectItem key={o.value} value={o.value}>
+                      {o.value === 'other'
+                        ? t('upload.language_other')
+                        : o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           <label
             data-testid="submission-dropzone"
@@ -181,16 +206,17 @@ export default function SubmissionUploadPage() {
           >
             <Upload className="h-8 w-8 text-muted-foreground" />
             <span className="text-sm font-medium">
-              Перетащите файлы или нажмите, чтобы выбрать
+              {t('upload.dropzone')}
             </span>
             <span className="text-xs text-muted-foreground">
-              Максимум 50 МБ суммарно. Поддерживаются архивы (.zip).
+              {pdfOnly ? t('upload.pdf_hint') : t('upload.hint')}
             </span>
             <input
               ref={inputRef}
               id="submission-files-input"
               type="file"
               multiple
+              accept={pdfOnly ? 'application/pdf,.pdf' : undefined}
               className="sr-only"
               onChange={(e) => {
                 const list = Array.from(e.currentTarget.files ?? []);
@@ -223,7 +249,7 @@ export default function SubmissionUploadPage() {
                     className="text-destructive hover:text-destructive"
                   >
                     <X className="mr-1 h-4 w-4" />
-                    Убрать
+                    {t('upload.remove')}
                   </Button>
                 </div>
               ))}
@@ -246,7 +272,7 @@ export default function SubmissionUploadPage() {
               onClick={() => navigate(`/assignments/${id}`)}
               data-testid="submission-upload-cancel"
             >
-              Отмена
+              {t('common.cancel')}
             </Button>
             <Button
               onClick={handleSubmit}
@@ -256,7 +282,7 @@ export default function SubmissionUploadPage() {
               {upload.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Отправить
+              {t('upload.submit')}
             </Button>
           </div>
         </CardContent>

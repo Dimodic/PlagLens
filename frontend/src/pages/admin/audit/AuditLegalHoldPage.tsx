@@ -28,6 +28,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useCreateLegalHold,
   useDeleteLegalHold,
@@ -36,6 +37,7 @@ import {
 import type { Problem } from '@/api/types';
 
 export function AuditLegalHoldPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Legal holds');
   const notify = useNotifications();
   const { data, isLoading, error, refetch } = useLegalHolds();
@@ -54,7 +56,7 @@ export function AuditLegalHoldPage() {
         resource_id: resourceId.trim(),
         reason: reason.trim(),
       });
-      notify.success('Hold создан');
+      notify.success(t('audit_legal_hold.created'));
       setOpened(false);
       setResourceId('');
       setReason('');
@@ -67,9 +69,9 @@ export function AuditLegalHoldPage() {
   const handleDelete = async (id: string) => {
     try {
       await deleteM.mutateAsync(id);
-      notify.success('Снят');
+      notify.success(t('audit_legal_hold.removed'));
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('audit_legal_hold.delete_failed'));
     }
   };
 
@@ -80,7 +82,7 @@ export function AuditLegalHoldPage() {
         action={
           <Button onClick={() => setOpened(true)} data-testid="legal-hold-create-button">
             <Plus className="mr-2 h-4 w-4" />
-            Поставить hold
+            {t('audit_legal_hold.create_button')}
           </Button>
         }
       />
@@ -92,7 +94,7 @@ export function AuditLegalHoldPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.length === 0 ? (
-        <EmptyState title="Активных holds нет" />
+        <EmptyState title={t('audit_legal_hold.empty')} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -136,7 +138,7 @@ export function AuditLegalHoldPage() {
                         ) : (
                           <Trash2 className="mr-2 h-4 w-4" />
                         )}
-                        Снять
+                        {t('audit_legal_hold.remove')}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -150,7 +152,7 @@ export function AuditLegalHoldPage() {
       <Dialog open={opened} onOpenChange={(o) => { if (!o) setOpened(false); }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Поставить legal hold</DialogTitle>
+            <DialogTitle>{t('audit_legal_hold.dialog_title')}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             {problem && <ProblemAlert problem={problem} />}
@@ -180,7 +182,7 @@ export function AuditLegalHoldPage() {
                 data-testid="legal-hold-submit"
               >
                 {createM.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Создать
+                {t('common.create')}
               </Button>
             </div>
           </div>

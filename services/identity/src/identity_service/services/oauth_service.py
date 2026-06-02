@@ -679,28 +679,26 @@ class OAuthService:
                     link_token=link_token,
                 )
 
-        # 3) Brand-new user.
-        if not profile.email:
-            raise ProblemException(
-                status=400,
-                code="OAUTH_NO_EMAIL",
-                title="Provider returned no email",
-                detail=(
-                    "PlagLens requires an email to provision an account."
-                    " Configure the provider with email scope or link the"
-                    " account to an existing PlagLens user."
-                ),
-            )
+        # 3) Brand-new user. Email is OPTIONAL — a provider without email
+        # scope (e.g. GitHub with a private address) still yields a uniquely
+        # identifiable account via its (provider, subject) OAuth link, so we
+        # provision with email=None rather than minting a fake address.
+        new_email = profile.email.lower() if profile.email else None
         new_user = User(
             id=user_id(),
             tenant_id=tenant_id,
-            email=profile.email.lower(),
+            email=new_email,
             password_hash=None,  # OAuth-only login
-            display_name=profile.display_name or profile.email.split("@")[0],
+            display_name=(
+                profile.display_name
+                or (new_email.split("@")[0] if new_email else f"{profile.provider}-user")
+            ),
             avatar_url=profile.avatar_url,
             global_role="student",
             email_verified_at=(
-                datetime.now(timezone.utc) if profile.email_verified else None
+                datetime.now(timezone.utc)
+                if (profile.email and profile.email_verified)
+                else None
             ),
         )
         await self.users.add(new_user)

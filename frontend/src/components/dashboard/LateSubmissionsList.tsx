@@ -15,28 +15,30 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { EmptyState } from '@/components/common/EmptyState';
+import { useTranslation } from '@/i18n';
 
 interface LateSubmissionsListProps {
   items: LateSubmission[] | undefined;
 }
 
 export function LateSubmissionsList({ items }: LateSubmissionsListProps) {
+  const { t } = useTranslation();
   if (!items || items.length === 0) {
-    return <EmptyState title="Нет поздних посылок" />;
+    return <EmptyState title={t('late_submissions.empty_title')} />;
   }
   return (
     <Card data-testid="late-submissions-list">
       <CardContent className="p-4">
         <div className="flex flex-col gap-3">
-          <span className="font-medium">Поздние посылки</span>
+          <span className="font-medium">{t('late_submissions.heading')}</span>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Студент</TableHead>
-                <TableHead>Задание</TableHead>
-                <TableHead>Опоздание</TableHead>
-                <TableHead>Тип</TableHead>
-                <TableHead>Дата</TableHead>
+                <TableHead>{t('late_submissions.col_student')}</TableHead>
+                <TableHead>{t('late_submissions.col_assignment')}</TableHead>
+                <TableHead>{t('late_submissions.col_delay')}</TableHead>
+                <TableHead>{t('late_submissions.col_kind')}</TableHead>
+                <TableHead>{t('late_submissions.col_date')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -54,7 +56,11 @@ export function LateSubmissionsList({ items }: LateSubmissionsListProps) {
                       {it.assignment_title}
                     </Link>
                   </TableCell>
-                  <TableCell>{Math.round(it.delay_minutes / 60)} ч.</TableCell>
+                  <TableCell>
+                    {t('late_submissions.delay_hours', {
+                      hours: Math.round(it.delay_minutes / 60),
+                    })}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       className={

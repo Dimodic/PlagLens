@@ -9,6 +9,7 @@
  */
 import { useMemo, useState } from 'react';
 import { Check, ChevronDown } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -40,25 +41,29 @@ export function HomeworkMultiSelect({
   options,
   value,
   onChange,
-  placeholder = 'Выберите ДЗ',
+  placeholder,
   disabled,
   loading,
   testId,
 }: HomeworkMultiSelectProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
 
   const valueSet = useMemo(() => new Set(value), [value]);
 
+  const placeholderLabel = placeholder ?? t('homework_multi_select.placeholder');
+
   const triggerLabel = (() => {
-    if (loading) return 'Загрузка…';
-    if (disabled && options.length === 0) return placeholder;
-    if (value.length === 0) return placeholder;
+    if (loading) return t('homework_multi_select.loading');
+    if (disabled && options.length === 0) return placeholderLabel;
+    if (value.length === 0) return placeholderLabel;
     if (value.length === 1) {
       const it = options.find((o) => o.id === value[0]);
-      return it?.title ?? `1 ДЗ`;
+      return it?.title ?? t('homework_multi_select.one');
     }
-    if (value.length === options.length) return 'Все ДЗ';
-    return `Выбрано ДЗ: ${value.length}`;
+    if (value.length === options.length)
+      return t('homework_multi_select.all_selected');
+    return t('homework_multi_select.selected_count', { count: value.length });
   })();
 
   const toggle = (id: string) => {
@@ -94,7 +99,7 @@ export function HomeworkMultiSelect({
       >
         {options.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">
-            В этом курсе нет ДЗ
+            {t('homework_multi_select.empty')}
           </div>
         ) : (
           <>
@@ -104,14 +109,14 @@ export function HomeworkMultiSelect({
                 className="rounded px-2 py-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={selectAll}
               >
-                Все
+                {t('homework_multi_select.action_all')}
               </button>
               <button
                 type="button"
                 className="rounded px-2 py-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 onClick={clear}
               >
-                Очистить
+                {t('homework_multi_select.action_clear')}
               </button>
             </div>
             <ul className="max-h-72 overflow-auto py-1">

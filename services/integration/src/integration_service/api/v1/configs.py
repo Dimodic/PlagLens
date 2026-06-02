@@ -40,7 +40,7 @@ def _to_dto(cfg: IntegrationConfig) -> IntegrationConfigOut:
 
 
 def _ensure_owner_or_admin(p: Principal, course_id: Optional[str]) -> None:
-    if p.is_admin or p.is_super_admin:
+    if p.is_admin:
         return
     if course_id is None:
         # Tenant-wide integration (no course attached yet). Teachers
@@ -119,7 +119,6 @@ async def create_config(
     elif not (
         getattr(p, "global_role", None) in ("teacher", "admin")
         or p.is_admin
-        or p.is_super_admin
     ):
         raise ProblemException(
             403, "FORBIDDEN", "Forbidden", "teacher / admin required"

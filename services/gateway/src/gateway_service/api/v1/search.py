@@ -37,7 +37,7 @@ from gateway_service.proxy.http_client import get_http_client
 router = APIRouter(tags=["search"])
 log = get_logger(__name__)
 
-_DEFAULT_TYPES = ("course", "assignment", "user")
+_DEFAULT_TYPES = ("course", "assignment", "person", "submission")
 _INTERNAL_TIMEOUT = httpx.Timeout(5.0, connect=2.0)
 
 
@@ -86,7 +86,7 @@ async def _search_courses(
     q: str,
     limit: int,
     headers: dict[str, str],
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     base = settings.backends_map().get("course")
     if not base:
         return []
@@ -94,6 +94,7 @@ async def _search_courses(
     url = f"{base.rstrip('/')}/api/v1/courses?{qs}"
     payload = await _fetch_json(client, "GET", url, headers)
     items = payload.get("data") or payload.get("items") or []
+    _total = (payload.get("pagination") or {}).get("total")
     out: list[dict[str, Any]] = []
     for c in items:
         cid = c.get("id")
@@ -106,7 +107,7 @@ async def _search_courses(
                 "url": f"/courses/{slug}" if slug else f"/courses/{cid}",
             }
         )
-    return out
+    return {"items": out, "total": _total if _total is not None else len(out)}
 
 
 async def _search_assignments(
@@ -114,7 +115,7 @@ async def _search_assignments(
     q: str,
     limit: int,
     headers: dict[str, str],
-) -> list[dict[str, Any]]:
+) -> dict[str, Any]:
     base = settings.backends_map().get("course")
     if not base:
         return []
@@ -122,6 +123,7 @@ async def _search_assignments(
     url = f"{base.rstrip('/')}/api/v1/assignments?{qs}"
     payload = await _fetch_json(client, "GET", url, headers)
     items = payload.get("data") or payload.get("items") or []
+    _total = (payload.get("pagination") or {}).get("total")
     out: list[dict[str, Any]] = []
     for a in items:
         aid = a.get("id")
@@ -133,48 +135,90 @@ async def _search_assignments(
                 "url": f"/assignments/{aid}" if aid is not None else "",
             }
         )
-    return out
+    return {"items": out, "total": _total if _total is not None else len(out)}
 
 
-async def _search_users(
+async def _search_people(
     client: httpx.AsyncClient,
     q: str,
     limit: int,
     headers: dict[str, str],
-    principal: Principal,
-) -> list[dict[str, Any]]:
-    # Students/teachers cannot enumerate other users — the identity backend
-    # already enforces RBAC, but we short-circuit here to avoid noise.
-    if principal.global_role not in ("admin",):
-        return []
+) -> dict[str, Any]:
+    """Cross-tenant people directory — any authenticated viewer (not just
+    admins). Backed by identity ``/api/v1/people`` (name/email, no PII
+    beyond name + org). Result links to the public profile ``/u/{id}``."""
     base = settings.backends_map().get("identity")
     if not base:
         return []
     qs = urlencode({"q": q, "limit": limit})
-    url = f"{base.rstrip('/')}/api/v1/users?{qs}"
+    url = f"{base.rstrip('/')}/api/v1/people?{qs}"
     payload = await _fetch_json(client, "GET", url, headers)
     items = payload.get("data") or payload.get("items") or []
+    _total = (payload.get("pagination") or {}).get("total")
     out: list[dict[str, Any]] = []
     for u in items:
         uid = u.get("id")
-        title = u.get("display_name") or u.get("email") or ""
         out.append(
             {
                 "id": str(uid) if uid is not None else "",
-                "title": title,
-                "email": u.get("email"),
-                "url": f"/admin/users/{uid}" if uid is not None else "",
+                "title": u.get("display_name") or "",
+                "subtitle": u.get("tenant_name"),
+                "role": u.get("global_role"),
+                "url": f"/u/{uid}" if uid is not None else "",
             }
         )
-    return out
+    return {"items": out, "total": _total if _total is not None else len(out)}
+
+
+async def _search_submissions(
+    client: httpx.AsyncClient,
+    q: str,
+    limit: int,
+    headers: dict[str, str],
+) -> dict[str, Any]:
+    """Cross-submission search, already scoped to the viewer's accessible
+    courses by the submission service (the staff inbox / own-submissions
+    endpoint with a ``q`` filter)."""
+    base = settings.backends_map().get("submission")
+    if not base:
+        return []
+    # ``latest_per_student`` collapses version history (v1/v2/v3) per
+    # (assignment, author) into one row — otherwise a cohort query returns
+    # dozens of near-duplicate rows from whoever submitted most recently.
+    qs = urlencode({"q": q, "limit": limit, "latest_per_student": "true"})
+    url = f"{base.rstrip('/')}/api/v1/users/me/submissions?{qs}"
+    payload = await _fetch_json(client, "GET", url, headers)
+    items = payload.get("data") or payload.get("items") or []
+    _total = (payload.get("pagination") or {}).get("total")
+    out: list[dict[str, Any]] = []
+    for s in items:
+        sid = s.get("id")
+        subtitle = " · ".join(
+            x
+            for x in (
+                s.get("assignment_title"),
+                s.get("course_name"),
+                s.get("external_verdict"),
+            )
+            if x
+        )
+        out.append(
+            {
+                "id": str(sid) if sid is not None else "",
+                "title": s.get("author_label") or s.get("assignment_title") or "—",
+                "subtitle": subtitle or None,
+                "url": f"/submissions/{sid}" if sid is not None else "",
+            }
+        )
+    return {"items": out, "total": _total if _total is not None else len(out)}
 
 
 @router.get("/api/v1/search", summary="Federated global search")
 async def global_search(
     request: Request,
     q: str = Query(..., min_length=2, max_length=120),
-    types: str | None = Query(default=None, description="Comma-separated subset of: course,assignment,user"),
-    limit: int = Query(default=5, ge=1, le=20),
+    types: str | None = Query(default=None, description="Comma-separated subset of: course,assignment,person,submission"),
+    limit: int = Query(default=5, ge=1, le=200),
 ):
     principal: Principal | None = getattr(request.state, "principal", None)
     if principal is None:
@@ -202,8 +246,10 @@ async def global_search(
         type_to_coro["course"] = _search_courses(client, q, limit, headers)
     if "assignment" in requested:
         type_to_coro["assignment"] = _search_assignments(client, q, limit, headers)
-    if "user" in requested:
-        type_to_coro["user"] = _search_users(client, q, limit, headers, principal)
+    if "person" in requested or "user" in requested:
+        type_to_coro["person"] = _search_people(client, q, limit, headers)
+    if "submission" in requested:
+        type_to_coro["submission"] = _search_submissions(client, q, limit, headers)
 
     if not type_to_coro:
         return JSONResponse(content={"q": q, "groups": []}, status_code=200)
@@ -220,9 +266,14 @@ async def global_search(
                 error=type(result).__name__,
                 detail=str(result)[:200],
             )
-            groups.append({"type": label, "items": [], "error": type(result).__name__})
+            groups.append(
+                {"type": label, "items": [], "total": 0, "error": type(result).__name__}
+            )
         else:
-            groups.append({"type": label, "items": result})
+            items = result.get("items", [])
+            groups.append(
+                {"type": label, "items": items, "total": result.get("total", len(items))}
+            )
 
     return JSONResponse(content={"q": q, "groups": groups}, status_code=200)
 

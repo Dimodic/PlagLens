@@ -249,6 +249,13 @@ class Homework(Base):
     status: Mapped[str] = mapped_column(
         String(32), nullable=False, default="active"
     )
+    # «single» — the ДЗ IS the task (one auto-created assignment carrying the
+    # same title); «collection» — a container of separate tasks. Drives the UI
+    # so a single ДЗ renders as a leaf (no nested self-duplicate, no extra
+    # crumb), instead of guessing it from a title match.
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="collection"
+    )
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, default=_utcnow

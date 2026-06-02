@@ -16,6 +16,11 @@ from pydantic import BaseModel, ConfigDict, Field
 # students) or ``archived``. ``draft`` / ``published`` are dropped.
 HomeworkStatus = Literal["active", "archived"]
 
+# «single» — the ДЗ itself is the task (one auto-created assignment with the
+# same title); «collection» — a set of separate tasks. The frontend branches
+# on this so a single ДЗ renders as a leaf instead of a self-duplicating tree.
+HomeworkKind = Literal["single", "collection"]
+
 
 class HomeworkBase(BaseModel):
     title: str = Field(min_length=1, max_length=255)
@@ -27,6 +32,7 @@ class HomeworkBase(BaseModel):
     )
     position: int = Field(default=0, ge=0)
     status: HomeworkStatus = "active"
+    kind: HomeworkKind = "collection"
     due_at: datetime | None = None
 
 
@@ -39,6 +45,7 @@ class HomeworkUpdate(BaseModel):
     description: str | None = Field(default=None, max_length=100_000)
     position: int | None = Field(default=None, ge=0)
     status: HomeworkStatus | None = None
+    kind: HomeworkKind | None = None
     due_at: datetime | None = None
 
 
@@ -52,6 +59,7 @@ class HomeworkRead(BaseModel):
     description: str | None = None
     position: int = 0
     status: HomeworkStatus
+    kind: HomeworkKind = "collection"
     due_at: datetime | None = None
     created_at: datetime
     updated_at: datetime | None = None

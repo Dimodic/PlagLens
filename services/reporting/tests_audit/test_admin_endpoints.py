@@ -29,14 +29,14 @@ async def test_retention_status(client):
 
 
 @pytest.mark.asyncio
-async def test_retention_run_now_requires_super_admin(client):
-    r = await client.post("/api/v1/admin/audit/retention:run-now", headers=HEADERS)
+async def test_retention_run_now_requires_admin(client):
+    teacher_hdrs = {**HEADERS, "X-Test-Role": "teacher"}
+    r = await client.post(
+        "/api/v1/admin/audit/retention:run-now", headers=teacher_hdrs
+    )
     assert r.status_code == 403
 
-    super_hdrs = {**HEADERS, "X-Test-Role": "super_admin"}
-    r = await client.post(
-        "/api/v1/admin/audit/retention:run-now", headers=super_hdrs
-    )
+    r = await client.post("/api/v1/admin/audit/retention:run-now", headers=HEADERS)
     assert r.status_code == 200
     assert r.json()["dry_run"] is False
 

@@ -1,17 +1,17 @@
 /**
- * Sidebar — Kaggle-style icon-rail + hover-expanded overlay drawer.
+ * Sidebar — Kaggle-style rail that *expands in place* on hover.
  *
- * Default state on desktop (>= 768px):
- *   • A 64px-wide rail with icon-only nav items is always visible.
- *   • On mouseenter ANYWHERE over the rail, an absolutely-positioned drawer
- *     (256px wide) opens over the content. Content does NOT shift.
- *   • On mouseleave the rail/drawer combo, the drawer closes.
- *   • No localStorage. No hover-expand suppression.
+ * Desktop (>= 768px):
+ *   • A single sidebar element that's 72px wide (icon rail) and smoothly
+ *     widens to 256px on hover, revealing labels. It's NOT a separate
+ *     drawer sliding over the rail — the same element grows.
+ *   • It's an overlay (position: fixed) with a 72px in-flow spacer holding
+ *     the layout, so page content never shifts when it expands.
+ *   • A hover-intent delay before opening lets you click a rail icon before
+ *     it widens. Each nav row is full rail width (no floating square).
  *
  * Mobile (< 768px):
- *   • Rail hidden. Topbar shows a hamburger that toggles an overlay drawer
- *     (state lifted to AppShell via the prop `mobileOpen` / `onMobileClose`).
- *   • No hover-expand on touch.
+ *   • Sidebar hidden; the topbar hamburger opens a full overlay drawer.
  */
 import { ReactNode, useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
@@ -23,7 +23,6 @@ import {
   ClipboardCheck,
   LogIn,
   Plug,
-  Sparkles,
   Settings2,
   Inbox,
   Users,
@@ -45,12 +44,6 @@ interface NavLeaf {
   label: string;
   icon: ReactNode;
   to: string;
-  /**
-   * Extra path prefixes that should also activate the item.
-   * Lets one sidebar entry stay highlighted on routes that don't share
-   * a single root — e.g. admin "Интеграции" must own both
-   * `/admin/integrations/*` and the shared `/integrations/wizard` route.
-   */
   matches?: string[];
 }
 
@@ -59,7 +52,6 @@ interface NavSection {
   items: NavLeaf[];
 }
 
-// Larger glyphs to match the Kaggle-style enlarged nav rows.
 const ic = (Icon: typeof LayoutGrid) => <Icon className="h-[22px] w-[22px]" />;
 
 function deriveRole(
@@ -71,27 +63,16 @@ function deriveRole(
   return 'teacher';
 }
 
-/**
- * Flat nav: rail + drawer expose the same items, no expand/collapse groups.
- * Sub-pages of admin sections are accessed via the page itself once you land
- * on the section root.
- */
 function buildSections(
   role: 'student' | 'teacher' | 'assistant' | 'admin',
-  isSuperAdmin: boolean,
+  isAdmin: boolean,
   t: (k: string) => string,
 ): NavSection[] {
   if (role === 'admin') {
-    // Order is deliberate: overview → structure (tenants → users → roles) →
-    // platform (AI → integrations → notifications) → audit-trail (journal →
-    // system). Reads top-to-bottom as "what / who / how / when".
-    //
-    // Every item has a UNIQUE icon: previously "Обзор" and "Учреждения"
-    // both used LayoutGrid, which broke visual scan in the icon-only rail.
     const items: NavLeaf[] = [
       { id: 'a_home', screenId: 'a_home', label: t('nav.overview'), icon: ic(LayoutGrid), to: '/admin' },
     ];
-    if (isSuperAdmin) {
+    if (isAdmin) {
       items.push({
         id: 'a_tenants', screenId: 'tenants', label: t('nav.admin.tenants'), icon: ic(Building2), to: '/admin/tenants',
       });
@@ -99,8 +80,7 @@ function buildSections(
     items.push(
       { id: 'a_users', screenId: 'a_users', label: t('nav.users'), icon: ic(Users), to: '/admin/users' },
       { id: 'a_roles', label: t('nav.admin.roles'), icon: ic(ShieldCheck), to: '/admin/roles' },
-      { id: 'a_ai', label: t('nav.admin.ai'), icon: ic(Sparkles), to: '/admin/ai/providers' },
-      { id: 'a_login', screenId: 'a_login', label: 'Авторизация', icon: ic(LogIn), to: '/admin/login-providers' },
+      { id: 'a_login', screenId: 'a_login', label: t('nav.login'), icon: ic(LogIn), to: '/admin/login-providers' },
       { id: 'a_integrations', screenId: 'a_integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/admin/integrations', matches: ['/integrations'] },
       { id: 'a_notifications', label: t('nav.admin.notifications'), icon: ic(Bell), to: '/admin/notifications/email' },
       { id: 'a_audit', screenId: 'a_audit', label: t('nav.audit'), icon: ic(FileClock), to: '/admin/audit' },
@@ -122,35 +102,19 @@ function buildSections(
   }
 
   if (role === 'assistant') {
-    // Assistant cabinet: the grading queue is home; plus their courses,
-    // the all-submissions feed (scoped to their courses) and export —
-    // the teacher workspace minus the owner-only tools (integrations,
-    // course management).
     return [
       {
         label: t('nav.workspace'),
         items: [
-          { id: 'grading', screenId: 'grading', label: 'Кабинет', icon: ic(ClipboardCheck), to: '/grading' },
+          { id: 'grading', screenId: 'grading', label: t('nav.grading'), icon: ic(ClipboardCheck), to: '/grading' },
           { id: 'courses', screenId: 'courses', label: t('nav.courses'), icon: ic(LayoutGrid), to: '/courses' },
-          { id: 'submissions', screenId: 'submissions', label: 'Все посылки', icon: ic(Table2), to: '/submissions' },
+          { id: 'submissions', screenId: 'submissions', label: t('nav.all_submissions'), icon: ic(Table2), to: '/submissions' },
           { id: 'reports', screenId: 'reports', label: t('nav.reports'), icon: ic(FileSpreadsheet), to: '/reports' },
         ],
       },
     ];
   }
 
-  // Teacher sidebar — only routes they actually have access
-  // to. `/activity` and `/llm` are admin/super_admin-only (RoleGuard
-  // silently redirects), so they must NOT appear here — showing a nav
-  // item that "doesn't go where it says" is a UX trap. "Мои задания"
-  // (/me/assignments) is a student view — a teacher/assistant works
-  // through courses, not a personal assignment feed — so it's dropped
-  // here. Admin sidebar (built below) has its own list.
-  //
-  // No standalone "Импорт" item: importing student submissions is now
-  // consolidated inside "Интеграции" (one import surface instead of the
-  // half-dozen scattered pages). "Экспорт" (/reports) is the outbound
-  // side — grades → Google Sheets / CSV.
   return [
     {
       label: t('nav.workspace'),
@@ -164,10 +128,6 @@ function buildSections(
       label: t('nav.tools'),
       items: [
         { id: 'integrations', screenId: 'integrations', label: t('nav.integrations'), icon: ic(Plug), to: '/integrations' },
-        // «Настройки» rolled into the avatar dropdown → Профиль. Keeping a
-        // sidebar entry would create three doorways to the same surface
-        // (sidebar / avatar menu / direct URL) and add visual noise to a
-        // page that's already mostly settings.
       ],
     },
   ];
@@ -180,11 +140,12 @@ interface SidebarProps {
   className?: string;
 }
 
-// Delay before the hover-drawer expands. Tuned so the typical reach-then-click
-// gesture (mouse-travel ~250ms + dwell ~200ms + click ~100ms ≈ 550ms) finishes
-// BEFORE the drawer covers the rail icon. Mouse-leave is instant — once they
-// intend to leave, get out of the way.
-const DRAWER_OPEN_DELAY_MS = 700;
+// Hover-intent delay before the rail widens — long enough that a "reach for
+// a rail icon and click it" gesture finishes before the rail grows. Close
+// is instant.
+const OPEN_DELAY_MS = 650;
+// Collapsed rail width; icons centre in this slot in both states (no jump).
+const RAIL_W = 72;
 
 export function Sidebar({ mobileOpen = false, onMobileClose, className }: SidebarProps) {
   const { user } = useAuth();
@@ -193,15 +154,11 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
   const [hovered, setHovered] = useState(false);
   const openTimerRef = useRef<number | null>(null);
 
-  // Close mobile drawer when route changes.
   useEffect(() => {
     if (mobileOpen) onMobileClose?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
 
-  // When the route changes, also collapse the hover drawer — clicking a nav
-  // item navigates AND should close the overlay, otherwise the drawer
-  // lingers over the new content.
   useEffect(() => {
     if (openTimerRef.current) {
       window.clearTimeout(openTimerRef.current);
@@ -210,14 +167,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
     setHovered(false);
   }, [location.pathname]);
 
-  // Clean up any pending open-timer on unmount.
   useEffect(() => {
     return () => {
       if (openTimerRef.current) window.clearTimeout(openTimerRef.current);
     };
   }, []);
 
-  // Esc closes mobile drawer.
   useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e: KeyboardEvent) => {
@@ -232,9 +187,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
     openTimerRef.current = window.setTimeout(() => {
       setHovered(true);
       openTimerRef.current = null;
-    }, DRAWER_OPEN_DELAY_MS);
+    }, OPEN_DELAY_MS);
   }, []);
-
   const onLeave = useCallback(() => {
     if (openTimerRef.current) {
       window.clearTimeout(openTimerRef.current);
@@ -246,58 +200,51 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
   if (!user) return null;
 
   const role = deriveRole(user.global_role);
-  const isSuperAdmin = user.global_role === 'admin';
-  const sections = buildSections(role, isSuperAdmin, t);
+  const isAdmin = user.global_role === 'admin';
+  const items = buildSections(role, isAdmin, t).flatMap((s) => s.items);
   const activeScreen = resolveScreen(location.pathname, user.global_role);
 
   return (
     <>
-      {/* Desktop rail + hover drawer. Hidden under 768px. */}
+      {/* Desktop: 72px spacer reserves the layout; the real sidebar below is
+          an overlay that widens in place, so content never shifts. */}
+      <div className="hidden md:block shrink-0" style={{ width: RAIL_W }} aria-hidden />
       <aside
         data-testid="app-sidebar"
         data-expanded={hovered ? 'true' : 'false'}
         onMouseEnter={onEnter}
         onMouseLeave={onLeave}
         className={cn(
-          'hidden md:block',
-          // Wider rail (was w-16 / 64px) to host larger touch targets +
-          // breathing room under the glyph — matches Kaggle's left chrome.
-          'sticky top-0 z-40 h-screen w-[72px] shrink-0',
-          'border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
+          'hidden md:flex fixed left-0 top-0 z-40 h-screen flex-col overflow-hidden',
+          'border-r border-sidebar-border/30 bg-sidebar text-sidebar-foreground',
+          'transition-[width] duration-300 ease-[cubic-bezier(0.4,0,0.2,1)]',
+          hovered ? 'shadow-[8px_0_28px_-14px_rgba(0,0,0,0.35)]' : '',
           className,
         )}
+        style={{ width: hovered ? 256 : RAIL_W }}
       >
-        {/* The rail itself — always visible, icon-only */}
-        <RailContents
-          sections={sections}
-          activeScreen={activeScreen}
-          pathname={location.pathname}
-        />
-
-        {/* Hover drawer — absolutely positioned, overlays the page. The
-            drawer is a sibling of the rail content inside the same <aside>
-            so mouseenter/leave on the parent catches both. */}
-        <div
-          data-testid="app-sidebar-drawer"
-          aria-hidden={!hovered}
-          // 288px (was 256) gives the larger labels room to breathe and
-          // keeps Russian translations from squeezing.
-          className={cn(
-            'absolute left-0 top-0 h-screen w-72',
-            'border-r border-sidebar-border bg-sidebar text-sidebar-foreground',
-            'shadow-[6px_0_24px_-12px_rgba(0,0,0,0.18)]',
-            'transition-[opacity,transform] duration-150 ease-out',
-            hovered
-              ? 'opacity-100 translate-x-0 pointer-events-auto'
-              : 'opacity-0 -translate-x-1 pointer-events-none',
-          )}
-        >
-          <DrawerContents
-            sections={sections}
-            activeScreen={activeScreen}
-            pathname={location.pathname}
+        <div className="flex h-14 shrink-0 items-center">
+          <Wordmark
+            variant="full"
+            railAligned
+            textRevealed={hovered}
+            data-testid="wordmark-rail"
           />
         </div>
+        <nav className="scroll-thin flex-1 overflow-y-auto overflow-x-hidden py-3">
+          <ul className="flex flex-col gap-1">
+            {items.map((leaf) => (
+              <li key={leaf.id}>
+                <NavRow
+                  leaf={leaf}
+                  expanded={hovered}
+                  activeScreen={activeScreen}
+                  pathname={location.pathname}
+                />
+              </li>
+            ))}
+          </ul>
+        </nav>
       </aside>
 
       {/* Mobile drawer — backdrop + sheet, toggled by AppShell. */}
@@ -310,86 +257,29 @@ export function Sidebar({ mobileOpen = false, onMobileClose, className }: Sideba
           />
           <aside
             data-testid="app-sidebar-mobile"
-            className="absolute left-0 top-0 h-full w-72 bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl"
+            className="absolute left-0 top-0 flex h-full w-72 flex-col overflow-hidden bg-sidebar text-sidebar-foreground border-r border-sidebar-border shadow-xl"
           >
-            <DrawerContents
-              sections={sections}
-              activeScreen={activeScreen}
-              pathname={location.pathname}
-            />
+            <div className="flex h-14 shrink-0 items-center">
+              <Wordmark variant="full" railAligned />
+            </div>
+            <nav className="scroll-thin flex-1 overflow-y-auto overflow-x-hidden py-3">
+              <ul className="flex flex-col gap-1">
+                {items.map((leaf) => (
+                  <li key={leaf.id}>
+                    <NavRow
+                      leaf={leaf}
+                      expanded
+                      activeScreen={activeScreen}
+                      pathname={location.pathname}
+                    />
+                  </li>
+                ))}
+              </ul>
+            </nav>
           </aside>
         </div>
       )}
     </>
-  );
-}
-
-interface ContentsProps {
-  sections: NavSection[];
-  activeScreen: Screen;
-  pathname: string;
-}
-
-function RailContents({ sections, activeScreen, pathname }: ContentsProps) {
-  return (
-    <div className="flex h-full flex-col">
-      {/* Glyph slot — matches the wordmark vertical alignment in the drawer.
-          NO border-b here: Header's own border-b runs across the full top
-          edge (including this slot), so a second line would stack and the
-          differing colour tokens (border vs sidebar-border) would crosshatch
-          at the corner. One line is one line. */}
-      <div className="flex h-14 items-center justify-center">
-        <Wordmark variant="compact" data-testid="wordmark-rail" />
-      </div>
-      <nav className="scroll-thin flex-1 overflow-y-auto py-3">
-        <ul className="flex flex-col items-center gap-1">
-          {sections.flatMap((s) =>
-            s.items.map((it) => (
-              <li key={it.id}>
-                <RailItem leaf={it} activeScreen={activeScreen} pathname={pathname} />
-              </li>
-            )),
-          )}
-        </ul>
-      </nav>
-    </div>
-  );
-}
-
-function DrawerContents({ sections, activeScreen, pathname }: ContentsProps) {
-  // Flat list — Kaggle drops the "WORKSPACE / TOOLS" group headings in
-  // favour of a single uninterrupted column of large nav rows. We do the
-  // same: keep the section grouping in code (still useful for ordering)
-  // but render every item at the same level so the eye scans straight
-  // down without sub-titles getting in the way.
-  //
-  // Padding here (`py-3`, `gap-1`) intentionally mirrors RailContents so
-  // every row lines up horizontally with its rail counterpart on hover —
-  // otherwise the drawer items would drift downwards as you scan.
-  const allItems = sections.flatMap((s) => s.items);
-  return (
-    <div className="flex h-full flex-col">
-      {/* Same as RailContents: no border-b — header line owns the top edge.
-          No px-4 here: the wordmark is `railAligned`, so its mark sits in
-          the same 72px centred slot as the rail glyph and stays put when
-          the rail expands into the drawer. */}
-      <div className="flex h-14 items-center">
-        <Wordmark variant="full" railAligned data-testid="wordmark-drawer" />
-      </div>
-      <nav className="scroll-thin flex-1 overflow-y-auto px-3 py-3">
-        <ul className="flex flex-col gap-1">
-          {allItems.map((leaf) => (
-            <li key={leaf.id}>
-              <DrawerItem
-                leaf={leaf}
-                activeScreen={activeScreen}
-                pathname={pathname}
-              />
-            </li>
-          ))}
-        </ul>
-      </nav>
-    </div>
   );
 }
 
@@ -403,13 +293,14 @@ function isLeafActive(leaf: NavLeaf, activeScreen: Screen, pathname: string): bo
   return false;
 }
 
-interface ItemProps {
+interface NavRowProps {
   leaf: NavLeaf;
+  expanded: boolean;
   activeScreen: Screen;
   pathname: string;
 }
 
-function RailItem({ leaf, activeScreen, pathname }: ItemProps) {
+function NavRow({ leaf, expanded, activeScreen, pathname }: NavRowProps) {
   const on = isLeafActive(leaf, activeScreen, pathname);
   return (
     <Link
@@ -417,48 +308,33 @@ function RailItem({ leaf, activeScreen, pathname }: ItemProps) {
       data-testid={`nav-item-${leaf.id}`}
       data-active={on ? 'true' : undefined}
       aria-label={leaf.label}
-      title={leaf.label}
-      // Larger hit-area (was 40×40) for fingertip parity with Kaggle's rail.
+      title={!expanded ? leaf.label : undefined}
+      // The row is always full rail width (a band, never a floating square).
+      // The icon sits in a fixed RAIL_W slot so it stays centred in the
+      // collapsed rail AND keeps the same x when the rail widens — the label
+      // just reveals to its right (clipped by the sidebar's overflow-hidden
+      // while collapsed).
       className={cn(
-        'flex h-12 w-12 items-center justify-center rounded-lg transition-colors',
+        'group flex h-12 items-center rounded-md transition-colors',
         on
           ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-          : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
-      )}
-    >
-      {leaf.icon}
-    </Link>
-  );
-}
-
-function DrawerItem({ leaf, activeScreen, pathname }: ItemProps) {
-  const on = isLeafActive(leaf, activeScreen, pathname);
-  return (
-    <Link
-      to={leaf.to}
-      data-testid={`nav-drawer-item-${leaf.id}`}
-      data-active={on ? 'true' : undefined}
-      // Locked to 48px (== rail item h-12 w-12) so the drawer items sit on
-      // the same baseline as their rail counterparts when the drawer
-      // overlays the rail. Without the explicit height, padding + line-
-      // height conspired to make every row a few px taller than the rail
-      // icons and the list drifted downwards as the user scanned.
-      className={cn(
-        'group flex h-12 items-center gap-4 rounded-md px-3 text-[17px] font-medium transition-colors',
-        on
-          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-          : 'text-sidebar-foreground/85 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
+          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground',
       )}
     >
       <span
-        className={cn(
-          'flex h-6 w-6 shrink-0 items-center justify-center',
-          on ? 'text-sidebar-primary' : 'text-muted-foreground',
-        )}
+        className="flex h-full shrink-0 items-center justify-center"
+        style={{ width: RAIL_W }}
       >
         {leaf.icon}
       </span>
-      <span className="flex-1 truncate">{leaf.label}</span>
+      <span
+        className={cn(
+          'truncate whitespace-nowrap pr-3 text-[15px] font-medium transition-opacity duration-200',
+          expanded ? 'opacity-100' : 'opacity-0',
+        )}
+      >
+        {leaf.label}
+      </span>
     </Link>
   );
 }

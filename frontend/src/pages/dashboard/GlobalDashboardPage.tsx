@@ -1,5 +1,5 @@
 /**
- * GlobalDashboardPage — super_admin cross-tenant overview.
+ * GlobalDashboardPage — admin cross-tenant overview.
  */
 import { Link } from 'react-router-dom';
 import {
@@ -11,11 +11,13 @@ import {
 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useGlobalDashboard } from '@/hooks/api/useDashboards';
+import { useTranslation } from '@/i18n';
 import { KPICard } from '@/components/dashboard/KPICard';
 import { Button } from '@/components/ui/button';
 
 export default function GlobalDashboardPage() {
-  useDocumentTitle('Глобальный дашборд');
+  const { t } = useTranslation();
+  useDocumentTitle(t('global_dashboard.title'));
   const { data, isLoading } = useGlobalDashboard();
 
   return (
@@ -23,10 +25,10 @@ export default function GlobalDashboardPage() {
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            Глобальный дашборд
+            {t('global_dashboard.heading')}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Сводка по всем тенантам.
+            {t('global_dashboard.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -41,21 +43,21 @@ export default function GlobalDashboardPage() {
         className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3"
       >
         <KPICard
-          label="Тенантов"
+          label={t('global_dashboard.kpi_tenants')}
           value={data?.tenants_count}
           icon={<Building className="h-4 w-4" />}
           loading={isLoading}
           testId="kpi-tenants-count"
         />
         <KPICard
-          label="Активных пользователей"
+          label={t('global_dashboard.kpi_active_users')}
           value={data?.active_users_total}
           icon={<Users className="h-4 w-4" />}
           loading={isLoading}
           testId="kpi-active-users-total"
         />
         <KPICard
-          label="Посылок (30д)"
+          label={t('global_dashboard.kpi_submissions_30d')}
           value={data?.submissions_total_30d}
           icon={<Building className="h-4 w-4" />}
           color="blue"
@@ -63,7 +65,7 @@ export default function GlobalDashboardPage() {
           testId="kpi-submissions-total-30d"
         />
         <KPICard
-          label="AI cost (30д)"
+          label={t('global_dashboard.kpi_ai_cost_30d')}
           value={
             data?.ai_cost_total_30d !== undefined
               ? `$${data.ai_cost_total_30d.toFixed(2)}`
@@ -75,7 +77,7 @@ export default function GlobalDashboardPage() {
           testId="kpi-ai-cost-total-30d"
         />
         <KPICard
-          label="Plagiarism runs (30д)"
+          label={t('global_dashboard.kpi_plagiarism_runs_30d')}
           value={data?.plagiarism_runs_total_30d}
           icon={<Shield className="h-4 w-4" />}
           color="red"
@@ -83,10 +85,10 @@ export default function GlobalDashboardPage() {
           testId="kpi-plagiarism-runs-total-30d"
         />
         <KPICard
-          label="AI"
+          label={t('global_dashboard.kpi_ai')}
           value="—"
           icon={<Brain className="h-4 w-4" />}
-          hint="Подробнее см. /admin/ai/budgets"
+          hint={t('global_dashboard.kpi_ai_hint')}
           loading={isLoading}
           testId="kpi-ai-hint"
         />

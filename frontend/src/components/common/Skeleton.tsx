@@ -1,5 +1,6 @@
 import { Skeleton as UISkeleton } from '@/components/ui/skeleton';
 import { Page, type PageWidth } from '@/components/layout/Page';
+import { useTranslation } from '@/i18n';
 
 export interface SkeletonListProps {
   rows?: number;
@@ -12,13 +13,14 @@ export interface SkeletonListProps {
 export function SkeletonList({
   rows = 3,
   rowHeight = 48,
-  ariaLabel = 'Загрузка',
+  ariaLabel,
 }: SkeletonListProps) {
+  const { t } = useTranslation();
   return (
     <div
       role="status"
       aria-live="polite"
-      aria-label={ariaLabel}
+      aria-label={ariaLabel ?? t('skeleton.aria_label')}
       className="flex flex-col gap-2"
     >
       {Array.from({ length: rows }).map((_, i) => (
@@ -49,12 +51,13 @@ export function PageSkeleton({
   rowHeight?: number;
   withTabs?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <Page width={width}>
       <div
         role="status"
         aria-live="polite"
-        aria-label="Загрузка"
+        aria-label={t('skeleton.aria_label')}
         className="space-y-6"
       >
         {/* Title + meta row */}

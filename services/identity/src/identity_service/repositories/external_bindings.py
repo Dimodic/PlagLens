@@ -1,10 +1,10 @@
 """External binding repository (Stepik / Yandex.Contest user mappings)."""
 from __future__ import annotations
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..models import ExternalBinding
+from ..models import ExternalBinding, User
 
 
 class ExternalBindingRepository:
@@ -43,3 +43,44 @@ class ExternalBindingRepository:
             delete(ExternalBinding).where(ExternalBinding.id == binding_id)
         )
         return result.rowcount or 0
+
+    async def rename_yc_external_id(
+        self, *, from_external_id: str, to_external_id: str
+    ) -> int:
+        """Swap a Yandex.Contest binding's ``external_id`` (one remap).
+
+        Used by the YC author-id reconciliation: a binding stored under the
+        unstable ``yc:<participantId>`` key is rewritten to the stable
+        ``yc:<login>`` form. Only ``external_id`` changes — ``user_id`` keeps
+        pointing at the same person. Scoped to ``system='yandex_contest'``;
+        idempotent (a second run matches nothing → 0). Returns rows updated.
+        """
+        result = await self.s.execute(
+            update(ExternalBinding)
+            .where(
+                ExternalBinding.system == "yandex_contest",
+                ExternalBinding.external_id == from_external_id,
+            )
+            .values(external_id=to_external_id)
+        )
+        return result.rowcount or 0
+
+    async def list_yc_for_tenant(
+        self, *, tenant_id: str
+    ) -> list[ExternalBinding]:
+        """Every ``yandex_contest`` binding whose user lives in ``tenant_id``.
+
+        Joins identity's OWN ``users`` table to restrict the result to the
+        given tenant — this is the list submission-service uses for its claim
+        pass (rewrite ``author_id`` from the external key to the bound
+        ``user_id``), so it must never leak another tenant's bindings.
+        """
+        stmt = (
+            select(ExternalBinding)
+            .join(User, User.id == ExternalBinding.user_id)
+            .where(
+                ExternalBinding.system == "yandex_contest",
+                User.tenant_id == tenant_id,
+            )
+        )
+        return list((await self.s.execute(stmt)).scalars().all())

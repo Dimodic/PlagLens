@@ -54,7 +54,7 @@ src/
 ## Roles & navigation
 
 The sidebar (`src/layout/Navbar.tsx`) is filtered by `global_role`
-and the user's course-role memberships. `super_admin` sees every
+and the user's course-role memberships. `admin` sees every
 section.
 
 ## Adding a new page

@@ -169,8 +169,16 @@ export const coursesApi = {
     // new_name optional); send {} so it isn't a 422 "body field required".
     api.post<Course>(`/courses/${id}:duplicate`, {}).then((r) => r.data),
 
+  // Invitation codes are issued and stored by the identity service
+  // (identity.invitations) and redeemed there — identity also creates the
+  // course membership. The old course-submission /courses:joinByCode only knew
+  // course-local codes and returned 404 for identity-issued ones, so route
+  // through the canonical redeem endpoint. Return shape kept as { course_id }
+  // for the existing callers (JoinByCodeDialog / JoinByCodePage).
   joinByCode: (code: string) =>
-    api.post<{ course_id: string }>('/courses:joinByCode', { code }).then((r) => r.data),
+    api
+      .post<{ course_id: string | null }>('/invitations:redeem', { code })
+      .then((r) => ({ course_id: r.data.course_id ?? '' })),
 
   // ---- owners ----
   // NB: this endpoint returns a *bare array* (``list[OwnerRead]``), not a

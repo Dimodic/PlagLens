@@ -170,6 +170,15 @@ export function useSubmissionFiles(id: string | undefined) {
     enabled: !!id,
     placeholderData: (prev) => prev,
     staleTime: PER_SUBMISSION_STALE_MS,
+    // A submission's file rows can land a beat after the upload POST
+    // returns. Without this, the first fetch right after upload can get an
+    // empty list, which the 5-min staleTime + global refetchOnMount:false
+    // then freeze until a hard reload (the "PDF appears only after F5"
+    // symptom). Refetch on (re)mount, and briefly poll while the list is
+    // still empty so a freshly-uploaded file shows up on its own.
+    refetchOnMount: true,
+    refetchInterval: (query) =>
+      (query.state.data?.data?.length ?? 0) === 0 ? 1500 : false,
   });
 }
 

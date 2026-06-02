@@ -12,10 +12,11 @@
 import { useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useAuditEvents } from '@/hooks/api/useAudit';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { AuditEvent } from '@/api/endpoints/audit';
 
 type Bucket = 'all' | 'run' | 'import' | 'verdict' | 'llm';
@@ -92,7 +93,8 @@ function relTime(iso: string | Date | null | undefined): string {
 }
 
 export default function ActivityLogPage() {
-  useDocumentTitle('Активность');
+  const { t } = useTranslation();
+  useDocumentTitle(t('activity_log.title'));
   const [filter, setFilter] = useState<Bucket>('all');
 
   const { data, isLoading } = useAuditEvents({ limit: 50 });
@@ -105,28 +107,52 @@ export default function ActivityLogPage() {
 
   return (
     <Page width="wide" data-testid="activity-log-page">
-      <PageHeader title="Активность" />
+      <PageHeader title={t('activity_log.title')} />
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <Tabs value={filter} onValueChange={(v) => setFilter(v as Bucket)}>
           <TabsList>
-            <TabsTrigger value="all">Все</TabsTrigger>
-            <TabsTrigger value="run">Проверки</TabsTrigger>
-            <TabsTrigger value="import">Импорт</TabsTrigger>
-            <TabsTrigger value="verdict">Вердикты</TabsTrigger>
-            <TabsTrigger value="llm">LLM</TabsTrigger>
+            <TabsTrigger value="all">{t('activity_log.filter_all')}</TabsTrigger>
+            <TabsTrigger value="run">{t('activity_log.filter_run')}</TabsTrigger>
+            <TabsTrigger value="import">
+              {t('activity_log.filter_import')}
+            </TabsTrigger>
+            <TabsTrigger value="verdict">
+              {t('activity_log.filter_verdict')}
+            </TabsTrigger>
+            <TabsTrigger value="llm">{t('activity_log.filter_llm')}</TabsTrigger>
           </TabsList>
         </Tabs>
         <span className="text-xs text-muted-foreground">
-          <span className="tabular-nums">{visible.length}</span> событий
+          <span className="tabular-nums">{visible.length}</span>{' '}
+          {t('activity_log.events_label')}
         </span>
       </div>
 
       {isLoading && visible.length === 0 ? (
-        <SkeletonList rows={5} rowHeight={48} />
+        <Card className="border-border/70">
+          <CardContent className="p-0">
+            {Array.from({ length: 6 }).map((_, idx) => (
+              <div
+                key={idx}
+                className={`grid grid-cols-[120px_16px_1fr_auto] gap-4 px-5 py-4 ${
+                  idx > 0 ? 'border-t border-border/70' : ''
+                }`}
+              >
+                <Skeleton className="mt-0.5 h-3 w-16 bg-muted/40" />
+                <Skeleton className="mt-1.5 h-1.5 w-1.5 rounded-full bg-muted/40" />
+                <div className="min-w-0 space-y-1.5">
+                  <Skeleton className="h-3.5 w-3/4 bg-muted/40" />
+                  <Skeleton className="h-3 w-2/5 bg-muted/30" />
+                </div>
+                <Skeleton className="mt-0.5 h-3 w-20 bg-muted/40" />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
       ) : visible.length === 0 ? (
         <div className="rounded-lg border border-dashed py-12 px-6 text-center text-sm text-muted-foreground">
-          Событий нет.
+          {t('activity_log.empty')}
         </div>
       ) : (
         <Card className="border-border/70">

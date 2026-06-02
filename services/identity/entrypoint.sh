@@ -4,8 +4,8 @@
 #   1. Wait for Postgres to be reachable (DATABASE_URL).
 #   2. Wait for Redis to be reachable (REDIS_URL).
 #   3. Run alembic migrations (idempotent — alembic skips applied revisions).
-#   4. Optionally bootstrap the system super-admin if BOOTSTRAP_SUPER_ADMIN_EMAIL
-#      is set and no super_admin exists yet.
+#   4. Optionally bootstrap the system admin if BOOTSTRAP_ADMIN_EMAIL
+#      is set and no admin exists yet.
 #   5. Hand off to uvicorn (PID 1).
 set -euo pipefail
 
@@ -72,11 +72,11 @@ echo "[entrypoint] running alembic upgrade head..."
 cd /app && alembic upgrade head
 
 # --------------------------------------------------------------------- #
-# 4. Bootstrap super_admin if requested (identity-only)
+# 4. Bootstrap admin if requested (identity-only)
 # --------------------------------------------------------------------- #
-if [ -n "${BOOTSTRAP_SUPER_ADMIN_EMAIL:-}" ]; then
-    echo "[entrypoint] bootstrapping super_admin if missing..."
-    python -m identity_service.bootstrap_super_admin || \
+if [ -n "${BOOTSTRAP_ADMIN_EMAIL:-}" ]; then
+    echo "[entrypoint] bootstrapping admin if missing..."
+    python -m identity_service.bootstrap_admin || \
         echo "[entrypoint]   (bootstrap skipped or already exists)"
 fi
 

@@ -103,13 +103,13 @@ def require_global_role(*allowed: str):
     return _dep
 
 
-def require_super_admin():
+def require_admin():
     async def _dep(user: CurrentUser = Depends(current_user)) -> CurrentUser:
         if user.global_role != "admin":
             raise ProblemException(
                 status=403,
                 code="FORBIDDEN",
-                title="super_admin required",
+                title="admin required",
             )
         return user
 
@@ -121,11 +121,11 @@ def resolve_tenant_scope(
     x_cross_tenant: str | None = None,
 ) -> str | None:
     """Returns the tenant_id to filter queries by, or None for cross-tenant
-    super_admin access. Non-super_admin users always pinned to their tenant."""
+    admin access. Non-admin users always pinned to their tenant."""
     if user.global_role == "admin" and x_cross_tenant:
         return x_cross_tenant
     if user.global_role == "admin" and x_cross_tenant is None:
-        # super_admin without explicit header sees their own tenant only.
+        # admin without explicit header sees their own tenant only.
         return user.tenant_id or None
     return user.tenant_id
 

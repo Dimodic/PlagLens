@@ -27,6 +27,7 @@ import { useAssignmentsByCourse } from '@/hooks/api/useAssignments';
 import { useMySubmissions } from '@/hooks/api/useSubmissions';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { displayAuthor } from '@/api/endpoints/submissions';
 
 interface QueueGroup {
@@ -43,7 +44,8 @@ interface QueueGroup {
 }
 
 export default function GradingQueuePage() {
-  useDocumentTitle('Кабинет ассистента');
+  const { t } = useTranslation();
+  useDocumentTitle(t('grading_queue.title'));
   const { user } = useAuth();
   const navigate = useNavigate();
   const myId = user?.id;
@@ -106,7 +108,8 @@ export default function GradingQueuePage() {
   const pct = total ? Math.round((graded / total) * 100) : 0;
 
   const courseName = course
-    ? courseItems.find((c) => String(c.id) === course)?.name ?? 'курс'
+    ? courseItems.find((c) => String(c.id) === course)?.name ??
+      t('grading_queue.course_fallback')
     : null;
   const hasFilter = !!(course || homework || assignment);
 
@@ -119,7 +122,10 @@ export default function GradingQueuePage() {
         key = s.author_id ?? s.id;
         label = displayAuthor(s);
       } else {
-        label = s.homework_title ?? s.assignment_title ?? 'Без ДЗ';
+        label =
+          s.homework_title ??
+          s.assignment_title ??
+          t('grading_queue.no_homework');
         key = label;
       }
       const g = m.get(key) ?? { key, label, total: 0, remaining: 0, ids: [] };
@@ -135,7 +141,7 @@ export default function GradingQueuePage() {
       (a, b) =>
         b.remaining - a.remaining || a.label.localeCompare(b.label, 'ru'),
     );
-  }, [subs, groupBy]);
+  }, [subs, groupBy, t]);
 
   // The whole remaining pile in grouped display order — the queue handed to
   // the review page so its ‹/› counter reads "X из <remaining>". Stored in
@@ -155,19 +161,21 @@ export default function GradingQueuePage() {
 
   return (
     <Page width="regular" data-testid="assistant-cabinet">
-      <PageHeader title="Кабинет ассистента" />
+      <PageHeader title={t('grading_queue.title')} />
 
       {/* Progress header — remaining / total + bar + «Начать проверку». */}
       <div className="rounded-xl border border-border/70 bg-muted/10 p-5">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs uppercase tracking-wider text-muted-foreground">
-              {courseName ? `В «${courseName}» осталось` : 'Осталось проверить'}
+              {courseName
+                ? t('grading_queue.remaining_in_course', { course: courseName })
+                : t('grading_queue.remaining_label')}
             </div>
             <div className="mt-1 text-4xl font-semibold tabular-nums">
               {remaining}
               <span className="ml-2 text-base font-normal text-muted-foreground">
-                из {total} назначенных
+                {t('grading_queue.of_total_assigned', { total })}
               </span>
             </div>
           </div>
@@ -177,7 +185,7 @@ export default function GradingQueuePage() {
             data-testid="assistant-start-review"
           >
             <Sparkles className="mr-2 h-4 w-4" />
-            Начать проверку
+            {t('grading_queue.start_review')}
           </Button>
         </div>
         <div className="mt-4 h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -186,22 +194,23 @@ export default function GradingQueuePage() {
             style={{ width: `${pct}%` }}
           />
         </div>
-        <div className="mt-2 text-xs text-muted-foreground">
-          Проверено <span className="tabular-nums">{graded}</span> из{' '}
-          <span className="tabular-nums">{total}</span> · {pct}%
+        <div className="mt-2 text-xs tabular-nums text-muted-foreground">
+          {t('grading_queue.progress', { graded, total, pct })}
         </div>
       </div>
 
       {/* Queue */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-base font-semibold">Очередь</h2>
+          <h2 className="text-base font-semibold">
+            {t('grading_queue.queue_heading')}
+          </h2>
           {/* курс → ДЗ → задание cascade (same controls as «Все посылки»). */}
           <FilterCombo
             value={course}
             onChange={setCourse}
-            allLabel="Все курсы"
-            searchPlaceholder="Найти курс…"
+            allLabel={t('grading_queue.all_courses')}
+            searchPlaceholder={t('grading_queue.find_course')}
             testId="assistant-course"
             options={courseItems.map((c) => ({
               value: String(c.id),
@@ -212,8 +221,8 @@ export default function GradingQueuePage() {
             <FilterCombo
               value={homework}
               onChange={setHomework}
-              allLabel="Все ДЗ курса"
-              searchPlaceholder="Найти ДЗ…"
+              allLabel={t('grading_queue.all_homeworks')}
+              searchPlaceholder={t('grading_queue.find_homework')}
               testId="assistant-hw"
               options={courseHomeworks.map((hw) => ({
                 value: String(hw.id),
@@ -225,8 +234,8 @@ export default function GradingQueuePage() {
             <FilterCombo
               value={assignment}
               onChange={setAssignment}
-              allLabel="Все задачи ДЗ"
-              searchPlaceholder="Найти задачу…"
+              allLabel={t('grading_queue.all_tasks')}
+              searchPlaceholder={t('grading_queue.find_task')}
               testId="assistant-task"
               options={homeworkAssignments.map((a) => ({
                 value: String(a.id),
@@ -246,7 +255,7 @@ export default function GradingQueuePage() {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              по задачам
+              {t('grading_queue.group_by_tasks')}
             </button>
             <button
               type="button"
@@ -258,7 +267,7 @@ export default function GradingQueuePage() {
                   : 'text-muted-foreground hover:text-foreground',
               )}
             >
-              по студентам
+              {t('grading_queue.group_by_students')}
             </button>
           </div>
         </div>
@@ -271,8 +280,8 @@ export default function GradingQueuePage() {
             data-testid="assistant-empty"
           >
             {hasFilter
-              ? 'Ничего не найдено по фильтру.'
-              : 'На вас пока ничего не распределено.'}
+              ? t('grading_queue.empty_filter')
+              : t('grading_queue.empty_unassigned')}
           </div>
         ) : (
           <ul className="flex flex-col divide-y divide-border/60">
@@ -291,8 +300,11 @@ export default function GradingQueuePage() {
                     </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
                       {g.remaining > 0
-                        ? `Осталось ${g.remaining} из ${g.total}`
-                        : `Проверено · ${g.total}`}
+                        ? t('grading_queue.group_remaining', {
+                            remaining: g.remaining,
+                            total: g.total,
+                          })
+                        : t('grading_queue.group_done', { total: g.total })}
                     </div>
                   </div>
                   {g.next && (

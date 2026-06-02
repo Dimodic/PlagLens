@@ -24,6 +24,11 @@ from .external_bindings import ExternalBindingCreate, ExternalBindingOut
 from .invitations import InvitationAccept, InvitationCreate, InvitationOut
 from .roles import RoleAssignRequest, RoleOut, RolePermissionsOut
 from .sessions import SessionOut
+from .telegram_binding import (
+    TelegramBindingConfirm,
+    TelegramBindingOut,
+    TelegramBindingStartResponse,
+)
 from .tenants import (
     TenantCreate,
     TenantOut,
@@ -64,6 +69,9 @@ __all__ = [
     "RoleOut",
     "RolePermissionsOut",
     "SessionOut",
+    "TelegramBindingConfirm",
+    "TelegramBindingOut",
+    "TelegramBindingStartResponse",
     "TenantCreate",
     "TenantOut",
     "TenantSettingsOut",

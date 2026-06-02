@@ -241,6 +241,17 @@ _INAPP_BLACKLIST_PREFIXES: tuple[str, ...] = (
     # Generic "email" event family — these are *email payloads*, not in-app
     # messages. Anything matching ``*.email.*`` was meant for the SMTP relay.
     "identity.email.",
+    # Per-submission creation fires once for *every* upload — and thousands of
+    # times during a bulk contest import — with no template, so each one left a
+    # generic "Уведомление PlagLens" stub. Pure noise in the in-app feed; the
+    # teacher's grading queue is the real surface for new submissions.
+    "plaglens.submission.submission.created",
+    # Code redemption is a confirmation event that duplicates the user-facing
+    # ``plaglens.course.member.added.v1`` ("you joined a course") notification
+    # and has no inviter-facing template — strip it from the feed.
+    "identity.user.invitation_redeemed",
+    # GDPR/account-lifecycle bookkeeping — audit-only, never a feed item.
+    "identity.user.anonymized",
 )
 
 

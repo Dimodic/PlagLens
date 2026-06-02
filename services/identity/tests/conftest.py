@@ -128,23 +128,6 @@ async def seed_user(session_factory, seed_tenant) -> User:
         return u
 
 
-@pytest_asyncio.fixture(scope="function")
-async def seed_super_admin(session_factory, seed_tenant) -> User:
-    async with session_factory() as s:
-        u = User(
-            id="usr_sa",
-            tenant_id=seed_tenant.id,
-            email="sa@plaglens.local",
-            password_hash=hash_password("p4ssword!"),
-            display_name="SA",
-            global_role="super_admin",
-        )
-        s.add(u)
-        await s.commit()
-        await s.refresh(u)
-        return u
-
-
 # --------------------------------------------------------------------------- #
 # FastAPI app with overridden dependencies
 # --------------------------------------------------------------------------- #
@@ -201,12 +184,3 @@ def auth_header(*, user_id: str, tenant_id: str, role: str = "admin") -> dict[st
 @pytest.fixture
 def auth_admin(seed_user):
     return auth_header(user_id=seed_user.id, tenant_id=seed_user.tenant_id, role="admin")
-
-
-@pytest.fixture
-def auth_super_admin(seed_super_admin):
-    return auth_header(
-        user_id=seed_super_admin.id,
-        tenant_id=seed_super_admin.tenant_id,
-        role="super_admin",
-    )

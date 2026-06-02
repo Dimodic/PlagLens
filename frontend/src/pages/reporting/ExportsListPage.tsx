@@ -41,6 +41,7 @@ import {
   useRetryExport,
 } from '@/hooks/api/useReporting';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import type { ExportStatus } from '@/api/endpoints/reporting';
 import type { Problem } from '@/api/types';
 
@@ -50,17 +51,18 @@ interface ExportsListPageProps {
   mode?: ExportsListMode;
 }
 
-const MODE_COPY: Record<ExportsListMode, { title: string; doc: string }> = {
-  student: { title: 'Мои экспорты', doc: 'Мои экспорты' },
-  teacher: { title: 'Отчёты', doc: 'Отчёты' },
-  admin: { title: 'Экспорты', doc: 'Экспорты' },
+const MODE_KEY: Record<ExportsListMode, string> = {
+  student: 'exports_list.title_student',
+  teacher: 'exports_list.title_teacher',
+  admin: 'exports_list.title_admin',
 };
 
 const ALL_STATUSES = '__all__';
 
 export default function ExportsListPage({ mode = 'student' }: ExportsListPageProps = {}) {
-  const copy = MODE_COPY[mode];
-  useDocumentTitle(copy.doc);
+  const { t } = useTranslation();
+  const title = t(MODE_KEY[mode]);
+  useDocumentTitle(title);
   const notify = useNotifications();
   const [status, setStatus] = useState<ExportStatus | undefined>();
   const { data, isLoading } = useExports({ status });
@@ -80,7 +82,7 @@ export default function ExportsListPage({ mode = 'student' }: ExportsListPagePro
         window.open(r.url, '_blank', 'noopener');
       }
     } catch (p) {
-      notify.error((p as unknown as Problem).title || 'Не удалось получить ссылку');
+      notify.error((p as unknown as Problem).title || t('exports_list.error_link'));
     }
   };
 
@@ -89,7 +91,7 @@ export default function ExportsListPage({ mode = 'student' }: ExportsListPagePro
   return (
     <Page width={mode === 'admin' || items.length > 0 ? 'wide' : 'regular'}>
       <PageHeader
-        title={copy.title}
+        title={title}
         action={
           <div className="flex items-center gap-2">
             <Select
@@ -99,20 +101,20 @@ export default function ExportsListPage({ mode = 'student' }: ExportsListPagePro
               }
             >
               <SelectTrigger className="w-44" data-testid="status-filter">
-                <SelectValue placeholder="Любой статус" />
+                <SelectValue placeholder={t('exports_list.status_any')} />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_STATUSES}>Любой статус</SelectItem>
-                <SelectItem value="queued">В очереди</SelectItem>
-                <SelectItem value="running">Выполняется</SelectItem>
-                <SelectItem value="completed">Готово</SelectItem>
-                <SelectItem value="failed">Ошибка</SelectItem>
-                <SelectItem value="cancelled">Отменено</SelectItem>
+                <SelectItem value={ALL_STATUSES}>{t('exports_list.status_any')}</SelectItem>
+                <SelectItem value="queued">{t('exports_list.status_queued')}</SelectItem>
+                <SelectItem value="running">{t('exports_list.status_running')}</SelectItem>
+                <SelectItem value="completed">{t('exports_list.status_completed')}</SelectItem>
+                <SelectItem value="failed">{t('exports_list.status_failed')}</SelectItem>
+                <SelectItem value="cancelled">{t('exports_list.status_cancelled')}</SelectItem>
               </SelectContent>
             </Select>
             <Button onClick={() => setOpened(true)}>
               <Plus className="mr-2 h-4 w-4" />
-              Новый экспорт
+              {t('exports_list.new_export')}
             </Button>
           </div>
         }
@@ -124,19 +126,19 @@ export default function ExportsListPage({ mode = 'student' }: ExportsListPagePro
         </div>
       ) : items.length === 0 ? (
         <EmptyState
-          title="Нет экспортов"
-          message="Создайте первый экспорт."
-          action={<Button onClick={() => setOpened(true)}>Создать</Button>}
+          title={t('exports_list.empty_title')}
+          message={t('exports_list.empty_message')}
+          action={<Button onClick={() => setOpened(true)}>{t('exports_list.create')}</Button>}
         />
       ) : (
         <div className="rounded-md border overflow-x-auto">
           <Table data-testid="exports-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Тип</TableHead>
-                <TableHead>Статус</TableHead>
-                <TableHead>Размер</TableHead>
-                <TableHead>Создан</TableHead>
+                <TableHead>{t('exports_list.col_type')}</TableHead>
+                <TableHead>{t('exports_list.col_status')}</TableHead>
+                <TableHead>{t('exports_list.col_size')}</TableHead>
+                <TableHead>{t('exports_list.col_created')}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
@@ -162,12 +164,12 @@ export default function ExportsListPage({ mode = 'student' }: ExportsListPagePro
         onSubmit={(input) => {
           create.mutate(input, {
             onSuccess: () => {
-              notify.success('Экспорт создан, скоро будет готов.');
+              notify.success(t('exports_list.created'));
               setOpened(false);
             },
             onError: (p) => {
               notify.error(
-                (p as unknown as Problem).title || 'Не удалось создать экспорт',
+                (p as unknown as Problem).title || t('exports_list.error_create'),
               );
             },
           });

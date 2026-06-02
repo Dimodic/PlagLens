@@ -65,16 +65,29 @@ export function getLocale(): Locale {
   return current;
 }
 
-export function t(key: string): string {
+export type TParams = Record<string, string | number>;
+
+/**
+ * Substitute ``{{name}}`` placeholders in a resolved string. No-op when
+ * ``params`` is omitted, so static ``t('key')`` calls are unaffected.
+ */
+function interpolate(s: string, params?: TParams): string {
+  if (!params) return s;
+  return s.replace(/\{\{(\w+)\}\}/g, (m, k) =>
+    k in params ? String(params[k]) : m,
+  );
+}
+
+export function t(key: string, params?: TParams): string {
   const d = DICTS[current] ?? DICTS.ru;
-  return d[key] ?? DICTS.ru[key] ?? DICTS.en[key] ?? key;
+  return interpolate(d[key] ?? DICTS.ru[key] ?? DICTS.en[key] ?? key, params);
 }
 
 /**
  * React hook — returns a reactive t() bound to the current locale.
  */
 export function useTranslation(): {
-  t: (key: string) => string;
+  t: (key: string, params?: TParams) => string;
   locale: Locale;
   setLocale: (loc: Locale) => void;
 } {
@@ -89,9 +102,9 @@ export function useTranslation(): {
   }, []);
 
   const tFn = useCallback(
-    (key: string): string => {
+    (key: string, params?: TParams): string => {
       const d = DICTS[locale] ?? DICTS.ru;
-      return d[key] ?? DICTS.ru[key] ?? DICTS.en[key] ?? key;
+      return interpolate(d[key] ?? DICTS.ru[key] ?? DICTS.en[key] ?? key, params);
     },
     [locale],
   );

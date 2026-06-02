@@ -12,6 +12,7 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useAuditSearch } from '@/hooks/api/useAudit';
 import type { AuditAggregation } from '@/api/endpoints/audit';
 import type { Problem } from '@/api/types';
@@ -48,7 +49,8 @@ function BarChart({ data }: BarChartProps) {
 }
 
 export function AuditSearchPage() {
-  useDocumentTitle('Audit search');
+  const { t } = useTranslation();
+  useDocumentTitle(t('audit_search.title'));
   const search = useAuditSearch();
 
   const [q, setQ] = useState('');
@@ -74,12 +76,12 @@ export function AuditSearchPage() {
 
   return (
     <Page width="wide">
-      <PageHeader title="Audit search" />
+      <PageHeader title={t('audit_search.title')} />
 
       <Card>
         <CardContent className="p-6 space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="audit-q">Текст запроса (q)</Label>
+            <Label htmlFor="audit-q">{t('audit_search.query_label')}</Label>
             <Input
               id="audit-q"
               value={q}
@@ -103,7 +105,7 @@ export function AuditSearchPage() {
               onCheckedChange={(v) => setAggByAction(v)}
               data-testid="audit-search-agg-toggle"
             />
-            <Label htmlFor="audit-agg">Aggregation: count by action</Label>
+            <Label htmlFor="audit-agg">{t('audit_search.agg_toggle_label')}</Label>
           </div>
           <div className="flex items-center justify-end">
             <Button
@@ -112,7 +114,7 @@ export function AuditSearchPage() {
               data-testid="audit-search-submit"
             >
               {search.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Искать
+              {t('audit_search.search')}
             </Button>
           </div>
         </CardContent>
@@ -129,10 +131,10 @@ export function AuditSearchPage() {
       {aggregations.length > 0 && (
         <Card data-testid="audit-aggregations-card">
           <CardContent className="p-6">
-            <h2 className="mb-3 text-base font-semibold tracking-tight">Aggregations</h2>
+            <h2 className="mb-3 text-base font-semibold tracking-tight">{t('audit_search.aggregations')}</h2>
             {aggregations.map((a) => (
               <div key={a.by} className="mb-3 space-y-2">
-                <h3 className="text-sm font-medium">by {a.by}</h3>
+                <h3 className="text-sm font-medium">{t('audit_search.agg_by', { field: a.by })}</h3>
                 <BarChart data={a.values} />
               </div>
             ))}

@@ -1,19 +1,26 @@
 """Student self-service endpoints (section F of 06-SUBMISSION.md)."""
 from __future__ import annotations
 
+import asyncio
+import os
+import time
 from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Query
 from sqlalchemy import text
 
+from plaglens_common.service_client import ServiceClient
+from plaglens_common.service_token import mint_service_jwt
 from submission_service.api.deps import CourseDep, CurrentUser, SessionDep
 from submission_service.common.pagination import Page, PageInfo
+from submission_service.config import get_settings
 from submission_service.common.problem import forbidden, not_found
 from submission_service.repositories.submission_repo import SubmissionRepository
 from submission_service.schemas.feedback import FeedbackOut
 from submission_service.schemas.grading import GradeOut
 from submission_service.schemas.submission import SubmissionOut
+from submission_service.services.course_client import CourseClient
 
 router = APIRouter()
 
@@ -89,6 +96,7 @@ _STAFF_ROLES = {
 async def my_submissions(
     user: CurrentUser,
     session: SessionDep,
+    course: CourseDep,
     course_id: str | None = None,
     assignment_id: str | None = None,
     assignment_ids: list[str] | None = Query(default=None),
@@ -100,6 +108,11 @@ async def my_submissions(
         "'pending' (no grade yet) | 'graded' (score set).",
     ),
     latest_per_student: bool = Query(default=False),
+    q: str | None = Query(
+        default=None,
+        description="Free-text search across author, ДЗ/задание title, "
+        "verdict, status and language (staff inbox + global search).",
+    ),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=50, ge=1, le=10_000),
 ) -> Page[SubmissionOut]:
@@ -120,8 +133,20 @@ async def my_submissions(
     bigger would need real DB-level offset pagination."""
     repo = SubmissionRepository(session)
     if user.global_role in _STAFF_ROLES:
+        # A global admin spans ALL tenants whenever the query is *scoped* —
+        # a search (q) or a specific course / assignment. This makes the
+        # per-assignment "Посылки" tab and per-course inbox show cross-tenant
+        # work (e.g. admin opening a course that lives in another tenant).
+        # The bare, unscoped admin inbox stays tenant-local so it isn't
+        # flooded with every submission on the platform.
+        admin_scoped = bool(q or course_id or assignment_id or assignment_ids)
+        inbox_tenant = (
+            None
+            if (user.global_role == "admin" and admin_scoped)
+            else user.tenant_id
+        )
         all_items = await repo.list_inbox_for_staff(
-            tenant_id=user.tenant_id,
+            tenant_id=inbox_tenant,
             course_id=course_id,
             assignment_id=assignment_id,
             assignment_ids=assignment_ids,
@@ -134,25 +159,7 @@ async def my_submissions(
         # see the whole tenant): restrict the inbox to the courses they
         # actually belong to, so they never see other courses' work.
         if user.global_role == "assistant":
-            from sqlalchemy import select as _select
-
-            from course_service.models import CourseMember, CourseOwner
-
-            member_ids = (
-                await session.execute(
-                    _select(CourseMember.course_id).where(
-                        CourseMember.user_id == user.user_id
-                    )
-                )
-            ).scalars().all()
-            owner_ids = (
-                await session.execute(
-                    _select(CourseOwner.course_id).where(
-                        CourseOwner.user_id == user.user_id
-                    )
-                )
-            ).scalars().all()
-            allowed = {str(c) for c in (*member_ids, *owner_ids)}
+            allowed = await course.staff_course_ids(user.user_id)
             all_items = [s for s in all_items if s.course_id in allowed]
     else:
         author_ids = await _self_author_ids(session, user.user_id)
@@ -185,6 +192,36 @@ async def my_submissions(
             all_items = [s for s in all_items if _is_graded(s)]
         else:  # pending
             all_items = [s for s in all_items if not _is_graded(s)]
+
+    # Free-text search (cross-submission). Matches author label, verdict,
+    # status, language directly; ДЗ/задание titles are matched by resolving
+    # the assignment ids whose title contains ``q`` (one course-schema
+    # query) and keeping submissions that point at them. Applied to the
+    # already-scoped working set, so it respects course visibility.
+    if q and q.strip():
+        ql = q.strip().lower()
+        # ДЗ/задание titles are matched by resolving the assignment ids whose
+        # title (or parent homework title) contains the query — ICU-folded so
+        # Cyrillic matches under LC_CTYPE=C. Behind the CourseClient seam now;
+        # still best-effort (returns an empty set on failure).
+        match_asg: set[str] = await course.search_assignment_ids_by_title(q)
+
+        def _q_match(s: Any) -> bool:
+            if (s.author_label or "").lower().find(ql) >= 0:
+                return True
+            # Also match the author key (e.g. Yandex.Contest login/cohort
+            # "yc:hse-compds-2024-12") so searching a login/cohort surfaces
+            # all of that author's work, not only rows whose label is the login.
+            if (s.author_id or "").lower().find(ql) >= 0:
+                return True
+            if s.assignment_id in match_asg:
+                return True
+            for f in (s.external_verdict, s.status, s.language):
+                if f and ql in str(f).lower():
+                    return True
+            return False
+
+        all_items = [s for s in all_items if _q_match(s)]
 
     total = len(all_items)
     window = all_items[offset : offset + limit]
@@ -227,64 +264,111 @@ async def my_submissions(
     # batch query, not per-row N+1). Applies to students too — it's
     # their own submissions' assignment titles, nothing sensitive.
     if out:
-        await _enrich_titles(session, out)
+        await _enrich_titles(course, out)
+        # Resolve usr_ → display name (e.g. "Nikita Shamov") so the staff
+        # inbox and cross-submission search never show a raw id. The
+        # per-assignment list endpoints in submissions.py already do this;
+        # the inbox went through this endpoint and was missed.
+        await _enrich_authors(out, user.tenant_id)
     return Page[SubmissionOut](data=out, pagination=info)
 
 
-async def _enrich_titles(session: Any, rows: list[SubmissionOut]) -> None:
+async def _enrich_titles(course: CourseClient, rows: list[SubmissionOut]) -> None:
     """Fill ``assignment_title`` / ``homework_title`` / ``course_name`` on
-    a page of inbox rows via three small ``IN`` lookups against the
-    course schema (same DB — the service is the merged course+submission
-    process)."""
-    from sqlalchemy import select as _select
-
-    from course_service.models import Assignment, Course, Homework
-
-    asg_ids: set[int] = set()
-    for r in rows:
-        try:
-            asg_ids.add(int(r.assignment_id))
-        except (TypeError, ValueError):
-            continue
-    if not asg_ids:
+    a page of inbox rows via the CourseClient (one batched read-model call;
+    in the merged process it resolves the course tables directly, same DB)."""
+    titles = await course.enrich_titles([r.assignment_id for r in rows])
+    if not titles:
         return
-    asg_rows = (
-        await session.execute(
-            _select(Assignment).where(Assignment.id.in_(asg_ids))
-        )
-    ).scalars().all()
-    asg_map: dict[str, Assignment] = {str(a.id): a for a in asg_rows}
-
-    hw_ids = {a.homework_id for a in asg_rows if a.homework_id is not None}
-    hw_map: dict[str, str] = {}
-    if hw_ids:
-        hw_rows = (
-            await session.execute(
-                _select(Homework).where(Homework.id.in_(hw_ids))
-            )
-        ).scalars().all()
-        hw_map = {str(h.id): h.title for h in hw_rows}
-
-    course_ids = {str(a.course_id) for a in asg_rows}
-    course_map: dict[str, str] = {}
-    if course_ids:
-        course_rows = (
-            await session.execute(
-                _select(Course).where(
-                    Course.id.in_([int(c) for c in course_ids if c.isdigit()])
-                )
-            )
-        ).scalars().all()
-        course_map = {str(c.id): c.name for c in course_rows}
-
     for r in rows:
-        a = asg_map.get(r.assignment_id)
-        if a is None:
+        t = titles.get(r.assignment_id)
+        if t is None:
             continue
-        r.assignment_title = a.title
-        if a.homework_id is not None:
-            r.homework_title = hw_map.get(str(a.homework_id))
-        r.course_name = course_map.get(str(a.course_id))
+        r.assignment_title = t.assignment_title
+        r.homework_title = t.homework_title
+        r.course_name = t.course_name
+
+
+# --- author display-name enrichment (identity) ----------------------------
+# Submissions store only ``author_id`` (usr_…) + an optional ``author_label``
+# (set by integrations like Y.Contest). A manually-uploaded submission has no
+# label, so the UI would otherwise show the raw ``usr_…`` id everywhere
+# (list / detail / breadcrumb). We resolve the real display name from identity
+# with a short-lived service JWT, cache it per id, and fill ``author_label``.
+# Best-effort: any failure leaves the row untouched (UI falls back to the id).
+_NAME_CACHE: dict[str, tuple[str, float]] = {}
+_NAME_TTL_S = 300.0
+
+
+async def _resolve_display_names(ids: list[str], tenant_id: str) -> dict[str, str]:
+    now = time.time()
+    out: dict[str, str] = {}
+    missing: list[str] = []
+    for uid in ids:
+        cached = _NAME_CACHE.get(uid)
+        if cached is not None and cached[1] > now:
+            out[uid] = cached[0]
+        else:
+            missing.append(uid)
+    if not missing:
+        return out
+    token = mint_service_jwt(subject="submission-service", tenant_id=tenant_id)
+    if not token:
+        return out
+    # Deployment provides IDENTITY_BASE_URL (http://identity:8000); the config
+    # default IDENTITY_SERVICE_URL is stale (wrong host/port, doesn't resolve).
+    base = os.environ.get("IDENTITY_BASE_URL") or get_settings().IDENTITY_SERVICE_URL
+    headers = {"Authorization": f"Bearer {token}"}
+    try:
+        async with ServiceClient(
+            base_url=base,
+            provider="identity",
+            timeout=5.0,
+            default_headers=headers,
+        ) as client:
+
+            async def _one(uid: str) -> tuple[str, str | None]:
+                try:
+                    r = await client.get(f"/api/v1/people/{uid}")
+                    data = r.json() if r.content else None
+                    return uid, (data or {}).get("display_name")
+                except Exception:
+                    return uid, None
+
+            for uid, name in await asyncio.gather(*[_one(u) for u in missing]):
+                if name:
+                    _NAME_CACHE[uid] = (name, now + _NAME_TTL_S)
+                    out[uid] = name
+    except Exception:
+        return out
+    return out
+
+
+async def _enrich_authors(rows: list[SubmissionOut], tenant_id: str) -> None:
+    """Fill ``author_label`` with the author's identity display name for any
+    real-user (``usr_…``) submission that lacks a label, so the UI never shows
+    a raw id. YC ``yc:…`` ghosts keep their roster label."""
+    ids = sorted(
+        {
+            r.author_id
+            for r in rows
+            if r.author_id
+            and r.author_id.startswith("usr_")
+            and not (r.author_label or "").strip()
+        }
+    )
+    if not ids:
+        return
+    names = await _resolve_display_names(ids, tenant_id)
+    if not names:
+        return
+    for r in rows:
+        if (
+            r.author_id
+            and not (r.author_label or "").strip()
+            and r.author_id in names
+        ):
+            r.author_label = names[r.author_id]
 
 
 @router.get("/users/me/submissions/{submission_id}", response_model=SubmissionOut)
@@ -380,3 +464,56 @@ async def my_ai(
             {"id": f.id, "body": f.body, "created_at": f.created_at} for f in llm
         ],
     }
+
+
+@router.get("/people/{author_id}/submissions", response_model=Page[SubmissionOut])
+async def person_submissions(
+    author_id: str,
+    user: CurrentUser,
+    session: SessionDep,
+    course: CourseDep,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> Page[SubmissionOut]:
+    """A person's submissions, gated to what the viewer may see (powers the
+    public profile's submissions section). Self / admin → all (within the
+    viewer's tenant); teacher / assistant → only submissions in courses the
+    viewer manages; anyone else → nothing."""
+    repo = SubmissionRepository(session)
+    is_self = user.user_id == author_id
+    if is_self or user.is_admin:
+        rows = await repo.list_for_user(
+            author_id=author_id, tenant_id=user.tenant_id, limit=500
+        )
+    elif user.global_role in _STAFF_ROLES:
+        rows = await repo.list_for_user(
+            author_id=author_id, tenant_id=user.tenant_id, limit=500
+        )
+        visible = await course.visible_course_ids(user.user_id)
+        rows = [s for s in rows if s.course_id in visible]
+    else:
+        rows = []
+
+    window = rows[:limit]
+    out = [SubmissionOut.model_validate(s) for s in window]
+    can_see_score = is_self or user.global_role in _STAFF_ROLES
+    for model, src in zip(out, window, strict=True):
+        g = getattr(src, "grade", None)
+        graded = g is not None and g.score is not None
+        model.is_graded = graded
+        if graded and (
+            can_see_score or bool(getattr(g, "comment_visible_to_student", False))
+        ):
+            model.score = float(g.score)
+            model.max_score = float(g.max_score) if g.max_score is not None else None
+    if out:
+        await _enrich_titles(course, out)
+    return Page[SubmissionOut](
+        data=out,
+        pagination=PageInfo(
+            next_cursor=None,
+            has_more=len(rows) > limit,
+            limit=limit,
+            offset=0,
+            total=len(rows),
+        ),
+    )

@@ -145,7 +145,12 @@ export interface UpdateIntegrationInput {
 }
 
 export interface SyncInput {
-  scope?: { course_id?: string; assignment_id?: string; since?: string };
+  scope?: {
+    course_id?: string;
+    assignment_id?: string;
+    homework_ids?: string[];
+    since?: string;
+  };
   force_full?: boolean;
 }
 
@@ -529,4 +534,31 @@ export const integrationsApi = {
         params: buildListParams(params),
       })
       .then((r) => r.data),
+
+  // -------- Manual upload (push source) --------
+  /** Upload a file of solutions for a ``manual`` integration. The endpoint
+   *  is chosen by extension — ``.csv`` → /upload-csv, anything else → the
+   *  ZIP path. Multipart; axios sets the boundary from the FormData. */
+  manualUpload: (
+    file: File,
+    opts: {
+      course_id?: string | null;
+      homework_id?: string | null;
+      assignment_id?: string | null;
+    } = {},
+  ) => {
+    const isCsv = /\.csv$/i.test(file.name);
+    const form = new FormData();
+    form.append('file', file);
+    if (opts.course_id) form.append('course_id', opts.course_id);
+    if (opts.homework_id) form.append('homework_id', opts.homework_id);
+    if (opts.assignment_id) form.append('assignment_id', opts.assignment_id);
+    return api
+      .post<{
+        ok: boolean;
+        summary: { items: number; with_assignment: number; students: number };
+        items: Array<Record<string, unknown>>;
+      }>(`/integrations/manual/${isCsv ? 'upload-csv' : 'upload'}`, form)
+      .then((r) => r.data);
+  },
 };

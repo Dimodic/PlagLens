@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ...common.email_change import apply_email_update
 from ...common.events import publish_user_event
 from ...common.ids import gen_id, user_id
 from ...common.pagination import Page, Pagination
@@ -40,7 +41,7 @@ def _user_to_out(u: User) -> UserOut:
     return UserOut(
         id=u.id,
         tenant_id=u.tenant_id,
-        email=u.email,
+        email=u.email or "",
         display_name=u.display_name,
         avatar_url=u.avatar_url,
         locale=u.locale,
@@ -176,6 +177,9 @@ async def update_user(
         u.timezone = payload.timezone
     if payload.avatar_url is not None:
         u.avatar_url = payload.avatar_url
+    if payload.email is not None:
+        # Admin (or the user themselves) sets/changes/clears this account's email.
+        await apply_email_update(repo, u, payload.email)
     if payload.global_role is not None:
         if not is_admin:
             raise ProblemException(
@@ -396,7 +400,7 @@ async def bulk_import(
     target_tenant_id = payload.tenant_id or me.tenant_id
     # Teachers can bulk-import students into their own tenant (the integration
     # service calls this on their behalf when pulling participants from
-    # Yandex.Contest). Admins/super_admins keep full power.
+    # Yandex.Contest). Admins keep full power.
     if me.global_role not in ("admin", "teacher"):
         raise ProblemException(
             status=403, code="FORBIDDEN", title="Teacher / admin role required"
@@ -415,12 +419,31 @@ async def bulk_import(
     seen_emails: set[str] = set()
 
     for item in payload.items:
-        # Resolve email (synth if missing).
+        # Resolve email.
         email = (item.email or "").strip().lower()
         if not email:
-            base = (item.login or item.external_id or "user").strip().lower()
-            base = "".join(c if c.isalnum() or c in ".-_" else "-" for c in base)
-            email = f"{base}@imported.local"
+            # External participant (e.g. Yandex.Contest) with no real email:
+            # do NOT create a phantom @imported.local User — those polluted
+            # the directory and could never log in. Return a stable
+            # external-author ref instead; the caller authors submissions by
+            # it, and the real person claims it later by redeeming a binding
+            # invitation code (which re-points the yc:<login> submissions to
+            # their real account). Mirrors the preferred YC import path.
+            login = (item.login or "").strip()
+            ext = (item.external_id or "").strip()
+            ref = f"yc:{login}" if login else (f"yc:uid:{ext}" if ext else None)
+            if ref is None:
+                continue
+            out.append(
+                BulkImportResultItem(
+                    user_id=ref,
+                    email="",
+                    action="external",
+                    external_id=item.external_id,
+                    login=item.login,
+                )
+            )
+            continue
         if email in seen_emails:
             continue  # dedupe within the batch itself
         seen_emails.add(email)

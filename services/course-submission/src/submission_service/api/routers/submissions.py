@@ -8,6 +8,7 @@ from fastapi import APIRouter, File, Form, Query, Request, Response, UploadFile
 from fastapi.responses import PlainTextResponse
 
 from submission_service.api.deps import (
+    CourseDep,
     CurrentUser,
     PublisherDep,
     SessionDep,
@@ -165,9 +166,11 @@ async def list_submissions(
     if version is not None:
         items = [s for s in items if s.version == version]
     page, info = _paginate(items, cursor, limit, offset_param=offset)
-    return Page[SubmissionOut](
-        data=[SubmissionOut.model_validate(s) for s in page], pagination=info
-    )
+    data = [SubmissionOut.model_validate(s) for s in page]
+    from submission_service.api.routers.self_service import _enrich_authors
+
+    await _enrich_authors(data, user.tenant_id)
+    return Page[SubmissionOut](data=data, pagination=info)
 
 
 @router.get(
@@ -183,7 +186,11 @@ async def latest_per_student(
     )
     if items:
         ensure_course_staff(user, items[0].course_id)
-    return [SubmissionOut.model_validate(s) for s in items]
+    data = [SubmissionOut.model_validate(s) for s in items]
+    from submission_service.api.routers.self_service import _enrich_authors
+
+    await _enrich_authors(data, user.tenant_id)
+    return data
 
 
 @router.get(
@@ -199,7 +206,11 @@ async def best_per_student(
     )
     if items:
         ensure_course_staff(user, items[0].course_id)
-    return [SubmissionOut.model_validate(s) for s in items]
+    data = [SubmissionOut.model_validate(s) for s in items]
+    from submission_service.api.routers.self_service import _enrich_authors
+
+    await _enrich_authors(data, user.tenant_id)
+    return data
 
 
 @router.get(
@@ -215,12 +226,16 @@ async def selected_per_student(
     )
     if items:
         ensure_course_staff(user, items[0].course_id)
-    return [SubmissionOut.model_validate(s) for s in items]
+    data = [SubmissionOut.model_validate(s) for s in items]
+    from submission_service.api.routers.self_service import _enrich_authors
+
+    await _enrich_authors(data, user.tenant_id)
+    return data
 
 
 @router.get("/submissions/{submission_id}", response_model=SubmissionDetail)
 async def get_submission(
-    submission_id: str, user: CurrentUser, session: SessionDep
+    submission_id: str, user: CurrentUser, session: SessionDep, course: CourseDep
 ) -> SubmissionDetail:
     repo = SubmissionRepository(session)
     sub = await repo.get(submission_id)
@@ -233,9 +248,13 @@ async def get_submission(
     # homework_title via ``_enrich_titles``; do the same on detail so
     # students don't see «Моя посылка» as the page heading. SubmissionDetail
     # inherits from SubmissionOut, so the same enrich works on it.
-    from submission_service.api.routers.self_service import _enrich_titles
+    from submission_service.api.routers.self_service import (
+        _enrich_authors,
+        _enrich_titles,
+    )
 
-    await _enrich_titles(session, [detail])
+    await _enrich_titles(course, [detail])
+    await _enrich_authors([detail], user.tenant_id)
     return detail
 
 
@@ -292,6 +311,15 @@ async def get_file_content(
     bucket = f.storage_uri.removeprefix("s3://").split("/", 1)[0]
     key = f.storage_uri.removeprefix("s3://").split("/", 1)[1]
     raw = await storage.get_object(bucket=bucket, key=key)
+    mime = (f.mime_type or "").lower()
+    # Binary previews (PDF, images) MUST be served byte-for-byte. Decoding them
+    # to UTF-8 (even with errors="replace") destroys every non-text byte and the
+    # file arrives corrupt — a PDF then parses but renders blank pages. NOTE: a
+    # PDF submission also carries ``sub.language`` ('pdf'), so the old
+    # ``sub.language is not None`` check below wrongly forced text decoding for
+    # it — gate binary on the mime type and return the raw bytes early.
+    if mime == "application/pdf" or mime.startswith("image/"):
+        return Response(content=raw, media_type=f.mime_type)
     if as_ == "highlighted":
         # Minimal HTML escaping; real impl would call pygments. We avoid heavy
         # dependency here and produce a <pre>-wrapped escaped block.

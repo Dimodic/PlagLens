@@ -18,6 +18,7 @@ import { EmptyState } from '@/components/common/EmptyState';
 import { StatusPill } from '@/components/common/StatusPill';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
   useDLQ,
@@ -27,6 +28,7 @@ import {
 import type { Problem } from '@/api/types';
 
 export function NotificationDLQPage() {
+  const { t } = useTranslation();
   useDocumentTitle('Notifications DLQ');
   const notify = useNotifications();
   const { data, isLoading, error, refetch } = useDLQ({ limit: 100 });
@@ -36,20 +38,20 @@ export function NotificationDLQPage() {
   const handleRetry = async (id: string) => {
     try {
       await retryM.mutateAsync(id);
-      notify.success('Перепоставлено в очередь');
+      notify.success(t('notif_dlq.retry_success'));
       refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('notif_dlq.action_failed'));
     }
   };
 
   const handleDiscard = async (id: string) => {
     try {
       await discardM.mutateAsync(id);
-      notify.success('Отброшено');
+      notify.success(t('notif_dlq.discard_success'));
       refetch();
     } catch (e) {
-      notify.error((e as Problem)?.detail ?? 'Не удалось');
+      notify.error((e as Problem)?.detail ?? t('notif_dlq.action_failed'));
     }
   };
 
@@ -64,7 +66,7 @@ export function NotificationDLQPage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="DLQ пуст" />
+        <EmptyState title={t('notif_dlq.empty')} />
       ) : (
         <Card>
           <CardContent className="p-0">
@@ -76,8 +78,8 @@ export function NotificationDLQPage() {
                   <TableHead>Event</TableHead>
                   <TableHead>Failure</TableHead>
                   <TableHead>Attempts</TableHead>
-                  <TableHead>Время</TableHead>
-                  <TableHead>Действия</TableHead>
+                  <TableHead>{t('notif_dlq.col_time')}</TableHead>
+                  <TableHead>{t('notif_dlq.col_actions')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>

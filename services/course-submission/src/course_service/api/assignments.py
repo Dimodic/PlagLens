@@ -138,8 +138,12 @@ async def list_assignments_flat(
         # somewhere). Coarse heuristic — fine for global search.
         if user.global_role == "student":
             published_only = True
+    # A global admin searching (q present) spans ALL tenants — same rule as
+    # the course search — so ⌘K / global search surfaces assignments outside
+    # their own tenant.
+    search_tenant = None if (user.global_role == "admin" and q) else user.tenant_id
     rows, next_id = await repo.list_with_filter(
-        tenant_id=user.tenant_id,
+        tenant_id=search_tenant,
         q=q,
         course_ids=course_ids,
         published_only=published_only,
@@ -431,15 +435,18 @@ async def assignment_stats(
     session: SessionDep,
     bearer: str | None = Depends(get_bearer_token),
 ) -> dict[str, Any]:
-    """Real assignment stats, fetched by proxying to submission_service
-    (which owns the submission + grade tables). Falls back to a
-    zero-value stub if the downstream call fails so the UI degrades
-    gracefully instead of 500-ing.
+    """Real assignment stats. Submission counts/grades are read in-process
+    (submission runs in the same merged service); plagiarism alerts and ai
+    run-count are fetched over HTTP from those separate services. Each source
+    falls back to a zero-value stub on failure so the UI degrades gracefully
+    instead of 500-ing.
     """
     role = await assert_course_membership(assignment.course_id, user, session)
     if role not in {"owner", "co_owner", "assistant", "admin"}:
         raise ProblemException(status_code=403, detail="Forbidden", code="FORBIDDEN")
-    return await a_svc.stats(assignment, bearer_token=bearer)
+    return await a_svc.stats(
+        assignment, tenant_id=user.tenant_id, bearer_token=bearer
+    )
 
 
 @flat_router.get(

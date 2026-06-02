@@ -7,14 +7,17 @@ from typing import Any, Optional
 
 from sqlalchemy import (
     ARRAY,
+    BigInteger,
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     LargeBinary,
     MetaData,
     String,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -86,7 +89,20 @@ class Tenant(Base):
 # --------------------------------------------------------------------------- #
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint("tenant_id", "email", name="uq_users_tenant_email"),)
+    # Email is OPTIONAL (OAuth/Telegram accounts may have none — they are
+    # identified by their (provider, subject) link, not by email). Uniqueness
+    # is therefore a PARTIAL unique index: enforced only WHERE email IS NOT
+    # NULL, so multiple email-less users coexist per tenant.
+    __table_args__ = (
+        Index(
+            "uq_users_tenant_email",
+            "tenant_id",
+            "email",
+            unique=True,
+            postgresql_where=text("email IS NOT NULL"),
+            sqlite_where=text("email IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String(40), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -95,7 +111,7 @@ class User(Base):
         nullable=False,
         index=True,
     )
-    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(320), nullable=True)
     email_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -165,6 +181,43 @@ class ExternalBinding(Base):
     external_id: Mapped[str] = mapped_column(String(255), nullable=False)
     display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Telegram binding (user ↔ Telegram chat)
+# --------------------------------------------------------------------------- #
+class TelegramBinding(Base):
+    """Links a PlagLens user to their Telegram chat.
+
+    Account-linking lives with identity (alongside OAuthIdentity /
+    ExternalBinding). The two-step flow: ``start`` issues a one-time
+    ``verification_token`` (surfaced as a t.me deep link); the bot worker
+    calls ``confirm`` with that token + the chat id once the user runs
+    ``/start <token>``. Mirrors the former integration-schema table.
+    """
+
+    __tablename__ = "telegram_bindings"
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        String(40),
+        ForeignKey(_fk("users.id"), ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(String(40), nullable=False, index=True)
+    chat_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    verification_token: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, unique=True
+    )
+    bound_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
@@ -374,6 +427,7 @@ __all__ = [
     "User",
     "OAuthIdentity",
     "ExternalBinding",
+    "TelegramBinding",
     "Session",
     "ApiKey",
     "PasswordResetToken",

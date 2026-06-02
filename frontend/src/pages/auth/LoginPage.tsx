@@ -161,8 +161,8 @@ export function LoginPage() {
       setPassword2Error(null);
       return;
     }
-    setPassword2Error(password2 === password ? null : 'Пароли не совпадают');
-  }, [mode, password, password2]);
+    setPassword2Error(password2 === password ? null : t('auth.reset.errors.confirm'));
+  }, [mode, password, password2, t]);
 
   const switchMode = (next: Mode) => {
     setMode(next);
@@ -186,7 +186,7 @@ export function LoginPage() {
     try {
       const info = await telegramAuthApi.info();
       if (!info.enabled || !info.bot_id) {
-        notify.info('Вход через Telegram пока не настроен администратором');
+        notify.info(t('auth.login.telegram_not_configured'));
         return;
       }
       const ok = await openTelegramLogin({
@@ -194,10 +194,10 @@ export function LoginPage() {
         redirect_uri: info.redirect_uri,
       });
       if (!ok) {
-        notify.error('Не удалось загрузить Telegram-виджет');
+        notify.error(t('auth.login.telegram_widget_failed'));
       }
     } catch {
-      notify.error('Не удалось открыть вход через Telegram');
+      notify.error(t('auth.login.telegram_open_failed'));
     } finally {
       setTgBusy(false);
     }
@@ -206,10 +206,10 @@ export function LoginPage() {
   useEffect(() => {
     const err = params.get('error');
     if (err !== 'oauth_email_exists') return;
-    const providerName = params.get('provider') ?? 'этот провайдер';
+    const providerName = params.get('provider') ?? t('auth.login.this_provider');
     const providerLabel: Record<string, string> = {
       google: 'Google',
-      yandex: 'Яндекс',
+      yandex: t('auth.login.provider_yandex'),
       stepik: 'Stepik',
       github: 'GitHub',
       telegram: 'Telegram',
@@ -217,10 +217,7 @@ export function LoginPage() {
     const niceProvider = providerLabel[providerName] ?? providerName;
     const emailFromQuery = params.get('email');
     if (emailFromQuery) setEmail(emailFromQuery);
-    setHint(
-      `Аккаунт с этим email уже существует, но к нему не привязан ${niceProvider}. ` +
-        `Войдите паролем, затем привяжите ${niceProvider} в разделе «Профиль → Безопасность».`,
-    );
+    setHint(t('auth.login.oauth_email_exists_hint', { provider: niceProvider }));
     // Strip the one-shot OAuth-error params from the URL so a reload (or
     // a shared link) doesn't resurrect the hint. We keep any unrelated
     // params (e.g. ?next=…). The hint already lives in React state.
@@ -241,13 +238,13 @@ export function LoginPage() {
   const validateLogin = (): boolean => {
     let ok = true;
     if (!/^.+@.+\..+$/.test(email)) {
-      setEmailError('Некорректный email'); ok = false;
+      setEmailError(t('auth.login.errors.email')); ok = false;
     } else { setEmailError(null); }
     if (password.length < 1) {
-      setPasswordError('Введите пароль'); ok = false;
+      setPasswordError(t('auth.login.errors.password')); ok = false;
     } else { setPasswordError(null); }
     if (mfaToken && !/^\d{6}$/.test(totpCode)) {
-      setTotpError('Введите 6 цифр'); ok = false;
+      setTotpError(t('auth.login.errors.totp')); ok = false;
     } else { setTotpError(null); }
     return ok;
   };
@@ -295,19 +292,19 @@ export function LoginPage() {
     let ok = true;
     const e = emailSchema.safeParse(email);
     if (!e.success) {
-      setEmailError(e.error.issues[0]?.message ?? 'Некорректный email');
+      setEmailError(e.error.issues[0]?.message ?? t('auth.login.errors.email'));
       ok = false;
     } else { setEmailError(null); }
     if (displayName.trim().length < 2) {
-      setDisplayNameError('Минимум 2 символа'); ok = false;
+      setDisplayNameError(t('auth.register.errors.display_name')); ok = false;
     } else { setDisplayNameError(null); }
     const p = passwordSchema.safeParse(password);
     if (!p.success) {
-      setPasswordError(p.error.issues[0]?.message ?? 'Слабый пароль');
+      setPasswordError(p.error.issues[0]?.message ?? t('auth.register.errors.weak_password'));
       ok = false;
     } else { setPasswordError(null); }
     if (password2 !== password || !password2) {
-      setPassword2Error(password2 ? 'Пароли не совпадают' : 'Подтвердите пароль');
+      setPassword2Error(password2 ? t('auth.reset.errors.confirm') : t('auth.register.errors.confirm_required'));
       ok = false;
     } else { setPassword2Error(null); }
     return ok;
@@ -342,7 +339,7 @@ export function LoginPage() {
     e?.preventDefault();
     setProblem(null);
     if (!/^.+@.+\..+$/.test(email)) {
-      setEmailError('Некорректный email');
+      setEmailError(t('auth.login.errors.email'));
       return;
     }
     setEmailError(null);
@@ -384,12 +381,12 @@ export function LoginPage() {
   const inlineErrorMessage = problem
     ? problem.code === 'INVALID_CREDENTIALS' ||
       problem.code === 'UNAUTHENTICATED'
-      ? 'Неверный email или пароль'
+      ? t('auth.login.error_invalid_credentials')
       : problem.code === 'CONFLICT'
-        ? 'Аккаунт с этим email уже существует'
+        ? t('auth.login.error_email_exists')
         : problem.code === 'TOO_MANY_REQUESTS'
-          ? 'Слишком много попыток. Попробуйте позже'
-          : 'Не удалось войти. Попробуйте ещё раз'
+          ? t('auth.login.error_too_many_requests')
+          : t('auth.login.error_generic')
     : null;
 
   const providerRow: { id: OAuthProvider; label: string }[] = [
@@ -408,17 +405,17 @@ export function LoginPage() {
       <main className="w-full max-w-sm space-y-10">
         {/* Brand */}
         <header className="flex flex-col items-center gap-3 text-center">
-          <BrandMark tile className="h-14 w-14" title="PlagLens" />
+          <BrandMark cropped className="h-14 w-14" title="PlagLens" />
           <div className="space-y-1">
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               PlagLens
             </h1>
             <p className="text-sm text-muted-foreground">
               {isRegister
-                ? 'Создайте аккаунт, чтобы продолжить'
+                ? t('auth.register.subtitle')
                 : isForgot
-                  ? 'Введите e-mail — пришлём ссылку для сброса пароля'
-                  : 'Войдите, чтобы продолжить'}
+                  ? t('auth.forgot.subtitle')
+                  : t('auth.login.subtitle')}
             </p>
           </div>
         </header>
@@ -436,7 +433,11 @@ export function LoginPage() {
                 <button
                   key={p.id}
                   type="button"
-                  aria-label={`${isRegister ? 'Зарегистрироваться' : 'Войти'} через ${p.label}`}
+                  aria-label={
+                    isRegister
+                      ? t('auth.register.oauth_aria', { provider: p.label })
+                      : t('auth.login.oauth_aria', { provider: p.label })
+                  }
                   title={p.label}
                   data-testid={`login-oauth-${p.id}`}
                   disabled={busy}
@@ -468,7 +469,7 @@ export function LoginPage() {
           <div className="relative flex items-center">
             <span className="flex-1 border-t border-border" aria-hidden />
             <span className="px-3 text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-              или по почте
+              {t('auth.login.email_divider')}
             </span>
             <span className="flex-1 border-t border-border" aria-hidden />
           </div>
@@ -489,9 +490,9 @@ export function LoginPage() {
               <div className="flex flex-col items-center gap-2 text-sm text-foreground">
                 <CheckCircle2 className="h-6 w-6 text-foreground/70" />
                 <p>
-                  Если такой аккаунт существует, на{' '}
-                  <span className="font-medium">{email}</span> отправлена
-                  ссылка для сброса пароля.
+                  {t('auth.forgot.sent_before')}{' '}
+                  <span className="font-medium">{email}</span>{' '}
+                  {t('auth.forgot.sent_after')}
                 </p>
               </div>
             </div>
@@ -507,7 +508,7 @@ export function LoginPage() {
                   htmlFor="forgot-email"
                   className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
                 >
-                  Email
+                  {t('auth.login.email')}
                 </Label>
                 <Input
                   id="forgot-email"
@@ -545,7 +546,7 @@ export function LoginPage() {
                 className="w-full h-11 text-sm font-medium"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Отправить ссылку
+                {t('auth.forgot.submit')}
               </Button>
             </form>
           )
@@ -555,15 +556,16 @@ export function LoginPage() {
           registered ? (
             <div className="space-y-4 text-center" data-testid="register-success">
               <p className="text-sm text-foreground">
-                Готово. На <span className="font-medium">{email}</span> отправлена
-                ссылка для подтверждения.
+                {t('auth.register.success_before')}{' '}
+                <span className="font-medium">{email}</span>{' '}
+                {t('auth.register.success_after')}
               </p>
               <Button
                 type="button"
                 className="w-full h-11 text-sm font-medium"
                 onClick={() => switchMode('login')}
               >
-                Войти
+                {t('auth.login.submit')}
               </Button>
             </div>
           ) : (
@@ -575,7 +577,7 @@ export function LoginPage() {
             >
               <div className="space-y-1.5">
                 <Label htmlFor="register-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Email
+                  {t('auth.login.email')}
                 </Label>
                 <Input
                   id="register-email"
@@ -597,7 +599,7 @@ export function LoginPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="register-name" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Имя
+                  {t('auth.register.name_label')}
                 </Label>
                 <Input
                   id="register-name"
@@ -617,7 +619,7 @@ export function LoginPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="register-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Пароль
+                  {t('auth.login.password')}
                 </Label>
                 <Input
                   id="register-password"
@@ -639,7 +641,7 @@ export function LoginPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="register-password2" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Повторите пароль
+                  {t('auth.register.confirm_password_label')}
                 </Label>
                 <Input
                   id="register-password2"
@@ -676,7 +678,7 @@ export function LoginPage() {
                 className="w-full h-11 text-sm font-medium"
               >
                 {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Создать аккаунт
+                {t('auth.register.submit')}
               </Button>
             </form>
           )
@@ -685,7 +687,7 @@ export function LoginPage() {
           <form onSubmit={handleLogin} noValidate className="space-y-4" data-testid="login-form">
             <div className="space-y-1.5">
               <Label htmlFor="login-email" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                Email
+                {t('auth.login.email')}
               </Label>
               <Input
                 id="login-email"
@@ -707,7 +709,7 @@ export function LoginPage() {
             <div className="space-y-1.5">
               <div className="flex items-baseline justify-between">
                 <Label htmlFor="login-password" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Пароль
+                  {t('auth.login.password')}
                 </Label>
                 <button
                   type="button"
@@ -715,7 +717,7 @@ export function LoginPage() {
                   data-testid="login-forgot-link"
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Забыли пароль?
+                  {t('auth.login.forgot')}
                 </button>
               </div>
               <Input
@@ -738,7 +740,7 @@ export function LoginPage() {
             {mfaToken && (
               <div className="space-y-1.5">
                 <Label htmlFor="login-totp" className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Код 2FA
+                  {t('auth.login.totp')}
                 </Label>
                 <Input
                   id="login-totp"
@@ -784,7 +786,7 @@ export function LoginPage() {
               className="w-full h-11 text-sm font-medium"
             >
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {mfaToken ? 'Подтвердить' : 'Войти'}
+              {mfaToken ? t('auth.twofa.submit') : t('auth.login.submit')}
             </Button>
           </form>
         )}
@@ -799,30 +801,30 @@ export function LoginPage() {
               data-testid="forgot-to-login"
               className="font-medium text-foreground hover:underline"
             >
-              Назад к входу
+              {t('auth.forgot.back')}
             </button>
           ) : isRegister ? (
             <>
-              Уже есть аккаунт?{' '}
+              {t('auth.register.have_account')}{' '}
               <button
                 type="button"
                 onClick={() => switchMode('login')}
                 data-testid="register-to-login"
                 className="font-medium text-foreground hover:underline"
               >
-                Войти
+                {t('auth.login.submit')}
               </button>
             </>
           ) : (
             <>
-              Нет аккаунта?{' '}
+              {t('auth.login.no_account')}{' '}
               <button
                 type="button"
                 onClick={() => switchMode('register')}
                 data-testid="login-register-link"
                 className="font-medium text-foreground hover:underline"
               >
-                Зарегистрируйтесь
+                {t('auth.login.register')}
               </button>
             </>
           )}

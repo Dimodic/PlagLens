@@ -59,8 +59,12 @@ async def list_courses(
         )
     repo = CourseRepository(session)
     if user.global_role in {"admin"}:
+        # A global admin *searching* (q present) spans ALL tenants — they
+        # manage the whole platform, so ⌘K / global search must find courses
+        # outside their own tenant. Browsing without a query stays scoped to
+        # their tenant so the admin course list isn't flooded cross-tenant.
         rows, next_id = await repo.list_for_tenant(
-            user.tenant_id,
+            None if q else user.tenant_id,
             status=status_filter,
             owner_id=owner_id,
             member_id=member_id,
@@ -74,6 +78,7 @@ async def list_courses(
             user.user_id,
             user.tenant_id,
             status=status_filter,
+            q=q,
             cursor_id=cursor_id,
             limit=limit,
         )

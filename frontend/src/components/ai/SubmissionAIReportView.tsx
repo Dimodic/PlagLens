@@ -15,17 +15,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import dayjs from 'dayjs';
-import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import {
   Tooltip,
   TooltipContent,
@@ -43,10 +35,10 @@ import { AnalysisStatusBadge } from './AnalysisStatusBadge';
 import { CostFormatter } from './CostFormatter';
 import { RiskSignalBadge } from './RiskSignalBadge';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import {
   useAnalyses,
   useLatestAnalysis,
-  usePromptVersions,
   useRegenerate,
   useShareWithStudent,
   useStartAnalysis,
@@ -60,19 +52,15 @@ interface SubmissionAIReportViewProps {
   onCurateClick?: (analysis: AIAnalysis) => void;
 }
 
-const NONE_VALUE = '__none__';
-
 export function SubmissionAIReportView({
   submissionId,
   onCurateClick,
 }: SubmissionAIReportViewProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const latestQuery = useLatestAnalysis(submissionId);
   const historyQuery = useAnalyses(submissionId, { limit: 50 });
-  const promptVersions = usePromptVersions({ limit: 50 });
   const start = useStartAnalysis(submissionId);
-
-  const [chosenPrompt, setChosenPrompt] = useState<string | null>(null);
 
   const latest = latestQuery.data;
   const regenerate = useRegenerate(latest?.id ?? '');
@@ -82,21 +70,21 @@ export function SubmissionAIReportView({
   const handleRegenerate = async () => {
     if (!latest) return;
     try {
-      await regenerate.mutateAsync({ prompt_version: chosenPrompt ?? undefined });
-      notify.success('Regenerate поставлен в очередь');
+      await regenerate.mutateAsync({});
+      notify.success(t('ai_report_view.regenerate_queued'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось');
+      notify.error(p?.detail ?? p?.title ?? t('ai_report_view.action_failed'));
     }
   };
 
   const handleStart = async () => {
     try {
-      await start.mutateAsync({ prompt_version: chosenPrompt ?? undefined });
-      notify.success('Анализ запущен');
+      await start.mutateAsync({});
+      notify.success(t('ai_report_view.analysis_started'));
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось');
+      notify.error(p?.detail ?? p?.title ?? t('ai_report_view.action_failed'));
     }
   };
 
@@ -115,40 +103,22 @@ export function SubmissionAIReportView({
     }
   }
 
-  const promptOptions = promptVersions.data?.data ?? [];
-
   if (!latest) {
     return (
       <div className="flex flex-col gap-4">
         <EmptyState
-          title="LLM-анализ ещё не запускался"
-          message="Запустите его — отчёт появится здесь, видим только преподавателю."
+          title={t('ai_report_view.empty_title')}
+          message={t('ai_report_view.empty_message')}
           icon={<Brain className="h-7 w-7" />}
           action={
             <div className="flex items-center gap-2">
-              <Select
-                value={chosenPrompt ?? NONE_VALUE}
-                onValueChange={(v) => setChosenPrompt(v === NONE_VALUE ? null : v)}
-              >
-                <SelectTrigger className="w-[260px]">
-                  <SelectValue placeholder="Prompt version" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NONE_VALUE}>—</SelectItem>
-                  {promptOptions.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.id} — {p.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
               <Button onClick={handleStart} disabled={start.isPending}>
                 {start.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Sparkles className="mr-2 h-4 w-4" />
                 )}
-                Запустить анализ
+                {t('ai_report_view.start_analysis')}
               </Button>
             </div>
           }
@@ -167,7 +137,7 @@ export function SubmissionAIReportView({
             <div className="flex items-start justify-between gap-3">
               <div className="flex flex-col gap-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <h3 className="text-lg font-medium">AI-анализ</h3>
+                  <h3 className="text-lg font-medium">{t('ai_report_view.heading')}</h3>
                   <AnalysisStatusBadge status={latest.status} />
                   {latest.cache_hit && (
                     <Tooltip>
@@ -182,7 +152,7 @@ export function SubmissionAIReportView({
                         </Badge>
                       </TooltipTrigger>
                       <TooltipContent>
-                        Получено из кэша — LLM не вызывался
+                        {t('ai_report_view.cache_hit_tooltip')}
                       </TooltipContent>
                     </Tooltip>
                   )}
@@ -192,7 +162,7 @@ export function SubmissionAIReportView({
                       className="bg-accent text-accent-foreground border-transparent font-normal"
                       data-testid="ai-shared-badge"
                     >
-                      видно студенту
+                      {t('ai_report_view.visible_to_student')}
                     </Badge>
                   )}
                 </div>
@@ -216,26 +186,10 @@ export function SubmissionAIReportView({
                       className="font-medium text-foreground"
                     />
                   </span>
-                  <span>Создано {dayjs(latest.created_at).format('DD.MM HH:mm')}</span>
+                  <span>{t('ai_report_view.created_at', { date: dayjs(latest.created_at).format('DD.MM HH:mm') })}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2 flex-wrap shrink-0">
-                <Select
-                  value={chosenPrompt ?? NONE_VALUE}
-                  onValueChange={(v) => setChosenPrompt(v === NONE_VALUE ? null : v)}
-                >
-                  <SelectTrigger className="w-[140px]">
-                    <SelectValue placeholder="Prompt" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={NONE_VALUE}>—</SelectItem>
-                    {promptOptions.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>
-                        {p.id}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
                 <Button
                   variant="secondary"
                   onClick={handleRegenerate}
@@ -247,7 +201,7 @@ export function SubmissionAIReportView({
                   ) : (
                     <RefreshCw className="mr-2 h-4 w-4" />
                   )}
-                  Сгенерировать заново
+                  {t('ai_report_view.regenerate')}
                 </Button>
                 <Button
                   onClick={() => onCurateClick?.(latest)}
@@ -255,7 +209,7 @@ export function SubmissionAIReportView({
                   data-testid="ai-curate-open"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Создать комментарий
+                  {t('ai_report_view.create_comment')}
                 </Button>
                 {latest.shared_with_student ? (
                   <Button
@@ -270,7 +224,7 @@ export function SubmissionAIReportView({
                     ) : (
                       <EyeOff className="mr-2 h-4 w-4" />
                     )}
-                    Скрыть от студента
+                    {t('ai_report_view.unshare')}
                   </Button>
                 ) : (
                   <Button
@@ -284,7 +238,7 @@ export function SubmissionAIReportView({
                     ) : (
                       <Send className="mr-2 h-4 w-4" />
                     )}
-                    Поделиться
+                    {t('ai_report_view.share')}
                   </Button>
                 )}
               </div>
@@ -296,7 +250,7 @@ export function SubmissionAIReportView({
       {latest.failure_reason && (
         <ProblemAlert
           problem={{
-            title: 'Анализ упал',
+            title: t('ai_report_view.analysis_failed'),
             status: 500,
             code: 'AI_FAILED',
             detail: latest.failure_reason,
@@ -308,7 +262,7 @@ export function SubmissionAIReportView({
         <>
           <Card data-testid="ai-analysis-summary-card">
             <CardContent className="p-4">
-              <h4 className="text-base font-medium mb-2">Резюме</h4>
+              <h4 className="text-base font-medium mb-2">{t('ai_report_view.summary_heading')}</h4>
               <p className="whitespace-pre-wrap text-sm" data-testid="ai-analysis-summary">
                 {report.summary}
               </p>
@@ -320,7 +274,7 @@ export function SubmissionAIReportView({
               <h4 className="text-base font-medium mb-2">Risk signals</h4>
               {report.risk_signals.length === 0 ? (
                 <p className="text-sm text-muted-foreground" data-testid="ai-analysis-no-risk-signals">
-                  Сигналов рисков не обнаружено.
+                  {t('ai_report_view.no_risk_signals')}
                 </p>
               ) : (
                 <div className="flex flex-wrap items-center gap-2" data-testid="ai-analysis-risk-signals">
@@ -339,9 +293,9 @@ export function SubmissionAIReportView({
 
           <Card data-testid="ai-analysis-questions-card">
             <CardContent className="p-4">
-              <h4 className="text-base font-medium mb-2">Вопросы для устной проверки</h4>
+              <h4 className="text-base font-medium mb-2">{t('ai_report_view.questions_heading')}</h4>
               {report.questions.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Нет вопросов.</p>
+                <p className="text-sm text-muted-foreground">{t('ai_report_view.no_questions')}</p>
               ) : (
                 <ol className="list-decimal pl-5 space-y-2 text-sm">
                   {report.questions.map((q, i) => (
@@ -356,9 +310,9 @@ export function SubmissionAIReportView({
 
           <Card data-testid="ai-analysis-recommendations-card">
             <CardContent className="p-4">
-              <h4 className="text-base font-medium mb-2">Рекомендации</h4>
+              <h4 className="text-base font-medium mb-2">{t('ai_report_view.recommendations_heading')}</h4>
               {report.recommendations.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Нет рекомендаций.</p>
+                <p className="text-sm text-muted-foreground">{t('ai_report_view.no_recommendations')}</p>
               ) : (
                 <ul className="list-disc pl-5 space-y-2 text-sm">
                   {report.recommendations.map((r, i) => (
@@ -376,7 +330,7 @@ export function SubmissionAIReportView({
       {historyQuery.data && historyQuery.data.data.length > 1 && (
         <Card>
           <CardContent className="p-4">
-            <h4 className="text-base font-medium mb-2">История регенераций</h4>
+            <h4 className="text-base font-medium mb-2">{t('ai_report_view.history_heading')}</h4>
             <Accordion type="multiple" className="w-full">
               {historyQuery.data.data
                 .filter((a) => a.id !== latest.id)
@@ -397,7 +351,7 @@ export function SubmissionAIReportView({
                       {a.report ? (
                         <p className="text-sm whitespace-pre-wrap">{a.report.summary}</p>
                       ) : (
-                        <p className="text-sm text-muted-foreground">Нет отчёта.</p>
+                        <p className="text-sm text-muted-foreground">{t('ai_report_view.no_report')}</p>
                       )}
                     </AccordionContent>
                   </AccordionItem>

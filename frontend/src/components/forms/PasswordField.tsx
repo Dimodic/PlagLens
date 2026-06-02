@@ -3,6 +3,7 @@ import { Eye, EyeOff, Lock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 
 export interface PasswordFieldProps
   extends Omit<React.ComponentProps<'input'>, 'type'> {
@@ -30,6 +31,7 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
     },
     ref,
   ) {
+    const { t } = useTranslation();
     const generatedId = useId();
     const inputId = id ?? generatedId;
     const [visible, setVisible] = useState(false);
@@ -51,7 +53,11 @@ export const PasswordField = forwardRef<HTMLInputElement, PasswordFieldProps>(
             <button
               type="button"
               tabIndex={-1}
-              aria-label={visible ? 'Скрыть пароль' : 'Показать пароль'}
+              aria-label={
+                visible
+                  ? t('password_field.hide')
+                  : t('password_field.show')
+              }
               onClick={() => setVisible((v) => !v)}
               className="absolute right-2 top-1/2 -translate-y-1/2 inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
             >

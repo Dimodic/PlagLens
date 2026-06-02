@@ -32,6 +32,7 @@ import {
 import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { parseProblem } from '@/api/problem';
+import { useTranslation } from '@/i18n';
 
 interface StatsPanelProps {
   courseId: string;
@@ -40,6 +41,7 @@ interface StatsPanelProps {
 }
 
 export function StatsPanel({ courseId }: StatsPanelProps) {
+  const { t } = useTranslation();
   const overview = useCourseDashboard(courseId);
   const gradesDist = useCourseGradesDist(courseId);
 
@@ -66,25 +68,25 @@ export function StatsPanel({ courseId }: StatsPanelProps) {
               no icon clutter. Title-of-cell is enough. ----- */}
       <div className="grid grid-cols-2 gap-x-8 gap-y-6 sm:grid-cols-4">
         <KpiCell
-          label="Студентов"
+          label={t('course_stats_panel.kpi_enrolled_students')}
           value={kpi?.enrolled_students}
           loading={loadingKpi}
           testId="kpi-enrolled-students"
         />
         <KpiCell
-          label="Заданий"
+          label={t('course_stats_panel.kpi_assignments_count')}
           value={kpi?.assignments_count}
           loading={loadingKpi}
           testId="kpi-assignments-count"
         />
         <KpiCell
-          label="Посылок"
+          label={t('course_stats_panel.kpi_submissions_total')}
           value={kpi?.submissions_total}
           loading={loadingKpi}
           testId="kpi-submissions-total"
         />
         <KpiCell
-          label="Средняя оценка"
+          label={t('course_stats_panel.kpi_average_score')}
           value={kpi?.average_score ?? null}
           tone="primary"
           loading={loadingKpi}
@@ -96,18 +98,18 @@ export function StatsPanel({ courseId }: StatsPanelProps) {
       <div data-testid="grade-histogram">
         <div className="mb-3 flex items-baseline justify-between gap-3">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Распределение оценок
+            {t('course_stats_panel.grade_distribution_title')}
           </h2>
           {gradesDist.data && gradesDist.data.buckets.length > 0 && (
             <div className="text-xs tabular-nums text-muted-foreground">
-              среднее{' '}
+              {t('course_stats_panel.mean_label')}{' '}
               <span className="text-foreground">
                 {typeof gradesDist.data.mean === 'number'
                   ? gradesDist.data.mean.toFixed(2)
                   : '—'}
               </span>
               <span className="mx-2 text-muted-foreground/40">·</span>
-              медиана{' '}
+              {t('course_stats_panel.median_label')}{' '}
               <span className="text-foreground">
                 {typeof gradesDist.data.median === 'number'
                   ? gradesDist.data.median.toFixed(2)
@@ -120,7 +122,7 @@ export function StatsPanel({ courseId }: StatsPanelProps) {
           <Skeleton className="h-56 w-full" />
         ) : !gradesDist.data || gradesDist.data.buckets.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
-            Пока нет оценённых посылок
+            {t('course_stats_panel.empty_no_graded')}
           </p>
         ) : (
           <div className="h-56 w-full">

@@ -14,7 +14,14 @@ import type { AssignmentBrief } from './assignments';
 
 // -------------------- Domain types --------------------
 
-export type HomeworkStatus = 'draft' | 'published' | 'archived';
+// Archive-only lifecycle — must mirror the backend Literal
+// (services/course-submission .../schemas/homework.py). 'draft'/'published'
+// are legacy values the API now 422s on.
+export type HomeworkStatus = 'active' | 'archived';
+
+// «single» — the ДЗ itself is the task (one task with the same title);
+// «collection» — a set of separate tasks. Mirrors the backend Literal.
+export type HomeworkKind = 'single' | 'collection';
 
 export interface Homework {
   id: string;
@@ -24,6 +31,7 @@ export interface Homework {
   description: string | null;
   position: number;
   status: HomeworkStatus;
+  kind: HomeworkKind;
   due_at: string | null;
   created_at: string;
   updated_at: string | null;
@@ -37,6 +45,8 @@ export interface CreateHomeworkInput {
   description?: string | null;
   position?: number;
   status?: HomeworkStatus;
+  /** «single» — the ДЗ IS the task; «collection» — a set of tasks. */
+  kind?: HomeworkKind;
   due_at?: string | null;
 }
 

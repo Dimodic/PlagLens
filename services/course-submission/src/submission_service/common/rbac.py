@@ -7,7 +7,7 @@ from submission_service.models.submission import Submission
 
 
 def ensure_tenant(ctx: AuthContext, tenant_id: str) -> None:
-    if ctx.is_super_admin:
+    if ctx.is_admin:
         return
     if ctx.tenant_id != tenant_id:
         raise ProblemException(

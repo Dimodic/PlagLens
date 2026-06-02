@@ -22,11 +22,6 @@ export interface DemoCredentials {
 }
 
 export const DEMO_USERS: Record<string, DemoCredentials> = {
-  super_admin: {
-    email: process.env.E2E_SUPER_ADMIN_EMAIL ?? 'admin@plaglens.local',
-    password: process.env.E2E_SUPER_ADMIN_PASSWORD ?? 'changeme',
-    tenantSlug: SYSTEM_TENANT_SLUG,
-  },
   admin: {
     email: 'admin@demo.local',
     password: 'admin',

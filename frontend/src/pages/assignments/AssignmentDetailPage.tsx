@@ -14,9 +14,10 @@
  * assignment-upload-button, assignment-settings-button,
  * assignment-actions-menu, assignment-action-{duplicate,archive}.
  */
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
+  AlertTriangle,
   ChevronRight,
   ExternalLink,
   Loader2,
@@ -40,7 +41,7 @@ import {
 } from '@/hooks/api/useSubmissions';
 import { useCourseMembers } from '@/hooks/api/useCourses';
 import { useUsers } from '@/hooks/api/useUsers';
-import { displayAuthor } from '@/api/endpoints/submissions';
+import { displayAuthor, submissionsApi } from '@/api/endpoints/submissions';
 import type {
   AssignmentAggregateStats,
   SubmissionBrief,
@@ -55,12 +56,14 @@ import {
 } from '@/hooks/api/usePlagiarism';
 import { cn } from '@/components/ui/utils';
 import { ConfirmDialog } from '@/components/common/ConfirmDialog';
-import { useAnalysesForAssignment } from '@/hooks/api/useAi';
+import { useAnalysesForAssignment, useBatchAnalyze } from '@/hooks/api/useAi';
 import { useAuth } from '@/auth/useAuth';
 import { hasCourseRole, hasGlobalRole } from '@/auth/RoleGuard';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { usePersistedTabState } from '@/hooks/usePersistedTabState';
+import { useTranslation } from '@/i18n';
+import type { TParams } from '@/i18n';
 import { parseProblem } from '@/api/problem';
 import type { Problem } from '@/api/types';
 import { ProblemAlert } from '@/components/common/ProblemAlert';
@@ -93,15 +96,31 @@ import { Pagination } from '@/components/common/Pagination';
 import { formatDate, formatDateTime } from '@/utils/formatters';
 import { sanitizeHtml } from '@/utils/sanitizeHtml';
 
-function statusBadge(status: string) {
+type TFunc = (key: string, params?: TParams) => string;
+
+function statusBadge(status: string, t: TFunc) {
   // Archive-only lifecycle: collapse draft/published into a single
   // "Активен" pill. Only "archived" is visually distinct.
   if (status === 'archived')
-    return <StatusPill tone="neutral">В архиве</StatusPill>;
-  return <StatusPill tone="success">Активен</StatusPill>;
+    return <StatusPill tone="neutral">{t('assignment_detail.status_archived')}</StatusPill>;
+  return <StatusPill tone="success">{t('assignment_detail.status_active')}</StatusPill>;
 }
 
 type TabId = 'submissions' | 'stats' | 'plagiarism' | 'ai' | 'about' | 'mine';
+
+/** Rough token estimate for a batch AI run: code size ÷ 4 chars/token plus a
+ *  per-submission prompt+output overhead. Order-of-magnitude only — shown so
+ *  the teacher knows it isn't free before confirming. */
+function estimateAnalysisTokens(subs: { total_size_bytes?: number }[]): number {
+  const CHARS_PER_TOKEN = 4;
+  const PROMPT_OVERHEAD = 450; // analysis prompt template, per submission
+  const AVG_OUTPUT = 600; // typical model response, per submission
+  const codeTokens = subs.reduce(
+    (sum, s) => sum + (s.total_size_bytes ?? 0) / CHARS_PER_TOKEN,
+    0,
+  );
+  return Math.round(codeTokens + subs.length * (PROMPT_OVERHEAD + AVG_OUTPUT));
+}
 
 type RunStatus =
   | 'queued'
@@ -111,16 +130,17 @@ type RunStatus =
   | 'cancelled'
   | string;
 
-function runStatusBadge(status: RunStatus) {
-  if (status === 'completed')
-    return <StatusPill tone="success">Готово</StatusPill>;
+function runStatusBadge(status: RunStatus, t: TFunc) {
+  // "Готово" is the overwhelming default — a badge on every row is just
+  // noise. Surface a pill only for states that actually need attention.
+  if (status === 'completed') return null;
   if (status === 'running')
-    return <StatusPill tone="info">Выполняется</StatusPill>;
+    return <StatusPill tone="info">{t('assignment_detail.run_status_running')}</StatusPill>;
   if (status === 'failed')
-    return <StatusPill tone="destructive">Ошибка</StatusPill>;
+    return <StatusPill tone="destructive">{t('assignment_detail.run_status_failed')}</StatusPill>;
   if (status === 'cancelled')
-    return <StatusPill tone="neutral">Отменено</StatusPill>;
-  return <StatusPill tone="neutral">В очереди</StatusPill>;
+    return <StatusPill tone="neutral">{t('assignment_detail.run_status_cancelled')}</StatusPill>;
+  return <StatusPill tone="neutral">{t('assignment_detail.run_status_queued')}</StatusPill>;
 }
 
 
@@ -134,6 +154,7 @@ function initials(name: string): string {
 }
 
 export default function AssignmentDetailPage() {
+  const { t } = useTranslation();
   const { id = '' } = useParams<{ id: string }>();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -159,11 +180,54 @@ export default function AssignmentDetailPage() {
   const { data: runsAll, isLoading: runsLoading } = usePlagiarismRuns(id, {
     limit: 1,
   });
-  const { data: aiAnalyses, isLoading: aiLoading } =
-    useAnalysesForAssignment(id, { limit: 25 });
+  // Number of submissions in the last triggered batch — drives force-polling
+  // of the analyses list so it fills in live (not only after a manual reload).
+  const [batchExpected, setBatchExpected] = useState(0);
+  const { data: aiAnalyses, isLoading: aiLoading } = useAnalysesForAssignment(
+    id,
+    { limit: 25 },
+    { forcePoll: batchExpected > 0 },
+  );
   const archiveMut = useArchiveAssignment(id);
   const duplicateMut = useDuplicateAssignment(id);
   const runPlag = useRunPlagiarism(id, assignment?.course_id ?? undefined);
+  const batchAi = useBatchAnalyze(id ?? '');
+  const [batchPreparing, setBatchPreparing] = useState(false);
+  const [batchPlan, setBatchPlan] = useState<
+    { ids: string[]; estTokens: number } | null
+  >(null);
+  // The AI-analysis rows only carry submission_id; resolve student names from
+  // the assignment's submissions so the list shows "Петров А." not "sub_…".
+  const aiNamesQ = useMySubmissions({ assignment_id: id, limit: 1000 });
+  const aiNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of aiNamesQ.data?.data ?? []) m.set(s.id, displayAuthor(s));
+    return m;
+  }, [aiNamesQ.data]);
+
+  // Stop force-polling once the batch has settled: enough rows landed (capped
+  // at the page size, since the list is paginated) and none are still
+  // queued/running.
+  const aiRowsAll = aiAnalyses?.data ?? [];
+  const aiActive = aiRowsAll.some(
+    (a) => a.status === 'queued' || a.status === 'running',
+  );
+  useEffect(() => {
+    if (
+      batchExpected > 0 &&
+      !aiActive &&
+      aiRowsAll.length >= Math.min(batchExpected, 25)
+    ) {
+      setBatchExpected(0);
+    }
+  }, [batchExpected, aiActive, aiRowsAll.length]);
+  // Safety valve: never force-poll for more than a few minutes.
+  useEffect(() => {
+    if (batchExpected <= 0) return;
+    const t = setTimeout(() => setBatchExpected(0), 180_000);
+    return () => clearTimeout(t);
+  }, [batchExpected]);
+  const aiBatchActive = batchExpected > 0 || aiActive;
 
   // Plagiarism-run deletion (soft delete on backend). Two-step UX so a
   // misclick on the trash icon doesn't nuke a run silently.
@@ -278,7 +342,7 @@ export default function AssignmentDetailPage() {
   const handleArchive = async () => {
     try {
       await archiveMut.mutateAsync();
-      notify.success('Задание архивировано');
+      notify.success(t('assignment_detail.notify_archived'));
     } catch (e) {
       setProblem(parseProblem(e));
     }
@@ -287,7 +351,7 @@ export default function AssignmentDetailPage() {
   const handleDuplicate = async () => {
     try {
       await duplicateMut.mutateAsync(undefined);
-      notify.info('Дублирование запущено');
+      notify.info(t('assignment_detail.notify_duplicate_started'));
     } catch (e) {
       setProblem(parseProblem(e));
     }
@@ -296,10 +360,54 @@ export default function AssignmentDetailPage() {
   const handleRunPlag = async () => {
     try {
       const op = await runPlag.mutateAsync({});
-      notify.info('Проверка запущена');
+      // No toast — the tab immediately shows "Идёт проверка", so a separate
+      // top-right notification is redundant.
       if ((op as { run_id?: string }).run_id) {
         navigate(`/plagiarism-runs/${(op as { run_id?: string }).run_id}`);
       }
+    } catch (e) {
+      setProblem(parseProblem(e));
+    }
+  };
+
+  // AI-анализ для всех — шаг 1: собираем последнюю посылку каждого студента,
+  // прикидываем расход токенов и открываем подтверждение (LLM не бесплатен).
+  const handleBatchAiClick = async () => {
+    setBatchPreparing(true);
+    try {
+      const subs = await submissionsApi.mySubmissions({
+        assignment_id: id,
+        latest_per_student: true,
+        limit: 1000,
+      });
+      const list = subs.data ?? [];
+      if (list.length === 0) return;
+      setBatchPlan({
+        ids: list.map((s) => s.id),
+        estTokens: estimateAnalysisTokens(list),
+      });
+    } catch (e) {
+      setProblem(parseProblem(e));
+    } finally {
+      setBatchPreparing(false);
+    }
+  };
+
+  // Шаг 2: подтверждено — закрываем окно сразу и запускаем батч (бэкенд
+  // обрабатывает посылки в фоне, список наполняется по мере готовности).
+  const handleBatchConfirm = async () => {
+    if (!batchPlan) return;
+    const ids = batchPlan.ids;
+    setBatchPlan(null);
+    try {
+      await batchAi.mutateAsync({
+        submission_ids: ids,
+        course_id: assignment.course_id ?? undefined,
+      });
+      // Force-poll the list until the batch settles, so it fills in live.
+      setBatchExpected(ids.length);
+      // No toast — status (идёт / готово / ошибка) is shown inline in the
+      // list and banners below.
     } catch (e) {
       setProblem(parseProblem(e));
     }
@@ -313,8 +421,16 @@ export default function AssignmentDetailPage() {
         graders: assistants,
       });
       notify.success(
-        `Распределено ${res.assigned} посылок между ${res.graders} ассистентами` +
-          (res.skipped > 0 ? ` (${res.skipped} уже были назначены)` : ''),
+        t('assignment_detail.notify_distributed', {
+          assigned: res.assigned,
+          graders: res.graders,
+        }) +
+          (res.skipped > 0
+            ? ' ' +
+              t('assignment_detail.notify_distributed_skipped', {
+                skipped: res.skipped,
+              })
+            : ''),
       );
       setDistributeOpen(false);
     } catch (e) {
@@ -343,7 +459,7 @@ export default function AssignmentDetailPage() {
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               {assignment.status === 'archived' && (
                 <span data-testid="assignment-status-badge">
-                  {statusBadge(assignment.status)}
+                  {statusBadge(assignment.status, t)}
                 </span>
               )}
               {assignment.language_hint && (
@@ -351,15 +467,17 @@ export default function AssignmentDetailPage() {
                   data-testid="assignment-language-badge"
                   className="font-mono"
                 >
-                  {assignment.language_hint}
+                  {assignment.language_hint === 'pdf'
+                    ? 'PDF'
+                    : assignment.language_hint}
                 </span>
               )}
               {assignment.deadline_soft_at && (
-                <span>Срок {formatDate(assignment.deadline_soft_at)}</span>
+                <span>{t('assignment_detail.deadline', { date: formatDate(assignment.deadline_soft_at) })}</span>
               )}
               {assignment.max_score != null && (
                 <span>
-                  макс.{' '}
+                  {t('assignment_detail.max_short')}{' '}
                   <span className="tabular-nums">{assignment.max_score}</span>
                 </span>
               )}
@@ -383,7 +501,9 @@ export default function AssignmentDetailPage() {
                   stepik: 'Stepik',
                   ejudge: 'eJudge',
                 };
-                const label = sysLabel[bind.system ?? ''] ?? 'провайдер';
+                const label =
+                  sysLabel[bind.system ?? ''] ??
+                  t('assignment_detail.provider_fallback');
                 return bind.url ? (
                   <Button
                     asChild
@@ -392,7 +512,7 @@ export default function AssignmentDetailPage() {
                   >
                     <a href={bind.url} target="_blank" rel="noopener noreferrer">
                       <ExternalLink className="mr-2 h-4 w-4" />
-                      Открыть в {label}
+                      {t('assignment_detail.open_in_provider', { provider: label })}
                     </a>
                   </Button>
                 ) : null;
@@ -401,7 +521,7 @@ export default function AssignmentDetailPage() {
                 <Button asChild data-testid="assignment-upload-button">
                   <Link to={`/assignments/${assignment.id}/upload`}>
                     <Upload className="mr-2 h-4 w-4" />
-                    Загрузить посылку
+                    {t('assignment_detail.upload_submission')}
                   </Link>
                 </Button>
               );
@@ -423,14 +543,14 @@ export default function AssignmentDetailPage() {
                   variant="outline"
                 >
                   <Sparkles className="mr-2 h-4 w-4" />
-                  Запустить проверку
+                  {t('assignment_detail.run_check')}
                 </Button>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       variant="outline"
                       size="icon"
-                      aria-label="Ещё"
+                      aria-label={t('assignment_detail.more')}
                       data-testid="assignment-actions-menu"
                     >
                       <MoreHorizontal className="h-4 w-4" />
@@ -442,7 +562,7 @@ export default function AssignmentDetailPage() {
                       data-testid="assignment-action-settings"
                     >
                       <Link to={`/assignments/${assignment.id}/settings`}>
-                        Настройки
+                        {t('assignment_detail.action_settings')}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -450,7 +570,7 @@ export default function AssignmentDetailPage() {
                       data-testid="assignment-action-all-submissions"
                     >
                       <Link to={`/assignments/${assignment.id}/submissions`}>
-                        Все посылки
+                        {t('assignment_detail.action_all_submissions')}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem
@@ -458,14 +578,14 @@ export default function AssignmentDetailPage() {
                       data-testid="assignment-action-deadlines"
                     >
                       <Link to={`/assignments/${assignment.id}/deadlines`}>
-                        Дедлайны
+                        {t('assignment_detail.action_deadlines')}
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       onSelect={() => void handleDuplicate()}
                       data-testid="assignment-action-duplicate"
                     >
-                      Дублировать
+                      {t('assignment_detail.action_duplicate')}
                     </DropdownMenuItem>
                     {assignment.status !== 'archived' && (
                       <DropdownMenuItem
@@ -473,7 +593,7 @@ export default function AssignmentDetailPage() {
                         className="text-amber-600 focus:text-amber-600"
                         data-testid="assignment-action-archive"
                       >
-                        Архивировать
+                        {t('assignment_detail.action_archive')}
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
@@ -491,14 +611,14 @@ export default function AssignmentDetailPage() {
             {/* "Описание" available to everyone — teachers also want to read
                 the condition (it's the source of truth for grading) but in
                 a tab, not as a giant block above every other tab. */}
-            <TabsTrigger value="about">Описание</TabsTrigger>
+            <TabsTrigger value="about">{t('assignment_detail.tab_about')}</TabsTrigger>
             {!isTeacher && (
-              <TabsTrigger value="mine">Мои посылки</TabsTrigger>
+              <TabsTrigger value="mine">{t('assignment_detail.tab_mine')}</TabsTrigger>
             )}
             {isTeacher && (
               <>
                 <TabsTrigger value="submissions">
-                  Посылки
+                  {t('assignment_detail.tab_submissions')}
                   {/* Count = number of students who submitted (latest-
                       per-student rows), NOT total submission attempts.
                       The submission popover surfaces the attempts. */}
@@ -508,9 +628,9 @@ export default function AssignmentDetailPage() {
                     </span>
                   )}
                 </TabsTrigger>
-                <TabsTrigger value="stats">Статистика</TabsTrigger>
-                <TabsTrigger value="plagiarism">Плагиат</TabsTrigger>
-                <TabsTrigger value="ai">AI-анализ</TabsTrigger>
+                <TabsTrigger value="stats">{t('assignment_detail.tab_stats')}</TabsTrigger>
+                <TabsTrigger value="plagiarism">{t('assignment_detail.tab_plagiarism')}</TabsTrigger>
+                <TabsTrigger value="ai">{t('assignment_detail.tab_ai')}</TabsTrigger>
               </>
             )}
           </TabsList>
@@ -536,7 +656,7 @@ export default function AssignmentDetailPage() {
                   />
                 ) : (
                   <div className="py-12 text-center text-sm text-muted-foreground">
-                    Описание не задано.
+                    {t('assignment_detail.description_empty')}
                   </div>
                 )}
               </TabsContent>
@@ -566,7 +686,7 @@ export default function AssignmentDetailPage() {
                       }
                       title={
                         assistants.length === 0
-                          ? 'В курсе нет ассистентов'
+                          ? t('assignment_detail.no_assistants')
                           : undefined
                       }
                       data-testid="assignment-distribute-submissions"
@@ -576,7 +696,7 @@ export default function AssignmentDetailPage() {
                       ) : (
                         <Users className="mr-2 h-4 w-4" />
                       )}
-                      Распределить между ассистентами
+                      {t('assignment_detail.distribute')}
                     </Button>
                   </div>
                 )}
@@ -591,7 +711,9 @@ export default function AssignmentDetailPage() {
                   <SkeletonList rows={6} rowHeight={56} />
                 ) : submissionList.length === 0 ? (
                   <div className="py-12 text-center text-sm text-muted-foreground">
-                    {subsPage === 1 ? 'Посылок пока нет.' : 'На этой странице пусто.'}
+                    {subsPage === 1
+                      ? t('assignment_detail.submissions_empty')
+                      : t('assignment_detail.page_empty')}
                   </div>
                 ) : (
                   // Flat list, same minimalism as the homework / course
@@ -637,14 +759,21 @@ export default function AssignmentDetailPage() {
                                   the version count meaningful with Russian
                                   pluralisation. */}
                               {' · '}
-                              {s.version} {(() => {
+                              {(() => {
                                 const n = s.version;
                                 const mod10 = n % 10;
                                 const mod100 = n % 100;
-                                if (mod10 === 1 && mod100 !== 11) return 'попытка';
-                                if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20))
-                                  return 'попытки';
-                                return 'попыток';
+                                const form =
+                                  mod10 === 1 && mod100 !== 11
+                                    ? 'one'
+                                    : mod10 >= 2 &&
+                                        mod10 <= 4 &&
+                                        (mod100 < 10 || mod100 >= 20)
+                                      ? 'few'
+                                      : 'many';
+                                return t(`assignment_detail.attempts_${form}`, {
+                                  count: n,
+                                });
                               })()}
                             </div>
                           </div>
@@ -657,12 +786,12 @@ export default function AssignmentDetailPage() {
                           )}
                           {s.status === 'error' && (
                             <span className="text-xs text-destructive">
-                              ошибка
+                              {t('assignment_detail.status_error')}
                             </span>
                           )}
                           {s.status === 'processing' && (
                             <span className="text-xs text-muted-foreground">
-                              обработка
+                              {t('assignment_detail.status_processing')}
                             </span>
                           )}
                           {/* Assigned assistant — shown after the
@@ -689,7 +818,7 @@ export default function AssignmentDetailPage() {
                             </span>
                           ) : (
                             <span className="text-xs text-muted-foreground/60 shrink-0">
-                              без оценки
+                              {t('assignment_detail.no_grade')}
                             </span>
                           )}
                           <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -741,23 +870,94 @@ export default function AssignmentDetailPage() {
 
               <TabsContent value="ai" className="mt-0">
                 {/* No Card chrome — same minimalism as Plagiarism tab. */}
-                <div className="flex justify-end pb-3">
+                <div className="flex items-center justify-end gap-4 pb-3">
                   <Link
                     to={`/assignments/${assignment.id}/ai-analyses`}
                     className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    Все анализы →
+                    {t('assignment_detail.all_analyses')}
                   </Link>
+                  {isTeacher && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleBatchAiClick}
+                      disabled={
+                        batchPreparing || batchAi.isPending || aiBatchActive
+                      }
+                      data-testid="assignment-ai-run-all"
+                    >
+                      {batchPreparing || batchAi.isPending || aiBatchActive ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="mr-2 h-3.5 w-3.5" />
+                      )}
+                      {aiBatchActive
+                        ? t('assignment_detail.ai_running')
+                        : t('assignment_detail.ai_run_all')}
+                    </Button>
+                  )}
                 </div>
-                {aiLoading && !aiAnalyses ? (
-                  <SkeletonList rows={3} rowHeight={48} />
-                ) : (aiAnalyses?.data ?? []).length === 0 ? (
-                  <div className="py-12 text-center text-sm text-muted-foreground">
-                    Анализов нет
-                  </div>
-                ) : (
-                  <div data-testid="assignment-ai-analyses" className="flex flex-col">
-                    {(aiAnalyses?.data ?? []).map((a) => (
+                {(() => {
+                  const rows = aiAnalyses?.data ?? [];
+                  const pending = rows.filter(
+                    (a) => a.status === 'queued' || a.status === 'running',
+                  ).length;
+                  const failed = rows.filter((a) => a.status === 'failed').length;
+                  const done = rows.filter(
+                    (a) => a.status === 'completed' || a.status === 'failed',
+                  ).length;
+                  const total = batchExpected > 0 ? batchExpected : rows.length;
+                  const batchActive = batchExpected > 0 || pending > 0;
+                  return (
+                    <>
+                      {batchActive && (
+                        <div className="mb-3 flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          {t('assignment_detail.ai_progress', { done, total })}
+                        </div>
+                      )}
+                      {/* Failure summary only once the batch has settled (so the
+                          denominator isn't moving), and only blame the provider/
+                          key when EVERYTHING failed — if some succeeded, the
+                          provider clearly works and the failure is per-submission. */}
+                      {failed > 0 && !batchActive && (
+                        <div
+                          className="mb-3 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive"
+                          data-testid="assignment-ai-error-banner"
+                        >
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                          <span>
+                            {failed === rows.length
+                              ? t('assignment_detail.ai_all_failed')
+                              : t('assignment_detail.ai_some_failed', {
+                                  failed,
+                                  total: rows.length,
+                                })}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+                {(() => {
+                  const visible = (aiAnalyses?.data ?? []).filter(
+                    (a) => a.status !== 'failed',
+                  );
+                  if (aiLoading && !aiAnalyses) {
+                    return <SkeletonList rows={3} rowHeight={48} />;
+                  }
+                  if ((aiAnalyses?.data ?? []).length === 0) {
+                    return aiBatchActive ? null : (
+                      <div className="py-12 text-center text-sm text-muted-foreground">
+                        {t('assignment_detail.ai_empty')}
+                      </div>
+                    );
+                  }
+                  if (visible.length === 0) return null;
+                  return (
+                    <div data-testid="assignment-ai-analyses" className="flex flex-col">
+                      {visible.map((a) => (
                       <div
                         key={a.id}
                         onClick={() =>
@@ -771,27 +971,29 @@ export default function AssignmentDetailPage() {
                         <div className="min-w-0">
                           <div className="text-sm font-medium text-foreground truncate">
                             {a.author?.display_name ??
+                              aiNameById.get(a.submission_id) ??
                               a.submission_id.slice(0, 12)}
                           </div>
                           <div className="mt-0.5 text-xs text-muted-foreground">
                             {a.provider} · {a.model} ·{' '}
                             {a.finished_at
                               ? formatDateTime(a.finished_at)
-                              : 'в процессе'}
+                              : t('assignment_detail.ai_in_progress')}
                           </div>
                         </div>
                         <div className="font-mono text-xs text-muted-foreground tabular-nums">
-                          {a.total_tokens} ток.
+                          {t('assignment_detail.tokens_unit', { count: a.total_tokens })}
                         </div>
                         <div className="font-mono text-xs text-muted-foreground tabular-nums">
-                          {a.latency_ms} мс
+                          {t('assignment_detail.latency_unit', { count: a.latency_ms })}
                         </div>
-                        <div>{runStatusBadge(a.status)}</div>
+                        <div>{runStatusBadge(a.status, t)}</div>
                         <ChevronRight className="h-4 w-4 text-muted-foreground justify-self-end" />
                       </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  );
+                })()}
               </TabsContent>
             </div>
 
@@ -804,15 +1006,15 @@ export default function AssignmentDetailPage() {
           gone from every list/query the user can reach. */}
       <ConfirmDialog
         opened={!!runToDelete}
-        title="Удалить проверку?"
-        message="Запуск пропадёт из списка проверок. Историю pairs/clusters восстановить не получится. Можно запустить новую проверку — она пересчитает заново."
-        confirmLabel="Удалить"
+        title={t('assignment_detail.delete_run_title')}
+        message={t('assignment_detail.delete_run_message')}
+        confirmLabel={t('assignment_detail.delete')}
         destructive
         loading={deleteRunMut.isPending}
         onConfirm={async () => {
           try {
             await deleteRunMut.mutateAsync();
-            notify.success('Проверка удалена');
+            notify.success(t('assignment_detail.notify_run_deleted'));
             setRunToDelete(null);
           } catch (e) {
             setProblem(parseProblem(e));
@@ -826,17 +1028,49 @@ export default function AssignmentDetailPage() {
           assistants + their names) before the bulk write. */}
       <ConfirmDialog
         opened={distributeOpen}
-        title="Распределить между ассистентами"
-        message={
-          `Непроверенные посылки задания будут равномерно распределены ` +
-          `между ${assistants.length} ассистентами: ` +
-          `${assistants.map((a) => a.name).join(', ')}. ` +
-          `Уже распределённые посылки не затрагиваются.`
-        }
-        confirmLabel="Распределить"
+        title={t('assignment_detail.distribute_title')}
+        message={t('assignment_detail.distribute_message', {
+          count: assistants.length,
+          names: assistants.map((a) => a.name).join(', '),
+        })}
+        confirmLabel={t('assignment_detail.distribute_confirm')}
         loading={distribute.isPending}
         onConfirm={handleDistribute}
         onClose={() => setDistributeOpen(false)}
+      />
+
+      {/* Batch AI run — confirm with a rough token estimate (it costs LLM
+          budget, so we don't fire on the first click). */}
+      <ConfirmDialog
+        opened={!!batchPlan}
+        title={t('assignment_detail.batch_ai_title')}
+        message={
+          batchPlan ? (
+            <div className="space-y-3">
+              <p>{t('assignment_detail.batch_ai_intro')}</p>
+              <div className="flex gap-3">
+                <div className="flex-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 text-center">
+                  <div className="text-2xl font-semibold tabular-nums text-foreground">
+                    {batchPlan.ids.length}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{t('assignment_detail.batch_ai_submissions')}</div>
+                </div>
+                <div className="flex-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2.5 text-center">
+                  <div className="text-2xl font-semibold tabular-nums text-foreground">
+                    ≈&nbsp;{batchPlan.estTokens.toLocaleString('ru-RU')}
+                  </div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">
+                    {t('assignment_detail.batch_ai_tokens_hint')}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null
+        }
+        confirmLabel={t('assignment_detail.batch_ai_confirm')}
+        loading={batchAi.isPending}
+        onConfirm={handleBatchConfirm}
+        onClose={() => setBatchPlan(null)}
       />
     </Page>
   );
@@ -864,6 +1098,7 @@ function PlagiarismTab({
   onDelete: (id: string) => void;
   starting: boolean;
 }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   // Top suspicious pairs — fetched only when we have a completed run.
   const enabledPairs = !!latest && latest.status === 'completed';
@@ -886,7 +1121,7 @@ function PlagiarismTab({
           <Sparkles className="h-5 w-5" />
         </div>
         <p className="text-sm text-muted-foreground">
-          Проверка ещё не запускалась
+          {t('assignment_detail.plag_never_run')}
         </p>
         {isTeacher && (
           <Button
@@ -899,7 +1134,7 @@ function PlagiarismTab({
             ) : (
               <Sparkles className="mr-2 h-4 w-4" />
             )}
-            Запустить проверку
+            {t('assignment_detail.run_check')}
           </Button>
         )}
       </div>
@@ -916,8 +1151,10 @@ function PlagiarismTab({
         <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
         <p className="text-sm text-muted-foreground">
           {latest.submissions_count > 0
-            ? `Идёт проверка · ${latest.submissions_count} посылок`
-            : 'Идёт проверка'}
+            ? t('assignment_detail.plag_running_count', {
+                count: latest.submissions_count,
+              })
+            : t('assignment_detail.plag_running')}
         </p>
       </div>
     );
@@ -938,16 +1175,15 @@ function PlagiarismTab({
       <div className="flex flex-wrap items-center gap-3">
         <StatusPill tone={failed ? 'destructive' : tone}>
           {failed
-            ? 'Ошибка'
+            ? t('assignment_detail.run_status_failed')
             : matchesCount > 0
-              ? `${matchesCount} ${
-                  matchesCount === 1
-                    ? 'совпадение'
-                    : matchesCount < 5
-                      ? 'совпадения'
-                      : 'совпадений'
-                }`
-              : 'Совпадений нет'}
+              ? t(
+                  `assignment_detail.matches_${
+                    matchesCount === 1 ? 'one' : matchesCount < 5 ? 'few' : 'many'
+                  }`,
+                  { count: matchesCount },
+                )
+              : t('assignment_detail.no_matches')}
         </StatusPill>
         <span className="text-sm text-muted-foreground">{finishedAt}</span>
         <span className="text-xs text-muted-foreground/70 uppercase tracking-wider">
@@ -968,12 +1204,12 @@ function PlagiarismTab({
               ) : (
                 <Sparkles className="mr-2 h-4 w-4" />
               )}
-              Перепроверить
+              {t('assignment_detail.recheck')}
             </Button>
             <button
               type="button"
               onClick={() => onDelete(latest.id)}
-              aria-label="Удалить проверку"
+              aria-label={t('assignment_detail.delete_run_aria')}
               data-testid={`assignment-plag-run-${latest.id}-delete`}
               className="flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-muted/60"
             >
@@ -995,7 +1231,7 @@ function PlagiarismTab({
           <div className="flex flex-wrap divide-x divide-border/50 border-y border-border/50 py-5">
             <div className="flex-1 min-w-[140px] px-5 first:pl-0">
               <div className="text-xs text-muted-foreground">
-                Подозр-ных пар
+                {t('assignment_detail.stat_suspicious_pairs')}
               </div>
               <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums">
                 {matchesCount}
@@ -1003,20 +1239,20 @@ function PlagiarismTab({
             </div>
             <div className="flex-1 min-w-[140px] px-5">
               <div className="text-xs text-muted-foreground">
-                Max similarity
+                {t('assignment_detail.stat_max_similarity')}
               </div>
               <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums">
                 {simPct}%
               </div>
             </div>
             <div className="flex-1 min-w-[140px] px-5">
-              <div className="text-xs text-muted-foreground">Посылок</div>
+              <div className="text-xs text-muted-foreground">{t('assignment_detail.stat_submissions')}</div>
               <div className="mt-1.5 font-mono text-2xl font-semibold tabular-nums">
                 {latest.submissions_count}
               </div>
             </div>
             <div className="flex-1 min-w-[140px] px-5 last:pr-0">
-              <div className="text-xs text-muted-foreground">Запущен</div>
+              <div className="text-xs text-muted-foreground">{t('assignment_detail.stat_started')}</div>
               <div className="mt-1.5 font-mono text-sm tabular-nums">
                 {latest.started_at
                   ? formatDateTime(latest.started_at)
@@ -1030,29 +1266,29 @@ function PlagiarismTab({
             <section>
               <div className="flex items-baseline gap-2 mb-3">
                 <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Топ подозрительных пар
+                  {t('assignment_detail.top_pairs')}
                 </h2>
                 <div className="flex-1" />
                 <Link
                   to={`/plagiarism-runs/${latest.id}`}
                   className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
-                  Открыть карту →
+                  {t('assignment_detail.open_map')}
                 </Link>
               </div>
               {topPairsQ.isLoading ? (
                 <SkeletonList rows={3} rowHeight={40} />
               ) : topPairs.length === 0 ? (
                 <p className="text-sm text-muted-foreground py-2">
-                  Пар выше порога 50% не нашлось.
+                  {t('assignment_detail.no_pairs_above_threshold')}
                 </p>
               ) : (
                 <div className="-mx-2 flex flex-col">
                   {topPairs.map((p) => {
                     const aName =
-                      p.a_author?.display_name ?? 'студент A';
+                      p.a_author?.display_name ?? t('assignment_detail.student_a');
                     const bName =
-                      p.b_author?.display_name ?? 'студент B';
+                      p.b_author?.display_name ?? t('assignment_detail.student_b');
                     const pct = (p.similarity * 100).toFixed(1);
                     const high = p.similarity >= 0.85;
                     return (
@@ -1119,6 +1355,7 @@ function StatsTab({
   maxScore: number | null;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   // ---- metric strip: prefer backend aggregate (single SQL query) and
   //      fall back to client-side counts so the page still renders if
   //      the new endpoint isn't reachable yet. ----
@@ -1191,22 +1428,22 @@ function StatsTab({
   if (submissionsCount === 0) {
     return (
       <div className="py-16 text-center text-sm text-muted-foreground">
-        Посылок пока нет — статистика появится после первых сдач.
+        {t('assignment_detail.stats_empty')}
       </div>
     );
   }
 
   const metrics: { label: string; value: number | string }[] = [
-    { label: 'Посылок', value: submissionsCount },
-    { label: 'Студентов', value: studentsCount },
+    { label: t('assignment_detail.metric_submissions'), value: submissionsCount },
+    { label: t('assignment_detail.metric_students'), value: studentsCount },
     {
-      label: 'Средний балл',
+      label: t('assignment_detail.metric_mean_score'),
       value: meanScore == null ? '—' : meanScore.toFixed(2),
     },
-    { label: 'Оценено', value: `${scoredCount} / ${submissionsCount}` },
-    { label: 'Поздних', value: lateCount },
-    { label: 'Алертов', value: plagAlerts },
-    { label: 'AI-анализов', value: aiCount },
+    { label: t('assignment_detail.metric_graded'), value: `${scoredCount} / ${submissionsCount}` },
+    { label: t('assignment_detail.metric_late'), value: lateCount },
+    { label: t('assignment_detail.metric_alerts'), value: plagAlerts },
+    { label: t('assignment_detail.metric_ai'), value: aiCount },
   ];
 
   return (
@@ -1230,16 +1467,17 @@ function StatsTab({
       <section>
         <div className="flex items-baseline mb-4">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Распределение оценок
+            {t('assignment_detail.score_distribution')}
           </h2>
           <div className="flex-1" />
           <span className="text-xs text-muted-foreground">
-            из {maxS}{maxScore == null ? ' (без max)' : ''}
+            {t('assignment_detail.out_of', { score: maxS })}
+            {maxScore == null ? ` ${t('assignment_detail.no_max')}` : ''}
           </span>
         </div>
         {scoredCount === 0 ? (
           <p className="text-sm text-muted-foreground py-2">
-            Никого ещё не оценили.
+            {t('assignment_detail.nobody_graded')}
           </p>
         ) : (
           <ScoreHistogram bins={bins} maxBin={maxBin} maxScore={maxS} />
@@ -1250,11 +1488,16 @@ function StatsTab({
       <section>
         <div className="flex items-baseline mb-4">
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-            Когда сдавали
+            {t('assignment_detail.when_submitted')}
           </h2>
           <div className="flex-1" />
           <span className="text-xs text-muted-foreground tabular-nums">
-            {days.length} {days.length === 1 ? 'день' : 'дней'}
+            {t(
+              days.length === 1
+                ? 'assignment_detail.days_one'
+                : 'assignment_detail.days_many',
+              { count: days.length },
+            )}
           </span>
         </div>
         <SubmissionTimeline days={days} maxCount={maxDay} />
@@ -1264,7 +1507,7 @@ function StatsTab({
       {langs.length > 1 && (
         <section>
           <h2 className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-4">
-            Языки
+            {t('assignment_detail.languages')}
           </h2>
           <div className="flex flex-wrap gap-2">
             {langs.map(([lang, n]) => (
@@ -1373,6 +1616,7 @@ function SubmissionTimeline({
   days: [string, number][];
   maxCount: number;
 }) {
+  const { t } = useTranslation();
   const W = 600;
   const H = 160;
   const padL = 24;
@@ -1386,7 +1630,7 @@ function SubmissionTimeline({
   if (days.length === 0) {
     return (
       <p className="text-sm text-muted-foreground py-2">
-        Нет данных по датам сдач.
+        {t('assignment_detail.no_date_data')}
       </p>
     );
   }
@@ -1490,6 +1734,7 @@ interface MySub {
 }
 
 function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
+  const { t } = useTranslation();
   // assignment_id (singular) hits the student-side filter; the plural
   // `assignment_ids` form is staff-only and would silently return every
   // submission across the course.
@@ -1517,7 +1762,7 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
   if (q.isLoading) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        Загружаем…
+        {t('assignment_detail.loading')}
       </p>
     );
   }
@@ -1525,7 +1770,7 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
   if (subs.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">
-        По этому заданию посылок пока нет.
+        {t('assignment_detail.my_subs_empty')}
       </p>
     );
   }
@@ -1544,16 +1789,16 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">Все</SelectItem>
-            <SelectItem value="ok">OK</SelectItem>
-            <SelectItem value="failed">С ошибкой</SelectItem>
+            <SelectItem value="all">{t('assignment_detail.filter_all')}</SelectItem>
+            <SelectItem value="ok">{t('assignment_detail.filter_ok')}</SelectItem>
+            <SelectItem value="failed">{t('assignment_detail.filter_failed')}</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
       {visible.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
-          Под фильтр ничего не подходит.
+          {t('assignment_detail.filter_no_match')}
         </p>
       ) : (
         <ul className="divide-y divide-border/40 border-t border-border/40">
@@ -1568,7 +1813,7 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
                   className="group flex items-center gap-4 py-3 -mx-2 px-2 rounded-md transition-colors hover:bg-muted/20"
                 >
                   <span className="text-sm text-foreground truncate flex-1">
-                    Посылка от {fmtSubDate(s.submitted_at)}
+                    {t('assignment_detail.my_sub_at', { date: fmtSubDate(s.submitted_at) })}
                   </span>
                   {s.external_verdict && (
                     <span
@@ -1576,7 +1821,7 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
                         'text-xs shrink-0',
                         ok ? 'text-muted-foreground' : 'text-sev-high',
                       )}
-                      title="Вердикт Y.Contest"
+                      title={t('assignment_detail.verdict_yc')}
                     >
                       {s.external_verdict}
                     </span>
@@ -1594,7 +1839,7 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
                       </span>
                     ) : (
                       <span className="text-xs text-muted-foreground shrink-0">
-                        на проверке
+                        {t('assignment_detail.under_review')}
                       </span>
                     ))}
                   <ChevronRight

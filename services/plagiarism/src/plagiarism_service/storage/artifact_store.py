@@ -6,11 +6,28 @@ implementation; in production the singleton wraps the real ``minio.Minio``.
 from __future__ import annotations
 
 import io
+import re
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
 
 from ..config import settings
+
+
+def _safe_bucket(prefix: str, tenant_id: str) -> str:
+    """Build an S3/MinIO-legal bucket name from a tenant id.
+
+    Bucket names must be 3–63 chars, lowercase ``[a-z0-9.-]``, and begin and
+    end with an alphanumeric. Tenant ids carry an underscore (``tnt_abc…``)
+    which is illegal in a bucket name — MinIO rejects ``plaglens-tnt_…`` with
+    ``InvalidBucketName`` and the artifact silently fails to persist. Replace
+    every disallowed character with a hyphen so the bucket is actually usable.
+    """
+    raw = f"{prefix}-{tenant_id}".lower()
+    cleaned = re.sub(r"[^a-z0-9.-]", "-", raw).strip("-.")
+    if len(cleaned) < 3:
+        cleaned = f"{cleaned}-bucket".strip("-.") or "plaglens-bucket"
+    return cleaned[:63].rstrip("-.")
 
 
 @dataclass
@@ -61,7 +78,7 @@ class InMemoryArtifactStore(ArtifactStore):
         content_type: str = "application/octet-stream",
         filename: str | None = None,
     ) -> StoredArtifact:
-        bucket = f"{settings.minio_bucket_prefix}-{tenant_id}".lower()
+        bucket = _safe_bucket(settings.minio_bucket_prefix, tenant_id)
         key = f"plagiarism/{run_id}/{kind}.{(filename or kind).split('.')[-1]}"
         self._objects[(bucket, key)] = (data, content_type)
         return StoredArtifact(bucket=bucket, key=key, size=len(data), content_type=content_type)
@@ -89,7 +106,7 @@ class MinioArtifactStore(ArtifactStore):
         )
 
     def _bucket(self, tenant_id: str) -> str:
-        return f"{settings.minio_bucket_prefix}-{tenant_id}".lower()
+        return _safe_bucket(settings.minio_bucket_prefix, tenant_id)
 
     def _ensure_bucket(self, bucket: str) -> None:
         try:

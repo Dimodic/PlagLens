@@ -6,6 +6,7 @@ from .external_bindings import ExternalBindingRepository
 from .invitations import InvitationRepository
 from .oauth import OAuthIdentityRepository
 from .sessions import SessionRepository
+from .telegram_binding import TelegramBindingRepository
 from .tenants import TenantRepository
 from .tokens import EmailVerifyTokenRepository, PasswordResetTokenRepository
 from .two_factor import TwoFactorRepository
@@ -19,6 +20,7 @@ __all__ = [
     "OAuthIdentityRepository",
     "PasswordResetTokenRepository",
     "SessionRepository",
+    "TelegramBindingRepository",
     "TenantRepository",
     "TwoFactorRepository",
     "UserRepository",

@@ -1,6 +1,7 @@
 """Core orchestrator: cache → budget → provider failover → persist → emit."""
 from __future__ import annotations
 
+import hashlib
 import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -180,14 +181,16 @@ class Orchestrator:
         prompt = await self.prompt_loader.load(
             self.session, req.tenant_id, req.prompt_version
         )
-        providers = await self._load_providers(req.tenant_id, req.provider)
+        providers = await self._load_providers(
+            req.tenant_id, req.provider, actor_id=req.actor_id
+        )
         if not providers:
             raise ProviderError("no provider configured", status=502)
 
         primary = providers[0]
         cache_key = build_cache_key(
             model=primary.model,
-            prompt_version=prompt.id,
+            prompt_version=_cache_prompt_identity(prompt, primary),
             code=req.code,
             language=req.language,
         )
@@ -313,24 +316,49 @@ class Orchestrator:
     # --------------------------- Helpers -----------------------------------
 
     async def _load_providers(
-        self, tenant_id: str, preferred: str | None
+        self, tenant_id: str, preferred: str | None, actor_id: str | None = None
     ) -> list[ProviderConfig]:
-        stmt = (
-            select(ProviderConfig)
-            .where(
-                ProviderConfig.tenant_id == tenant_id,
-                ProviderConfig.enabled.is_(True),
-                ProviderConfig.deleted_at.is_(None),
+        def _ordered(extra):
+            return (
+                select(ProviderConfig)
+                .where(
+                    ProviderConfig.tenant_id == tenant_id,
+                    ProviderConfig.enabled.is_(True),
+                    ProviderConfig.deleted_at.is_(None),
+                    extra,
+                )
+                # Active (default flag) first, then by priority — otherwise an
+                # auto-bootstrapped provider with priority=1 can shadow the
+                # configured default that has a higher number.
+                .order_by(
+                    ProviderConfig.default_for_tenant.desc(),
+                    ProviderConfig.priority.asc(),
+                )
             )
-            # Tenant-default first, then by priority. Without this ordering
-            # an auto-bootstrapped provider with priority=1 can shadow an
-            # admin-configured default that happens to have a higher number.
-            .order_by(
-                ProviderConfig.default_for_tenant.desc(),
-                ProviderConfig.priority.asc(),
+
+        # Per-user "bring your own key": prefer the provider(s) the *actor*
+        # connected (their own key/account). Only if they have none do we fall
+        # back to the tenant/admin-level config (owner_user_id NULL).
+        if actor_id:
+            mine = list(
+                (
+                    await self.session.execute(
+                        _ordered(ProviderConfig.owner_user_id == actor_id)
+                    )
+                ).scalars()
             )
+            if mine:
+                if preferred:
+                    mine.sort(key=lambda c: 0 if c.provider == preferred else 1)
+                return mine
+
+        rows = list(
+            (
+                await self.session.execute(
+                    _ordered(ProviderConfig.owner_user_id.is_(None))
+                )
+            ).scalars()
         )
-        rows = list((await self.session.execute(stmt)).scalars())
         if preferred:
             rows.sort(key=lambda c: 0 if c.provider == preferred else 1)
         if not rows:
@@ -413,7 +441,7 @@ class Orchestrator:
             client = self.provider_factory.build(cfg, api_key)
             try:
                 result = await client.analyze(
-                    system_prompt=prompt.system_prompt,
+                    system_prompt=_provider_system_prompt(cfg, prompt),
                     user_message=user_message,
                     json_schema=prompt.json_schema,
                     prompt_version=prompt.id,
@@ -648,6 +676,41 @@ class Orchestrator:
         if req.course_id:
             scopes.append(("course", req.course_id))
         return scopes
+
+
+def _provider_override_prompt(cfg: ProviderConfig) -> str:
+    """Per-provider custom system prompt, if the connector set one.
+
+    Stored in ``ProviderConfig.settings['system_prompt']`` so no schema change
+    is needed. Returns ``""`` when none is set.
+    """
+    settings = getattr(cfg, "settings", None)
+    if isinstance(settings, dict):
+        raw = settings.get("system_prompt")
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return ""
+
+
+def _provider_system_prompt(cfg: ProviderConfig, bundle: PromptBundle) -> str:
+    """Effective system prompt: the teacher's override if present, else the
+    loaded bundle's. The user template + JSON schema always stay from the
+    bundle, so the structured-output contract (and line-level comments) is
+    preserved regardless of the override.
+    """
+    return _provider_override_prompt(cfg) or bundle.system_prompt
+
+
+def _cache_prompt_identity(bundle: PromptBundle, cfg: ProviderConfig) -> str:
+    """Cache identity for the prompt. Folds a short hash of any per-provider
+    override into the id so two connectors sharing a model + base version but
+    different custom prompts don't read each other's cached results.
+    """
+    override = _provider_override_prompt(cfg)
+    if not override:
+        return bundle.id
+    digest = hashlib.sha256(override.encode("utf-8")).hexdigest()[:12]
+    return f"{bundle.id}#{digest}"
 
 
 def _max_severity(report: PlagLensReport) -> str:

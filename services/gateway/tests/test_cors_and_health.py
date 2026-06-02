@@ -49,21 +49,22 @@ def test_aggregated_health_unhealthy_majority_returns_503(client):
     assert r.status_code in (200, 503)
 
 
-def test_services_status_requires_super_admin(client, auth_headers):
+def test_services_status_requires_admin(client, auth_headers):
+    # auth_headers carries a non-admin (teacher) token → must be forbidden.
     r = client.get("/v1/services-status", headers=auth_headers)
     assert r.status_code == 403
     assert r.json()["code"] == "FORBIDDEN"
 
 
 @respx.mock
-def test_services_status_super_admin_ok(client, super_admin_headers):
+def test_services_status_admin_ok(client, admin_headers):
     from gateway_service.config import settings
 
     for name, base in settings.backends_map().items():
         respx.get(base.rstrip("/") + "/readyz").mock(
             return_value=Response(200)
         )
-    r = client.get("/v1/services-status", headers=super_admin_headers)
+    r = client.get("/v1/services-status", headers=admin_headers)
     assert r.status_code == 200
     body = r.json()
     assert body["healthy_count"] == body["total_count"]

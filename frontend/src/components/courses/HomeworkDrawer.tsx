@@ -49,6 +49,7 @@ import {
 import { submissionsApi } from '@/api/endpoints/submissions';
 import { submissionKeys } from '@/hooks/api/useSubmissions';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import { formatDateTime } from '@/utils/formatters';
 import { cn } from '@/components/ui/utils';
 import type {
@@ -168,6 +169,7 @@ export function HomeworkDrawer({
   assignments,
   canManage,
 }: HomeworkDrawerProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const qc = useQueryClient();
   const update = useUpdateHomework(homework?.id ?? '');
@@ -212,7 +214,7 @@ export function HomeworkDrawer({
     if (!homework) return;
     const trimmed = title.trim();
     if (trimmed.length < 2) {
-      notify.error('Название слишком короткое');
+      notify.error(t('homework_drawer.error_title_short'));
       return;
     }
     update.mutate(
@@ -223,13 +225,13 @@ export function HomeworkDrawer({
       },
       {
         onSuccess: () => {
-          notify.success('ДЗ сохранено');
+          notify.success(t('homework_drawer.toast_saved'));
           setEditing(false);
           void qc.invalidateQueries({ queryKey: homeworkKeys.all });
         },
         onError: (p) => {
           notify.error(
-            (p as unknown as Problem).title || 'Не удалось сохранить',
+            (p as unknown as Problem).title || t('homework_drawer.error_save'),
           );
         },
       },
@@ -238,20 +240,24 @@ export function HomeworkDrawer({
 
   const onToggleArchive = () => {
     if (!homework) return;
-    const nextStatus = homework.status === 'archived' ? 'published' : 'archived';
+    // Backend lifecycle is archive-only: valid values are active|archived.
+    // Sending the legacy 'published' here 422s and the un-archive silently fails.
+    const nextStatus = homework.status === 'archived' ? 'active' : 'archived';
     update.mutate(
       { status: nextStatus },
       {
         onSuccess: () => {
           notify.success(
-            nextStatus === 'archived' ? 'ДЗ в архиве' : 'ДЗ восстановлено',
+            nextStatus === 'archived'
+              ? t('homework_drawer.toast_archived')
+              : t('homework_drawer.toast_restored'),
           );
           void qc.invalidateQueries({ queryKey: homeworkKeys.all });
         },
         onError: (p) =>
           notify.error(
             (p as unknown as Problem).title ||
-              'Не удалось сменить статус',
+              t('homework_drawer.error_status'),
           ),
       },
     );
@@ -262,13 +268,13 @@ export function HomeworkDrawer({
     if (!homework) return;
     remove.mutate(undefined, {
       onSuccess: () => {
-        notify.success('ДЗ удалено');
+        notify.success(t('homework_drawer.toast_deleted'));
         setConfirmDelete(false);
         onClose();
       },
       onError: (p) =>
         notify.error(
-          (p as unknown as Problem).title || 'Не удалось удалить',
+          (p as unknown as Problem).title || t('homework_drawer.error_delete'),
         ),
     });
   };
@@ -291,7 +297,7 @@ export function HomeworkDrawer({
                 value={title}
                 onChange={(e) => setTitle(e.currentTarget.value)}
                 data-testid="hw-drawer-title"
-                placeholder="Название ДЗ"
+                placeholder={t('homework_drawer.title_placeholder')}
                 className="text-base font-semibold"
               />
             ) : (
@@ -303,29 +309,33 @@ export function HomeworkDrawer({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {isArchived && (
               <Badge variant="outline" className="font-normal">
-                в архиве
+                {t('homework_drawer.archived_badge')}
               </Badge>
             )}
-            <span>{stats.assignments} заданий</span>
+            <span>
+              {t('homework_drawer.assignments_count', {
+                count: stats.assignments,
+              })}
+            </span>
           </div>
         </SheetHeader>
 
         <div className="flex-1 space-y-6 overflow-y-auto px-4 py-5">
           {/* ---- Stats ---- */}
           <section className="space-y-2">
-            <SectionLabel>Статистика</SectionLabel>
+            <SectionLabel>{t('homework_drawer.section_stats')}</SectionLabel>
             {stats.assignments === 0 ? (
               <p className="text-sm text-muted-foreground">
-                В этом ДЗ ещё нет заданий.
+                {t('homework_drawer.no_assignments')}
               </p>
             ) : (
               <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <StatCell
-                  label="Сдач всего"
+                  label={t('homework_drawer.stat_submissions')}
                   value={statsLoading && !stats.loaded ? '…' : stats.submissions}
                 />
                 <StatCell
-                  label="Сдавали (≈ людей)"
+                  label={t('homework_drawer.stat_submitters')}
                   value={
                     statsLoading && !stats.loaded
                       ? '…'
@@ -333,15 +343,15 @@ export function HomeworkDrawer({
                   }
                 />
                 <StatCell
-                  label="Оценено"
+                  label={t('homework_drawer.stat_graded')}
                   value={statsLoading && !stats.loaded ? '…' : stats.graded}
                 />
                 <StatCell
-                  label="Опоздали"
+                  label={t('homework_drawer.stat_late')}
                   value={statsLoading && !stats.loaded ? '…' : stats.late}
                 />
                 <StatCell
-                  label="Средний балл"
+                  label={t('homework_drawer.stat_average')}
                   value={
                     statsLoading && !stats.loaded
                       ? '…'
@@ -356,10 +366,12 @@ export function HomeworkDrawer({
 
           {/* ---- Deadline ---- */}
           <section className="space-y-2">
-            <SectionLabel>Дедлайн</SectionLabel>
+            <SectionLabel>{t('homework_drawer.section_deadline')}</SectionLabel>
             {editing ? (
               <div className="space-y-1.5">
-                <Label htmlFor="hw-drawer-due">Срок сдачи</Label>
+                <Label htmlFor="hw-drawer-due">
+                  {t('homework_drawer.due_label')}
+                </Label>
                 <Input
                   id="hw-drawer-due"
                   type="datetime-local"
@@ -368,7 +380,7 @@ export function HomeworkDrawer({
                   data-testid="hw-drawer-due"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Применяется ко всем заданиям без собственного дедлайна.
+                  {t('homework_drawer.due_hint')}
                 </p>
               </div>
             ) : (
@@ -378,7 +390,9 @@ export function HomeworkDrawer({
                     {formatDateTime(homework.due_at)}
                   </span>
                 ) : (
-                  <span className="text-muted-foreground">не задан</span>
+                  <span className="text-muted-foreground">
+                    {t('homework_drawer.due_unset')}
+                  </span>
                 )}
               </p>
             )}
@@ -386,12 +400,14 @@ export function HomeworkDrawer({
 
           {/* ---- Description ---- */}
           <section className="space-y-2">
-            <SectionLabel>Описание</SectionLabel>
+            <SectionLabel>
+              {t('homework_drawer.section_description')}
+            </SectionLabel>
             {editing ? (
               <MarkdownEditor
                 value={description}
                 onChange={setDescription}
-                placeholder="Опишите тему недели и задания"
+                placeholder={t('homework_drawer.description_placeholder')}
               />
             ) : homework.description ? (
               // Match HomeworkDetailPage: no live markdown render — just
@@ -400,7 +416,9 @@ export function HomeworkDrawer({
                 {homework.description}
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Нет описания.</p>
+              <p className="text-sm text-muted-foreground">
+                {t('homework_drawer.no_description')}
+              </p>
             )}
           </section>
         </div>
@@ -420,11 +438,12 @@ export function HomeworkDrawer({
                   {isArchived ? (
                     <>
                       <ArchiveRestore className="mr-2 h-4 w-4" />
-                      Восстановить
+                      {t('homework_drawer.restore')}
                     </>
                   ) : (
                     <>
-                      <Archive className="mr-2 h-4 w-4" />В архив
+                      <Archive className="mr-2 h-4 w-4" />
+                      {t('homework_drawer.archive')}
                     </>
                   )}
                 </Button>
@@ -440,7 +459,7 @@ export function HomeworkDrawer({
                   data-testid="hw-drawer-delete"
                 >
                   <Trash2 className="mr-2 h-4 w-4" />
-                  Удалить
+                  {t('common.delete')}
                 </Button>
               )}
             </div>
@@ -460,7 +479,7 @@ export function HomeworkDrawer({
                     disabled={update.isPending}
                   >
                     <X className="mr-2 h-4 w-4" />
-                    Отмена
+                    {t('common.cancel')}
                   </Button>
                   <Button
                     type="button"
@@ -473,7 +492,7 @@ export function HomeworkDrawer({
                     ) : (
                       <Save className="mr-2 h-4 w-4" />
                     )}
-                    Сохранить
+                    {t('common.save')}
                   </Button>
                 </>
               ) : (
@@ -483,7 +502,7 @@ export function HomeworkDrawer({
                   data-testid="hw-drawer-edit"
                 >
                   <Pencil className="mr-2 h-4 w-4" />
-                  Редактировать
+                  {t('homework_drawer.edit')}
                 </Button>
               )}
             </div>
@@ -492,9 +511,11 @@ export function HomeworkDrawer({
 
         <ConfirmDialog
           opened={confirmDelete}
-          title="Удалить ДЗ?"
-          message={`«${homework.title}» и все его задания будут удалены. Это нельзя отменить.`}
-          confirmLabel="Удалить"
+          title={t('homework_drawer.confirm_delete_title')}
+          message={t('homework_drawer.confirm_delete_message', {
+            title: homework.title,
+          })}
+          confirmLabel={t('common.delete')}
           destructive
           loading={remove.isPending}
           onConfirm={onDelete}

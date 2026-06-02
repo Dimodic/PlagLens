@@ -15,12 +15,14 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
 from openai import APIStatusError, AsyncOpenAI
+from pydantic import ValidationError
 
 from ..schemas import PlagLensReport
 
@@ -318,6 +320,99 @@ def _extract_usage(resp: Any) -> TokenUsage:
     )
 
 
+_VALID_RISK_TYPES = {
+    "style_jump",
+    "generic_solution",
+    "non_idiomatic",
+    "complexity_jump",
+    "library_misuse",
+    "stub_code",
+    "other",
+}
+_VALID_SEVERITIES = {"low", "medium", "high"}
+
+
+def _coerce_line_range(value: Any) -> list[int] | None:
+    """Normalize an LLM-supplied line range to exactly ``[start, end]``.
+
+    The schema wants ``tuple[int, int]`` but models routinely emit a single
+    line (``[15]`` or ``15``), three+ entries, a ``{"start","end"}`` dict, or
+    a ``"15-20"`` string. Any of those used to raise a ``ValidationError`` and
+    fail the entire analysis. Collapse them all into a clamped two-int range.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    nums: list[int] = []
+    if isinstance(value, int):
+        nums = [value]
+    elif isinstance(value, dict):
+        for key in ("start", "end", "from", "to", "line", "lineno"):
+            v = value.get(key)
+            if isinstance(v, int) and not isinstance(v, bool):
+                nums.append(v)
+    elif isinstance(value, list | tuple):
+        for v in value:
+            if isinstance(v, bool):
+                continue
+            try:
+                nums.append(int(v))
+            except (TypeError, ValueError):
+                continue
+    elif isinstance(value, str):
+        nums = [int(x) for x in re.findall(r"\d+", value)]
+    if not nums:
+        return None
+    return [min(nums), max(nums)] if len(nums) > 1 else [nums[0], nums[0]]
+
+
+def _coerce_report_data(data: Any) -> Any:
+    """Make a best-effort-valid report dict out of loose LLM JSON.
+
+    LLMs bend the contract constantly: omit ``summary``, invent a risk
+    ``type`` outside the enum, send a one-element ``line_range``. Rather than
+    fail the run (and surface as a 500 to the teacher), coerce the common
+    deviations into the strict shape the consumers downstream rely on.
+    """
+    if not isinstance(data, dict):
+        return data
+    # ``summary`` is required (no default) — synthesize from the student brief.
+    if not isinstance(data.get("summary"), str) or not data["summary"]:
+        brief = data.get("student_brief")
+        data["summary"] = brief if isinstance(brief, str) and brief else "—"
+    # Fields with defaults: an explicit ``null`` from the model defeats the
+    # default_factory and fails validation, so normalize the type here.
+    if not isinstance(data.get("student_brief"), str):
+        data["student_brief"] = ""
+    if not isinstance(data.get("metadata"), dict):
+        data["metadata"] = {}
+    # ``risk_signals`` — clamp every entry into the strict shape.
+    signals = data.get("risk_signals")
+    if isinstance(signals, list):
+        cleaned: list[Any] = []
+        for s in signals:
+            if not isinstance(s, dict):
+                continue
+            if s.get("type") not in _VALID_RISK_TYPES:
+                s["type"] = "other"
+            if s.get("severity") not in _VALID_SEVERITIES:
+                s["severity"] = "medium"
+            if not isinstance(s.get("details"), str):
+                s["details"] = "" if s.get("details") is None else str(s["details"])
+            s["line_range"] = _coerce_line_range(s.get("line_range"))
+            cleaned.append(s)
+        data["risk_signals"] = cleaned
+    else:
+        data["risk_signals"] = []
+    # ``questions`` / ``recommendations`` — always a list[str].
+    for key in ("questions", "recommendations"):
+        val = data.get(key)
+        if isinstance(val, list):
+            data[key] = [str(x) for x in val if x is not None]
+        else:
+            data[key] = [] if val is None else [str(val)]
+    return data
+
+
 def _parse_report(content: str) -> PlagLensReport:
     try:
         data = json.loads(content)
@@ -328,7 +423,16 @@ def _parse_report(content: str) -> PlagLensReport:
         if start == -1 or end == -1 or end <= start:
             raise ProviderError("LLM did not return JSON", status=502)
         data = json.loads(content[start : end + 1])
-    return PlagLensReport.model_validate(data)
+    data = _coerce_report_data(data)
+    try:
+        return PlagLensReport.model_validate(data)
+    except ValidationError as exc:
+        # Coercion handles the common deviations; anything still invalid is a
+        # genuine provider problem — raise a typed error so failover / the
+        # caller records a clean reason instead of an opaque 500.
+        raise ProviderError(
+            f"LLM report failed schema validation: {exc}", status=502
+        ) from exc
 
 
 def _status_of(exc: Exception | None) -> int:

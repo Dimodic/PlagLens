@@ -9,9 +9,11 @@ import { AuditEventCard } from '@/components/admin/AuditEventCard';
 import { Page, PageHeader } from '@/components/layout/Page';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useAuditByResource } from '@/hooks/api/useAudit';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function AuditByResourcePage() {
+  const { t } = useTranslation();
   const { type, id } = useParams<{ type: string; id: string }>();
   useDocumentTitle('Audit · Resource');
   const { data, isLoading, error } = useAuditByResource(type, id, {
@@ -30,7 +32,7 @@ export function AuditByResourcePage() {
           <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
         </div>
       ) : data && data.data.length === 0 ? (
-        <EmptyState title="Событий нет" />
+        <EmptyState title={t('audit_by_resource.empty')} />
       ) : (
         <div className="space-y-3">
           {data?.data.map((e) => <AuditEventCard key={e.id} event={e} />)}

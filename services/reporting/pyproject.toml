@@ -71,6 +71,11 @@ packages = [
     "src/audit_service",
     "src/notification_service",
 ]
+# ``templates/`` ships via force-include below. Exclude it from the package
+# glob so the files aren't added twice — newer hatchling aborts the wheel
+# build on the duplicate (e.g. ``templates/__init__.py``) instead of
+# silently de-duping like older releases did.
+exclude = ["src/notification_service/templates/**"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "src/notification_service/templates" = "notification_service/templates"

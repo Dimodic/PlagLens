@@ -17,10 +17,12 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { integrationsApi } from '@/api/endpoints/integrations';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export default function IntegrationOAuthCallbackPage() {
-  useDocumentTitle('Подключение интеграции');
+  const { t } = useTranslation();
+  useDocumentTitle(t('integration_oauth_cb.doc_title'));
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const ranRef = useRef(false);
@@ -36,7 +38,7 @@ export default function IntegrationOAuthCallbackPage() {
 
     if (errorParam) {
       setProblem({
-        title: 'Yandex отказал в авторизации',
+        title: t('integration_oauth_cb.err_denied_title'),
         detail: errorParam,
         status: 400,
         code: 'UPSTREAM_DENIED',
@@ -45,8 +47,8 @@ export default function IntegrationOAuthCallbackPage() {
     }
     if (!code || !stateParam) {
       setProblem({
-        title: 'Параметры code / state отсутствуют',
-        detail: 'OAuth-провайдер прислал неполный URL.',
+        title: t('integration_oauth_cb.err_missing_params_title'),
+        detail: t('integration_oauth_cb.err_missing_params_detail'),
         status: 400,
         code: 'BAD_REQUEST',
       } as Problem);
@@ -64,7 +66,7 @@ export default function IntegrationOAuthCallbackPage() {
       .catch((raw) => {
         setProblem(raw as Problem);
       });
-  }, [code, stateParam, errorParam, navigate]);
+  }, [code, stateParam, errorParam, navigate, t]);
 
   return (
     <div
@@ -74,14 +76,14 @@ export default function IntegrationOAuthCallbackPage() {
       {!problem ? (
         <div className="flex flex-col items-center gap-3 text-sm text-muted-foreground">
           <Loader2 className="h-5 w-5 animate-spin" />
-          <span>Завершаем OAuth-обмен с провайдером…</span>
+          <span>{t('integration_oauth_cb.finishing')}</span>
         </div>
       ) : (
         <div className="w-full max-w-md space-y-4 text-center">
           <div className="flex items-center justify-center gap-2 text-sm text-destructive">
             <AlertCircle className="h-5 w-5" />
             <span className="font-medium">
-              {problem.title ?? 'Ошибка обмена кода на токен'}
+              {problem.title ?? t('integration_oauth_cb.err_fallback_title')}
             </span>
           </div>
           {problem.detail && (
@@ -89,7 +91,7 @@ export default function IntegrationOAuthCallbackPage() {
           )}
           <div className="flex justify-center gap-2 pt-2">
             <Button asChild variant="outline" size="sm">
-              <Link to="/integrations">Назад к интеграциям</Link>
+              <Link to="/integrations">{t('integration_oauth_cb.back')}</Link>
             </Button>
           </div>
         </div>

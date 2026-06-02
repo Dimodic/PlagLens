@@ -14,6 +14,7 @@ import {
 } from '@/hooks/api/useNotificationsApi';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,8 @@ function urlBase64ToArrayBuffer(base64: string): ArrayBuffer {
 }
 
 export default function WebPushSettingsPage() {
-  useDocumentTitle('Web Push');
+  const { t } = useTranslation();
+  useDocumentTitle(t('web_push_settings.document_title'));
   const subscribe = useWebPushSubscribe();
   const unsubscribe = useWebPushUnsubscribe();
   const notify = useNotifications();
@@ -59,7 +61,7 @@ export default function WebPushSettingsPage() {
       const perm = await Notification.requestPermission();
       setPermission(perm);
       if (perm !== 'granted') {
-        notify.error('Разрешение на уведомления не выдано.');
+        notify.error(t('web_push_settings.notify_permission_denied'));
         return;
       }
       const reg = await navigator.serviceWorker.register('/sw.js').catch(
@@ -81,12 +83,12 @@ export default function WebPushSettingsPage() {
         user_agent: navigator.userAgent,
       });
       setGranted(true);
-      notify.success('Подписка включена.');
+      notify.success(t('web_push_settings.notify_subscribed'));
       // Quiet the unused-var lint warning.
       void reg;
     } catch (err) {
       const p = err as unknown as Problem;
-      notify.error(p.title || 'Не удалось подписаться');
+      notify.error(p.title || t('web_push_settings.notify_subscribe_failed'));
     } finally {
       setBusy(false);
     }
@@ -102,10 +104,10 @@ export default function WebPushSettingsPage() {
       }
       await unsubscribe.mutateAsync();
       setGranted(false);
-      notify.success('Подписка отключена.');
+      notify.success(t('web_push_settings.notify_unsubscribed'));
     } catch (err) {
       const p = err as unknown as Problem;
-      notify.error(p.title || 'Не удалось отписаться');
+      notify.error(p.title || t('web_push_settings.notify_unsubscribe_failed'));
     } finally {
       setBusy(false);
     }
@@ -113,15 +115,14 @@ export default function WebPushSettingsPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title="Push-уведомления" />
+      <PageHeader title={t('web_push_settings.page_title')} />
       <div className="space-y-4">
           {!supported && (
             <Alert>
               <AlertCircle />
-              <AlertTitle>Браузер не поддерживает Web Push</AlertTitle>
+              <AlertTitle>{t('web_push_settings.unsupported_title')}</AlertTitle>
               <AlertDescription>
-                Используйте in-app или email. Web Push требует Service Worker и
-                PushManager.
+                {t('web_push_settings.unsupported_description')}
               </AlertDescription>
             </Alert>
           )}
@@ -132,10 +133,14 @@ export default function WebPushSettingsPage() {
                 <div className="flex items-center gap-3">
                   <BellRing className="h-7 w-7" />
                   <div>
-                    <p className="font-semibold">Состояние подписки</p>
+                    <p className="font-semibold">{t('web_push_settings.status_heading')}</p>
                     <p className="text-sm text-muted-foreground">
-                      Разрешение: <code>{permission}</code> · подписан:{' '}
-                      {granted ? 'да' : 'нет'}
+                      {t('web_push_settings.permission_label')}{' '}
+                      <code>{permission}</code> ·{' '}
+                      {t('web_push_settings.subscribed_label')}{' '}
+                      {granted
+                        ? t('web_push_settings.subscribed_yes')
+                        : t('web_push_settings.subscribed_no')}
                     </p>
                   </div>
                 </div>
@@ -150,7 +155,7 @@ export default function WebPushSettingsPage() {
                       {busy && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Отписаться
+                      {t('web_push_settings.unsubscribe_button')}
                     </Button>
                   ) : (
                     <Button
@@ -161,7 +166,7 @@ export default function WebPushSettingsPage() {
                       {busy && (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       )}
-                      Подписаться
+                      {t('web_push_settings.subscribe_button')}
                     </Button>
                   )}
                 </div>

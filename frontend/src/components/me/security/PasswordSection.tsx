@@ -15,9 +15,11 @@ import { ProblemAlert } from '@/components/common/ProblemAlert';
 import { useChangePassword } from '@/hooks/api/useUsers';
 import { useNotifications } from '@/hooks/useNotifications';
 import { cn } from '@/components/ui/utils';
+import { useTranslation } from '@/i18n';
 import type { Problem } from '@/api/types';
 
 export function PasswordSection() {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const change = useChangePassword();
   const [open, setOpen] = useState(false);
@@ -36,12 +38,12 @@ export function PasswordSection() {
   const submit = async () => {
     setProblem(null);
     if (next !== confirm) {
-      setProblem({ title: 'Пароли не совпадают', status: 400, code: 'MISMATCH' });
+      setProblem({ title: t('password_section.mismatch_error'), status: 400, code: 'MISMATCH' });
       return;
     }
     try {
       await change.mutateAsync({ current_password: current, new_password: next });
-      notify.success('Пароль изменён');
+      notify.success(t('password_section.change_success'));
       reset();
       setOpen(false);
     } catch (e) {
@@ -61,9 +63,9 @@ export function PasswordSection() {
         data-testid="profile-password-toggle"
         aria-expanded={open}
       >
-        <span className="text-sm text-foreground">Пароль</span>
+        <span className="text-sm text-foreground">{t('password_section.label')}</span>
         <span className="flex items-center gap-1 text-sm text-muted-foreground group-hover:text-foreground transition-colors">
-          {open ? 'Закрыть' : 'Сменить'}
+          {open ? t('password_section.collapse') : t('password_section.expand')}
           <ChevronDown
             className={cn(
               'h-3.5 w-3.5 transition-transform',
@@ -79,7 +81,7 @@ export function PasswordSection() {
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label htmlFor="profile-password-current" className="text-xs">
-                Текущий
+                {t('password_section.current')}
               </Label>
               <Input
                 id="profile-password-current"
@@ -92,7 +94,7 @@ export function PasswordSection() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="profile-password-new" className="text-xs">
-                Новый
+                {t('password_section.new')}
               </Label>
               <Input
                 id="profile-password-new"
@@ -105,7 +107,7 @@ export function PasswordSection() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="profile-password-confirm" className="text-xs">
-                Подтверждение
+                {t('password_section.confirm')}
               </Label>
               <Input
                 id="profile-password-confirm"
@@ -125,7 +127,7 @@ export function PasswordSection() {
               data-testid="profile-password-submit"
             >
               {change.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Сменить пароль
+              {t('password_section.submit')}
             </Button>
             <Button
               size="sm"
@@ -136,7 +138,7 @@ export function PasswordSection() {
               }}
               disabled={change.isPending}
             >
-              Отмена
+              {t('common.cancel')}
             </Button>
           </div>
         </div>

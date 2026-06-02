@@ -4,25 +4,27 @@
  * Defaults to a whole-instance roll-up («Все организации»); the picker
  * narrows to a single tenant. Shown at /admin and
  * /admin/dashboard/tenant/:id (deep link pins that tenant).
+ *
+ * Note: there's no «integration health» block here. Integration
+ * *instances* are created per-teacher, so a single tenant-wide status
+ * per kind was misleading. What the admin actually sets up — the OAuth
+ * apps (Client ID/Secret) — lives in «Интеграции → Авторизация».
  */
 import { useState } from 'react';
-import dayjs from 'dayjs';
 import { useParams } from 'react-router-dom';
 import {
   Building2,
   Database,
   FileText,
-  Loader2,
   ShieldCheck,
   UserCheck,
   Users,
 } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { t, useTranslation } from '@/i18n';
 import {
-  useInstanceIntegrationsHealth,
   useInstanceOverview,
   useTenantDashboard,
-  useTenantIntegrationsHealth,
 } from '@/hooks/api/useDashboards';
 import { useTenants } from '@/hooks/api/useTenants';
 import { StatsPanel } from '@/components/common/StatsPanel';
@@ -34,18 +36,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-
-function statusDot(status: string): string {
-  if (status === 'healthy') return 'bg-sev-low';
-  if (status === 'degraded') return 'bg-sev-mid';
-  return 'bg-sev-high';
-}
-
-function statusText(status: string): string {
-  if (status === 'healthy') return 'работает';
-  if (status === 'degraded') return 'ожидает';
-  return 'ошибка';
-}
 
 /** Count formatter: grouped (« 3 174 ») up to 100k, then compact
  *  (« 104 тыс. », « 1,2 млн ») so a six-figure submission count can't
@@ -66,7 +56,7 @@ function fmtCount(v: number | undefined | null): string {
 function fmtBytes(b: number | undefined | null): string {
   if (b === undefined || b === null) return '—';
   if (b <= 0) return '0';
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ'];
+  const units = t('common.byte_units').split(',');
   let n = b;
   let i = 0;
   while (n >= 1024 && i < units.length - 1) {
@@ -81,7 +71,8 @@ function fmtBytes(b: number | undefined | null): string {
 const ALL = '__all__';
 
 export default function TenantDashboardPage() {
-  useDocumentTitle('Обзор');
+  const { t } = useTranslation();
+  useDocumentTitle(t('tenant_dashboard.title'));
   const { id: paramId } = useParams<{ id: string }>();
   // What the dashboard shows. Default is the whole-instance roll-up
   // («Все организации») — the admin's own tenant is usually empty, so
@@ -93,14 +84,10 @@ export default function TenantDashboardPage() {
   const tenantsQ = useTenants({ limit: 100 });
   const tenants = tenantsQ.data?.data ?? [];
 
-  // Two query pairs, gated so only the active scope fetches.
+  // Gated so only the active scope fetches.
   const instanceDash = useInstanceOverview(isAll);
-  const instanceInteg = useInstanceIntegrationsHealth(isAll);
   const tenantDash = useTenantDashboard(isAll ? undefined : selected);
-  const tenantInteg = useTenantIntegrationsHealth(isAll ? undefined : selected);
-
   const data = isAll ? instanceDash.data : tenantDash.data;
-  const integrations = isAll ? instanceInteg : tenantInteg;
 
   const tenantPicker = (
     <Select value={selected} onValueChange={setSelected}>
@@ -108,10 +95,10 @@ export default function TenantDashboardPage() {
         className="h-9 w-[240px]"
         data-testid="tenant-dashboard-picker"
       >
-        <SelectValue placeholder="Все организации" />
+        <SelectValue placeholder={t('tenant_dashboard.all_tenants')} />
       </SelectTrigger>
       <SelectContent>
-        <SelectItem value={ALL}>Все организации</SelectItem>
+        <SelectItem value={ALL}>{t('tenant_dashboard.all_tenants')}</SelectItem>
         {tenants.map((t) => (
           <SelectItem key={t.id} value={t.id}>
             {t.name}
@@ -123,82 +110,47 @@ export default function TenantDashboardPage() {
 
   return (
     <Page width="regular">
-      <PageHeader title="Обзор" action={tenantPicker} />
+      <PageHeader title={t('tenant_dashboard.title')} action={tenantPicker} />
 
       <StatsPanel
         data-testid="tenant-dashboard-kpis"
         items={[
           {
             icon: <Building2 className="h-4 w-4" />,
-            label: 'Курсов',
+            label: t('tenant_dashboard.kpi_courses'),
             value: fmtCount(data?.active_courses),
           },
           {
             icon: <FileText className="h-4 w-4" />,
-            label: 'Посылок',
+            label: t('tenant_dashboard.kpi_submissions'),
             value: fmtCount(data?.submissions_total),
           },
           {
             icon: <UserCheck className="h-4 w-4" />,
-            label: 'DAU',
+            label: t('tenant_dashboard.kpi_dau'),
             value: fmtCount(data?.active_users_dau),
-            tooltip: 'Daily Active Users — уникальных пользователей зашло за последние 24 часа',
+            tooltip: t('tenant_dashboard.kpi_dau_tooltip'),
           },
           {
             icon: <Users className="h-4 w-4" />,
-            label: 'MAU',
+            label: t('tenant_dashboard.kpi_mau'),
             value: fmtCount(data?.active_users_mau),
-            tooltip: 'Monthly Active Users — уникальных пользователей зашло за последние 30 дней',
+            tooltip: t('tenant_dashboard.kpi_mau_tooltip'),
           },
           {
             icon: <ShieldCheck className="h-4 w-4" />,
-            label: 'Проверок',
+            label: t('tenant_dashboard.kpi_checks'),
             value: fmtCount(data?.plagiarism_runs_total),
-            tooltip: 'Запусков проверки на заимствования',
+            tooltip: t('tenant_dashboard.kpi_checks_tooltip'),
           },
           {
             icon: <Database className="h-4 w-4" />,
-            label: 'Хранилище',
+            label: t('tenant_dashboard.kpi_storage'),
             value: fmtBytes(data?.storage_used_bytes),
-            tooltip: 'Объём файлов в MinIO (решения студентов, экспорты, отчёты)',
+            tooltip: t('tenant_dashboard.kpi_storage_tooltip'),
           },
         ]}
       />
-
-      {/* Integration health — flat list, no card chrome (minimalism). */}
-      <section className="space-y-3">
-        <h2 className="text-base font-semibold tracking-tight">
-          Состояние интеграций
-        </h2>
-        {integrations.isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-        ) : !integrations.data?.length ? (
-          <p className="text-sm text-muted-foreground">Нет настроенных интеграций.</p>
-        ) : (
-          <div className="divide-y divide-border/50" data-testid="tenant-integrations">
-            {integrations.data.map((it) => (
-              <div
-                key={it.integration}
-                className="flex items-center gap-4 py-3"
-                data-testid={`integration-${it.integration}`}
-              >
-                <span
-                  className={`h-2 w-2 flex-none rounded-full ${statusDot(it.status)}`}
-                />
-                <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                  {it.integration}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground">
-                  {statusText(it.status)}
-                </span>
-                <span className="shrink-0 text-xs text-muted-foreground tabular-nums w-[92px] text-right">
-                  {it.last_check_at ? dayjs(it.last_check_at).format('DD.MM HH:mm') : '—'}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
     </Page>
   );
 }

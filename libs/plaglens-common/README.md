@@ -67,7 +67,7 @@ Decorators for global / course role checks per RBAC §2-§4.
 from plaglens_common.rbac import require_global_role, require_course_role
 
 @app.post("/v1/tenants")
-@require_global_role("super_admin", "admin")
+@require_global_role("admin")
 def create_tenant(...): ...
 
 @app.patch("/v1/courses/{course_id}")

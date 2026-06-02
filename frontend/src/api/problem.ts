@@ -69,17 +69,11 @@ export function problemMessage(p: Problem): string {
 }
 
 /**
- * Show a sonner toast for a Problem. Lazy import to keep this module light
- * for SSR/tests.
+ * Toasts are disabled product-wide, so this no longer pops a notification —
+ * it just logs the Problem for debugging. Errors surface inline (ProblemAlert)
+ * at the place the action happened. Kept async + same signature so existing
+ * callers don't change.
  */
 export async function showProblemNotification(p: Problem): Promise<void> {
-  try {
-    const { toast } = await import('sonner');
-    toast.error(p.title, {
-      description: problemMessage(p),
-      duration: 6000,
-    });
-  } catch {
-    console.error('[Problem]', p);
-  }
+  console.error('[Problem]', p.code, p.title, problemMessage(p));
 }

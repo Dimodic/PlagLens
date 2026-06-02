@@ -28,8 +28,8 @@ export interface ResolvedAssignment {
  * Resolve seeded course + assignment IDs through the gateway. Cached per
  * APIRequestContext so repeated lookups within one test cost nothing.
  *
- * NOTE: super_admin lives in a different tenant and cannot see demo courses,
- * so we re-authenticate with the teacher role for this lookup.
+ * NOTE: we re-authenticate with the teacher role for this lookup, since the
+ * teacher reliably owns the seeded demo course regardless of the caller's role.
  */
 export async function resolveDemoAssignment(
   client: ApiClient,
@@ -107,8 +107,8 @@ export async function findStudentSubmission(
   assignmentId: string,
   studentEmail: string,
 ): Promise<{ id: string; author_id: string }> {
-  // super_admin (the default ApiClient) is in a different tenant and cannot
-  // list demo submissions; re-authenticate as teacher for the lookup.
+  // Re-authenticate as teacher for the lookup — the teacher reliably owns the
+  // seeded demo submissions regardless of the caller's role.
   const lookupClient = await ApiClient.create();
   try {
     await lookupClient.loginAs('teacher');

@@ -21,10 +21,6 @@ class AuthContext:
         return self.course_roles.get(course_id)
 
     @property
-    def is_super_admin(self) -> bool:
-        return self.global_role == "admin"
-
-    @property
     def is_admin(self) -> bool:
         return self.global_role in {"admin"}
 

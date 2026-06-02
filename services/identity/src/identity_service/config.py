@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     refresh_ttl_seconds: int = 30 * 24 * 3600
 
     # Service-to-service auth — shared secret used by internal services
-    # (integration, scheduler, …) to obtain long-lived super_admin JWTs from
+    # (integration, scheduler, …) to obtain long-lived admin JWTs from
     # `POST /v1/auth/service-token`. Rotate in production; the resulting
     # token has a long TTL (24h) so background workers don't have to refresh
     # mid-cycle. Rotate the secret to invalidate every token at once.

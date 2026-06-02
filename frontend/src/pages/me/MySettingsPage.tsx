@@ -6,9 +6,11 @@
 import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { useAuth } from '@/auth/useAuth';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Page, PageHeader, Section } from '@/components/layout/Page';
+import { RoleBadge } from '@/components/common/RoleBadge';
 
 interface RowProps {
   to: string;
@@ -33,12 +35,13 @@ function NavRow({ to, title, testid }: RowProps) {
 }
 
 export default function MySettingsPage() {
-  useDocumentTitle('Настройки');
+  const { t } = useTranslation();
+  useDocumentTitle(t('my_settings.title'));
   const { user } = useAuth();
 
   return (
     <Page width="narrow">
-      <PageHeader title="Настройки" />
+      <PageHeader title={t('my_settings.title')} />
 
       {user && (
         <div className="flex items-center gap-4 pb-2">
@@ -51,75 +54,76 @@ export default function MySettingsPage() {
             <div className="truncate text-sm font-medium text-foreground">
               {user.display_name ?? user.email}
             </div>
-            <div className="mt-0.5 truncate text-xs text-muted-foreground">
-              {user.email} · {user.global_role ?? 'student'}
+            <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+              <span className="truncate">{user.email}</span>
+              <RoleBadge role={user.global_role ?? 'student'} />
             </div>
           </div>
         </div>
       )}
 
-      <Section title="Аккаунт" variant="document">
+      <Section title={t('my_settings.section_account')} variant="document">
         <NavRow
           to="/me/profile"
-          title="Профиль"
+          title={t('my_settings.profile')}
           testid="settings-link-profile"
           isFirst
         />
         <NavRow
           to="/me/security"
-          title="Безопасность"
+          title={t('my_settings.security')}
           testid="settings-link-security"
         />
         <NavRow
           to="/me/security?tab=2fa"
-          title="Двухфакторная аутентификация"
+          title={t('my_settings.two_factor')}
           testid="settings-link-2fa"
         />
       </Section>
 
-      <Section title="Уведомления" variant="document">
+      <Section title={t('my_settings.section_notifications')} variant="document">
         <NavRow
           to="/me/notifications/preferences"
-          title="Подписки и каналы"
+          title={t('my_settings.notifications_subscriptions')}
           testid="settings-link-notifications"
           isFirst
         />
         <NavRow
           to="/me/notifications/web-push"
-          title="Web-push в браузере"
+          title={t('my_settings.notifications_web_push')}
           testid="settings-link-webpush"
         />
         <NavRow
           to="/notifications"
-          title="История уведомлений"
+          title={t('my_settings.notifications_history')}
           testid="settings-link-inbox"
         />
       </Section>
 
-      <Section title="Подключения" variant="document">
+      <Section title={t('my_settings.section_connections')} variant="document">
         <NavRow
           to="/me/external-bindings"
-          title="Внешние аккаунты"
+          title={t('my_settings.external_accounts')}
           testid="settings-link-bindings"
           isFirst
         />
         <NavRow
           to="/me/api-keys"
-          title="API-ключи"
+          title={t('my_settings.api_keys')}
           testid="settings-link-keys"
         />
       </Section>
 
-      <Section title="Данные" variant="document">
+      <Section title={t('my_settings.section_data')} variant="document">
         <NavRow
           to="/me/exports"
-          title="Мои экспорты"
+          title={t('my_settings.my_exports')}
           testid="settings-link-exports"
           isFirst
         />
         <NavRow
           to="/me/grades"
-          title="Мои оценки"
+          title={t('my_settings.my_grades')}
           testid="settings-link-grades"
         />
       </Section>

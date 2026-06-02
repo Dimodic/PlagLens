@@ -24,7 +24,7 @@ test.describe('Admin tenants — detail tabs', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       await findDemoTenantId(page);
       const detail = new TenantDetailPo(page);
       await detail.tabSettings.click();
@@ -48,7 +48,7 @@ test.describe('Admin tenants — detail tabs', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       await findDemoTenantId(page);
       const detail = new TenantDetailPo(page);
       await expect(detail.corsInput).toBeVisible({ timeout: 10_000 });
@@ -68,7 +68,7 @@ test.describe('Admin tenants — detail tabs', () => {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
     try {
-      await uiLoginAs(page, 'super_admin');
+      await uiLoginAs(page, 'admin');
       await findDemoTenantId(page);
       const detail = new TenantDetailPo(page);
       await detail.tabSettings.click();

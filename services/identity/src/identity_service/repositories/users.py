@@ -1,7 +1,7 @@
 """User repository."""
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models import User
@@ -10,6 +10,40 @@ from ..models import User
 class UserRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.s = session
+
+    async def search_people(
+        self, q: str, *, limit: int = 20, offset: int = 0
+    ) -> list[User]:
+        """Cross-tenant directory search by name/email for the global
+        people search + profiles. Substring (ILIKE) match, ranked
+        exact → name-prefix → email-prefix → contains; active, non-deleted
+        only. (Typo-tolerance via pg_trgm is a planned fast-follow.)"""
+        ql = (q or "").strip().lower()
+        if not ql:
+            return []
+        like = f"%{ql}%"
+        prefix = f"{ql}%"
+        # The DB is LC_CTYPE=C, so plain lower()/ILIKE only fold ASCII —
+        # "Смирнов" wouldn't match "смирнов". Fold via the ICU collation
+        # (the query side is already Python-lowercased, which IS Unicode-
+        # aware) so Cyrillic search works.
+        name_l = func.lower(User.display_name.collate("und-x-icu"))
+        email_l = func.lower(User.email.collate("und-x-icu"))
+        rank = case(
+            (name_l == ql, 0),
+            (name_l.like(prefix), 1),
+            (email_l.like(prefix), 2),
+            else_=3,
+        )
+        stmt = (
+            select(User)
+            .where(User.deleted_at.is_(None), User.status == "active")
+            .where(or_(name_l.like(like), email_l.like(like)))
+            .order_by(rank, User.display_name.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        return list((await self.s.execute(stmt)).scalars().all())
 
     async def get(self, user_id: str) -> User | None:
         return await self.s.get(User, user_id)

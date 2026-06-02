@@ -14,6 +14,7 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 import { useBreadcrumbs, type BreadcrumbItem } from '@/hooks/useBreadcrumbs';
+import { useTranslation } from '@/i18n';
 
 // 4 fits the deepest chain we render today — Курсы → Курс → ДЗ → Задание.
 // Anything beyond collapses into a `…` popover so the top bar never wraps.
@@ -24,6 +25,7 @@ interface BreadcrumbsProps {
 }
 
 export function Breadcrumbs({ fallbackTitle }: BreadcrumbsProps) {
+  const { t } = useTranslation();
   const items = useBreadcrumbs();
   const [popoverOpen, setPopoverOpen] = useState(false);
 
@@ -90,7 +92,7 @@ export function Breadcrumbs({ fallbackTitle }: BreadcrumbsProps) {
             <PopoverTrigger
               data-testid="breadcrumbs-overflow"
               className="text-muted-foreground hover:text-foreground"
-              aria-label="Развернуть"
+              aria-label={t('crumbs.expand')}
             >
               …
             </PopoverTrigger>

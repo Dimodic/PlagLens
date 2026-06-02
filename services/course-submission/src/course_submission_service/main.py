@@ -7,6 +7,7 @@ CourseClient so submission reads course data in-process (no cross-service HTTP).
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -14,10 +15,12 @@ from fastapi import FastAPI
 from plaglens_common.health import health_router
 from plaglens_common.observability import install_observability
 from plaglens_common.problem import make_handlers
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 import course_service.api._helpers as course_helpers
 import course_service.deps as course_deps
+import course_service.services.submission_stats_client as course_submission_stats
 import submission_service.api.deps as submission_api_deps
 import submission_service.db as submission_db
 from course_service.api import assignments as course_assignments
@@ -26,6 +29,7 @@ from course_service.api import discovery as course_discovery
 from course_service.api import groups as course_groups
 from course_service.api import homeworks as course_homeworks
 from course_service.api import members as course_members
+from course_service.api import people as course_people
 from course_service.common.events import KafkaProducer
 from course_service.common.redis_client import RedisClient
 from course_service.config import get_settings as get_course_settings
@@ -41,6 +45,7 @@ from submission_service.events.consumer import get_consumer as submission_get_co
 from submission_service.events.producer import get_publisher as submission_get_publisher
 
 from .course_client import InProcessCourseClient
+from .submission_stats_client import InProcessSubmissionStatsClient
 
 API_BASE = "/api/v1"
 
@@ -50,12 +55,16 @@ def wire_shared_session(factory: async_sessionmaker[Any]) -> None:
     submission's HTTP CourseClient with the in-process one.
 
     This is the heart of the merge: course and submission now share a single
-    engine (two Postgres schemas, one connection pool) and submission resolves
-    assignment metadata by reading course tables directly.
+    engine (two Postgres schemas, one connection pool), submission resolves
+    assignment metadata by reading course tables directly, and course reads
+    submission-side assignment stats directly — both ways in-process, no HTTP.
     """
     course_deps.configure_session_factory(factory)
     submission_db.set_session_factory(factory)
     submission_api_deps.set_course_client(InProcessCourseClient(factory))
+    course_submission_stats.set_submission_stats_client(
+        InProcessSubmissionStatsClient(factory)
+    )
 
 
 @asynccontextmanager
@@ -127,6 +136,7 @@ def create_app() -> FastAPI:
     app.include_router(course_assignments.course_assignments_router)
     app.include_router(course_assignments.flat_router)
     app.include_router(course_discovery.router)
+    app.include_router(course_people.router)
 
     # --- Submission routers (mounted under /api/v1) -------------------------
     app.include_router(submission_submissions.router, prefix=API_BASE)
@@ -137,7 +147,43 @@ def create_app() -> FastAPI:
     app.include_router(submission_bulk.router, prefix=API_BASE)
 
     # --- Single shared health/metrics/version surface -----------------------
-    app.include_router(health_router(service_name="course-submission", version="0.1.0"))
+    # Real readiness probes. These read live wiring off ``app.state`` (populated
+    # in ``lifespan``) at request time, each catching its own errors so /readyz
+    # reports a clean "fail" rather than bubbling an exception. /healthz stays a
+    # bare liveness check (Docker healthcheck depends on it).
+    async def check_db() -> bool:
+        """Is Postgres reachable? The merged app shares one engine across the
+        course and submission schemas, so a single ``SELECT 1`` is sufficient."""
+        factory: async_sessionmaker[Any] | None = getattr(
+            app.state, "session_factory", None
+        )
+        if factory is None:
+            return False
+        try:
+            async with factory() as session:
+                await asyncio.wait_for(session.execute(text("SELECT 1")), timeout=2.0)
+            return True
+        except Exception:
+            return False
+
+    async def check_redis() -> bool:
+        """Is the service's Redis reachable?"""
+        redis: RedisClient | None = getattr(app.state, "redis", None)
+        if redis is None:
+            return False
+        try:
+            await asyncio.wait_for(redis.ping(), timeout=1.0)
+            return True
+        except Exception:
+            return False
+
+    app.include_router(
+        health_router(
+            service_name="course-submission",
+            version="0.1.0",
+            checks={"db": check_db, "redis": check_redis},
+        )
+    )
 
     # Real app metrics (Prometheus) + traces (OpenTelemetry -> Jaeger).
     install_observability(app, service_name="course-submission")

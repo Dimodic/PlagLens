@@ -6,7 +6,6 @@ from integration_service.models.entities import (
     IntegrationConfig,
     ProcessedEvent,
     SyncSchedule,
-    TelegramBinding,
     WebhookEvent,
 )
 
@@ -16,7 +15,6 @@ __all__ = [
     "ImportJob",
     "SyncSchedule",
     "WebhookEvent",
-    "TelegramBinding",
     "GoogleSheetsLink",
     "ProcessedEvent",
 ]

@@ -35,6 +35,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { useTranslation } from '@/i18n';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useNotifications } from '@/hooks/useNotifications';
 import {
@@ -73,7 +74,8 @@ const PROVIDER_LABELS: Record<EmailProvider, string> = {
 };
 
 export function EmailConfigPage() {
-  useDocumentTitle('Почта');
+  const { t } = useTranslation();
+  useDocumentTitle(t('email_config.title'));
   const { user } = useAuth();
   const notify = useNotifications();
   const cfgQ = useEmailConfig();
@@ -154,7 +156,7 @@ export function EmailConfigPage() {
     }
     try {
       await update.mutateAsync(body);
-      notify.success('Сохранено');
+      notify.success(t('email_config.saved'));
       setSmtpPassword('');
       setMailgunApiKey('');
       setResendApiKey('');
@@ -165,17 +167,20 @@ export function EmailConfigPage() {
 
   const onTest = async () => {
     if (!user?.email) {
-      notify.error('У вашего аккаунта не задан email — некуда отправить тест');
+      notify.error(t('email_config.test_no_email'));
       return;
     }
     setProblem(null);
     try {
       const res = await testM.mutateAsync(user.email);
       if (res.status === 'sent') {
-        notify.success(`Тестовое письмо отправлено на ${user.email}`);
+        notify.success(t('email_config.test_sent', { email: user.email }));
       } else {
         notify.error(
-          `Не доставлено (${res.status})${res.error ? `: ${res.error}` : ''}`,
+          t('email_config.test_failed', {
+            status: res.status,
+            detail: res.error ? `: ${res.error}` : '',
+          }),
         );
       }
     } catch (raw) {
@@ -185,7 +190,7 @@ export function EmailConfigPage() {
 
   return (
     <Page width="narrow">
-      <PageHeader title="Почта" />
+      <PageHeader title={t('email_config.title')} />
 
       {cfgQ.isLoading ? (
         <div className="flex items-center justify-center py-12">
@@ -195,7 +200,7 @@ export function EmailConfigPage() {
         <form onSubmit={onSave} className="space-y-5" noValidate>
           {problem && (
             <Alert variant="destructive" data-testid="email-config-error">
-              <AlertTitle>{problem.title || 'Не удалось'}</AlertTitle>
+              <AlertTitle>{problem.title || t('email_config.error_title')}</AlertTitle>
               {problem.detail && <AlertDescription>{problem.detail}</AlertDescription>}
             </Alert>
           )}
@@ -205,7 +210,7 @@ export function EmailConfigPage() {
               select was overkill for three choices and read as two big
               chrome blocks. One Select is enough. */}
           <div className="space-y-1.5">
-            <Label htmlFor="email-provider">Транспорт</Label>
+            <Label htmlFor="email-provider">{t('email_config.transport')}</Label>
             <Select
               value={provider}
               onValueChange={(v) => setProvider((v as EmailProvider) ?? 'smtp')}
@@ -223,7 +228,7 @@ export function EmailConfigPage() {
 
           {/* From-address block — shared across all providers. */}
           <div className="space-y-1.5">
-            <Label htmlFor="email-from-email">Адрес отправителя</Label>
+            <Label htmlFor="email-from-email">{t('email_config.from_email')}</Label>
             <Input
               id="email-from-email"
               value={fromEmail}
@@ -233,7 +238,7 @@ export function EmailConfigPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="email-from-name">Имя отправителя</Label>
+            <Label htmlFor="email-from-name">{t('email_config.from_name')}</Label>
             <Input
               id="email-from-name"
               value={fromName}
@@ -246,7 +251,7 @@ export function EmailConfigPage() {
             <>
               <div className="grid grid-cols-[1fr_96px] gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="smtp-host">SMTP-сервер</Label>
+                  <Label htmlFor="smtp-host">{t('email_config.smtp_host')}</Label>
                   <Input
                     id="smtp-host"
                     value={smtpHost}
@@ -257,7 +262,7 @@ export function EmailConfigPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="smtp-port">Порт</Label>
+                  <Label htmlFor="smtp-port">{t('email_config.smtp_port')}</Label>
                   <Input
                     id="smtp-port"
                     type="number"
@@ -269,7 +274,7 @@ export function EmailConfigPage() {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="smtp-mode">Режим шифрования</Label>
+                <Label htmlFor="smtp-mode">{t('email_config.smtp_mode')}</Label>
                 <Select
                   value={smtpMode}
                   onValueChange={(v) => setSmtpMode((v as SmtpMode) ?? 'ssl')}
@@ -278,15 +283,15 @@ export function EmailConfigPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="ssl">SSL (порт 465 — Yandex, Gmail)</SelectItem>
-                    <SelectItem value="starttls">STARTTLS (порт 587)</SelectItem>
-                    <SelectItem value="plain">Без шифрования (порт 25 — dev)</SelectItem>
+                    <SelectItem value="ssl">{t('email_config.smtp_mode_ssl')}</SelectItem>
+                    <SelectItem value="starttls">{t('email_config.smtp_mode_starttls')}</SelectItem>
+                    <SelectItem value="plain">{t('email_config.smtp_mode_plain')}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="smtp-username">Логин</Label>
+                <Label htmlFor="smtp-username">{t('email_config.smtp_username')}</Label>
                 <Input
                   id="smtp-username"
                   value={smtpUsername}
@@ -299,10 +304,10 @@ export function EmailConfigPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="smtp-password">
-                  Пароль
+                  {t('email_config.smtp_password')}
                   {smtpPasswordSet && (
                     <span className="ml-2 text-xs text-muted-foreground">
-                      (введите заново для замены)
+                      {t('email_config.secret_replace_hint')}
                     </span>
                   )}
                 </Label>
@@ -316,16 +321,16 @@ export function EmailConfigPage() {
                   data-testid="smtp-password-input"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Для Yandex —{' '}
+                  {t('email_config.smtp_yandex_lead')}{' '}
                   <a
                     href="https://id.yandex.ru/security/app-passwords"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-foreground hover:underline"
                   >
-                    пароль приложения
+                    {t('email_config.smtp_yandex_link')}
                   </a>
-                  , не основной.
+                  {t('email_config.smtp_yandex_tail')}
                 </p>
               </div>
             </>
@@ -335,7 +340,7 @@ export function EmailConfigPage() {
             <>
               <div className="grid grid-cols-[1fr_96px] gap-3">
                 <div className="space-y-1.5">
-                  <Label htmlFor="mailgun-domain">Домен</Label>
+                  <Label htmlFor="mailgun-domain">{t('email_config.mailgun_domain')}</Label>
                   <Input
                     id="mailgun-domain"
                     value={mailgunDomain}
@@ -345,7 +350,7 @@ export function EmailConfigPage() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="mailgun-region">Регион</Label>
+                  <Label htmlFor="mailgun-region">{t('email_config.mailgun_region')}</Label>
                   <Select
                     value={mailgunRegion}
                     onValueChange={(v) =>
@@ -365,10 +370,10 @@ export function EmailConfigPage() {
 
               <div className="space-y-1.5">
                 <Label htmlFor="mailgun-api-key">
-                  API-ключ
+                  {t('email_config.api_key')}
                   {mailgunApiKeySet && (
                     <span className="ml-2 text-xs text-muted-foreground">
-                      (введите заново для замены)
+                      {t('email_config.secret_replace_hint')}
                     </span>
                   )}
                 </Label>
@@ -388,10 +393,10 @@ export function EmailConfigPage() {
           {provider === 'resend' && (
             <div className="space-y-1.5">
               <Label htmlFor="resend-api-key">
-                API-ключ
+                {t('email_config.api_key')}
                 {resendApiKeySet && (
                   <span className="ml-2 text-xs text-muted-foreground">
-                    (введите заново для замены)
+                    {t('email_config.secret_replace_hint')}
                   </span>
                 )}
               </Label>
@@ -405,7 +410,7 @@ export function EmailConfigPage() {
                 data-testid="resend-api-key-input"
               />
               <p className="text-xs text-muted-foreground">
-                Создайте ключ на{' '}
+                {t('email_config.resend_lead')}{' '}
                 <a
                   href="https://resend.com/api-keys"
                   target="_blank"
@@ -414,7 +419,7 @@ export function EmailConfigPage() {
                 >
                   resend.com/api-keys
                 </a>
-                . Домен отправителя должен быть подтверждён в Resend.
+                {t('email_config.resend_tail')}
               </p>
             </div>
           )}
@@ -432,7 +437,7 @@ export function EmailConfigPage() {
               ) : (
                 <MailCheck className="mr-2 h-4 w-4" />
               )}
-              Тест на свой email
+              {t('email_config.test_button')}
             </Button>
             <Button
               type="submit"
@@ -442,7 +447,7 @@ export function EmailConfigPage() {
               {update.isPending && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               )}
-              Сохранить
+              {t('common.save')}
             </Button>
           </div>
         </form>

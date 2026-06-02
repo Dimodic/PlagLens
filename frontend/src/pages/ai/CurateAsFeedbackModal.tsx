@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { RiskSignalBadge } from '@/components/ai/RiskSignalBadge';
+import { useTranslation } from '@/i18n';
 import { useNotifications } from '@/hooks/useNotifications';
 import { useCurateAsFeedback } from '@/hooks/api/useAi';
 import type { AIAnalysis, RiskSignalType } from '@/api/endpoints/ai';
@@ -36,6 +37,7 @@ export function CurateAsFeedbackModal({
   onClose,
   submissionId,
 }: CurateAsFeedbackModalProps) {
+  const { t } = useTranslation();
   const notify = useNotifications();
   const navigate = useNavigate();
   const curate = useCurateAsFeedback(analysis?.id ?? '');
@@ -85,14 +87,14 @@ export function CurateAsFeedbackModal({
         additional_text: additional || undefined,
         visible_to_student: visibleToStudent,
       });
-      notify.success('Комментарий создан');
+      notify.success(t('curate_feedback.created'));
       onClose();
       if (submissionId) {
         navigate(`/submissions/${submissionId}?tab=feedback`);
       }
     } catch (e) {
       const p = e as Problem;
-      notify.error(p?.detail ?? p?.title ?? 'Не удалось создать комментарий');
+      notify.error(p?.detail ?? p?.title ?? t('curate_feedback.create_failed'));
     }
   };
 
@@ -103,12 +105,12 @@ export function CurateAsFeedbackModal({
         className="sm:max-w-2xl max-h-[90vh] overflow-y-auto"
       >
         <DialogHeader>
-          <DialogTitle>Создать комментарий из AI-отчёта</DialogTitle>
+          <DialogTitle>{t('curate_feedback.title')}</DialogTitle>
         </DialogHeader>
         <div className="space-y-5">
           <div className="space-y-1">
             <Label className="text-sm font-medium">
-              Резюме (редактируется)
+              {t('curate_feedback.summary_label')}
             </Label>
             <Textarea
               value={summary}
@@ -119,9 +121,9 @@ export function CurateAsFeedbackModal({
           </div>
 
           <div className="space-y-2">
-            <h5 className="text-base font-medium">Risk signals</h5>
+            <h5 className="text-base font-medium">{t('curate_feedback.risk_signals_heading')}</h5>
             {r.risk_signals.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Нет сигналов.</p>
+              <p className="text-sm text-muted-foreground">{t('curate_feedback.no_signals')}</p>
             ) : (
               <div className="space-y-2">
                 {r.risk_signals.map((s, i) => (
@@ -146,9 +148,9 @@ export function CurateAsFeedbackModal({
           </div>
 
           <div className="space-y-2">
-            <h5 className="text-base font-medium">Вопросы для устной проверки</h5>
+            <h5 className="text-base font-medium">{t('curate_feedback.questions_heading')}</h5>
             {r.questions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Нет вопросов.</p>
+              <p className="text-sm text-muted-foreground">{t('curate_feedback.no_questions')}</p>
             ) : (
               <div className="space-y-3">
                 {r.questions.map((q, i) => (
@@ -158,7 +160,7 @@ export function CurateAsFeedbackModal({
                         checked={includeQuestions.has(i)}
                         onCheckedChange={() => toggleQuestion(i)}
                       />
-                      <span className="text-sm">{`Вопрос #${i + 1}`}</span>
+                      <span className="text-sm">{t('curate_feedback.question_n', { n: i + 1 })}</span>
                     </label>
                     {includeQuestions.has(i) && (
                       <Textarea
@@ -180,13 +182,13 @@ export function CurateAsFeedbackModal({
 
           <div className="space-y-1">
             <Label className="text-sm font-medium">
-              Доп. текст от преподавателя
+              {t('curate_feedback.additional_label')}
             </Label>
             <Textarea
               value={additional}
               onChange={(e) => setAdditional(e.currentTarget.value)}
               rows={3}
-              placeholder="Например: «Проверь, понимает ли студент сложность алгоритма устно»"
+              placeholder={t('curate_feedback.additional_placeholder')}
             />
           </div>
 
@@ -196,7 +198,7 @@ export function CurateAsFeedbackModal({
               onCheckedChange={setVisibleToStudent}
               data-testid="ai-curate-visible-to-student"
             />
-            <span className="text-sm">Показать студенту</span>
+            <span className="text-sm">{t('curate_feedback.visible_to_student')}</span>
           </label>
         </div>
 
@@ -206,7 +208,7 @@ export function CurateAsFeedbackModal({
             onClick={onClose}
             data-testid="ai-curate-cancel"
           >
-            Отмена
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleSubmit}
@@ -216,7 +218,7 @@ export function CurateAsFeedbackModal({
             {curate.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
             )}
-            Сохранить как комментарий
+            {t('curate_feedback.save')}
           </Button>
         </DialogFooter>
       </DialogContent>

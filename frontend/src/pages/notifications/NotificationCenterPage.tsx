@@ -21,7 +21,7 @@ import dayjs from 'dayjs';
 import { Archive, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/common/EmptyState';
-import { SkeletonList } from '@/components/common/Skeleton';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Page, PageHeader } from '@/components/layout/Page';
 import {
   useArchiveNotification,
@@ -30,6 +30,7 @@ import {
   useNotifications,
 } from '@/hooks/api/useNotificationsApi';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
+import { useTranslation } from '@/i18n';
 import { cn } from '@/components/ui/utils';
 import type {
   NotificationFilter,
@@ -37,7 +38,8 @@ import type {
 } from '@/api/endpoints/notifications';
 
 export default function NotificationCenterPage() {
-  useDocumentTitle('Уведомления');
+  const { t } = useTranslation();
+  useDocumentTitle(t('notification_center.title'));
   const navigate = useNavigate();
 
   // No filters — just "everything that's not archived", newest first.
@@ -79,7 +81,7 @@ export default function NotificationCenterPage() {
   return (
     <Page>
       <PageHeader
-        title="Уведомления"
+        title={t('notification_center.title')}
         action={
           items.some((n) => !n.read) ? (
             <Button
@@ -94,16 +96,16 @@ export default function NotificationCenterPage() {
               ) : (
                 <Check className="mr-2 h-4 w-4" />
               )}
-              Прочитать все
+              {t('notification_center.mark_all_read')}
             </Button>
           ) : null
         }
       />
 
       {isPending && items.length === 0 ? (
-        <SkeletonList rows={5} rowHeight={56} />
+        <FeedSkeleton />
       ) : items.length === 0 ? (
-        <EmptyState title="Уведомлений пока нет" />
+        <EmptyState title={t('notification_center.empty')} />
       ) : (
         <ul
           className="-mx-2 divide-y divide-border/40"
@@ -119,12 +121,46 @@ export default function NotificationCenterPage() {
           ))}
           {data?.pagination?.has_more && (
             <li className="px-2 pt-4 text-xs text-muted-foreground">
-              Показаны последние 100. Старые архивируются автоматически.
+              {t('notification_center.list_truncated')}
             </li>
           )}
         </ul>
       )}
     </Page>
+  );
+}
+
+/** Loading state — mirrors the real feed: the same `-mx-2 divide-y` list
+ *  shell, and per-row a 6px dot slot + stacked title / body / timestamp
+ *  lines at `px-2 py-3`. Quiet `bg-muted/*` tone; widths vary per row and
+ *  only some rows carry a body line, like the real notifications. */
+function FeedSkeleton() {
+  // [hasBody, titleWidth] per placeholder row.
+  const rows: Array<[boolean, string]> = [
+    [true, 'w-2/3'],
+    [false, 'w-1/2'],
+    [true, 'w-3/5'],
+    [true, 'w-2/5'],
+    [false, 'w-1/2'],
+  ];
+  return (
+    <ul
+      role="status"
+      aria-live="polite"
+      className="-mx-2 divide-y divide-border/40"
+    >
+      {rows.map(([hasBody, titleWidth], i) => (
+        <li key={i} className="flex items-start gap-3 px-2 py-3">
+          {/* Dot slot — matches the unread marker column. */}
+          <Skeleton className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-muted/40" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className={cn('h-3.5 rounded bg-muted/40', titleWidth)} />
+            {hasBody && <Skeleton className="h-3 w-4/5 rounded bg-muted/30" />}
+            <Skeleton className="h-2.5 w-24 rounded bg-muted/30" />
+          </div>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -135,6 +171,7 @@ interface FeedRowProps {
 }
 
 function FeedRow({ notification: n, onClick, onArchive }: FeedRowProps) {
+  const { t } = useTranslation();
   return (
     <li
       data-testid={`notification-item-${n.id}`}
@@ -184,8 +221,8 @@ function FeedRow({ notification: n, onClick, onArchive }: FeedRowProps) {
         variant="ghost"
         size="icon"
         onClick={onArchive}
-        aria-label="Скрыть"
-        title="Скрыть"
+        aria-label={t('notification_center.archive')}
+        title={t('notification_center.archive')}
         data-testid={`archive-${n.id}`}
         className="absolute right-1 top-2 size-7 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
       >

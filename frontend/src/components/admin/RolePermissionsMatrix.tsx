@@ -14,6 +14,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip';
 import { roleLabel } from '@/lib/roles';
+import { useTranslation } from '@/i18n';
 import type { PermissionMeta } from '@/api/endpoints/system';
 
 interface Props {
@@ -31,6 +32,7 @@ export function RolePermissionsMatrix({
   onToggle,
   disabled,
 }: Props) {
+  const { t } = useTranslation();
   return (
     <TooltipProvider delayDuration={200}>
       <div className="overflow-x-auto">
@@ -38,7 +40,7 @@ export function RolePermissionsMatrix({
           <thead>
             <tr className="border-b">
               <th className="py-2.5 pr-4 text-left font-medium text-muted-foreground">
-                Разрешение
+                {t('role_perms_matrix.permission_header')}
               </th>
               {roles.map((r) => (
                 <th

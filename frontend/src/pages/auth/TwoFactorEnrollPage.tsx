@@ -8,6 +8,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import { authApi } from '@/api/endpoints/auth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
 import { useTranslation } from '@/i18n';
@@ -54,7 +55,7 @@ export function TwoFactorEnrollPage() {
     e?.preventDefault();
     setProblem(null);
     if (!/^\d{6}$/.test(totpCode)) {
-      setTotpError('Введите 6 цифр');
+      setTotpError(t('auth.2fa.totp_6digits'));
       return;
     }
     setTotpError(null);
@@ -107,14 +108,15 @@ export function TwoFactorEnrollPage() {
 
         {enroll ? (
           <>
-            {enroll.qr_svg && (
-              <div
-                aria-label="QR"
-                data-testid="twofa-qr"
-                className="mx-auto w-fit rounded-md border bg-white p-2"
-                dangerouslySetInnerHTML={{ __html: enroll.qr_svg }}
-              />
-            )}
+            {/* QR generated client-side from the otpauth URI (backend's
+                qr_svg is null — never implemented). */}
+            <div
+              aria-label="QR"
+              data-testid="twofa-qr"
+              className="mx-auto w-fit rounded-md bg-white p-3"
+            >
+              <QRCodeSVG value={enroll.otpauth_uri} size={176} level="M" />
+            </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               {t('auth.twofa.secret_hint')}{' '}
               <code

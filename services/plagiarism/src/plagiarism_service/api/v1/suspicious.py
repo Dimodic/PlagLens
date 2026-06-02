@@ -4,8 +4,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Query, Request
+from plaglens_common.errors import PlagLensError
+from plaglens_common.service_client import ServiceClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ...common.logging import get_logger
@@ -111,29 +112,29 @@ async def _resolve_submission_meta(
     headers = {"Authorization": bearer}
     out: dict[str, dict] = {}
 
-    async def fetch(sid: str) -> None:
+    async def fetch(client: ServiceClient, sid: str) -> None:
         try:
-            async with httpx.AsyncClient(timeout=4.0) as client:
-                resp = await client.get(
-                    f"{base}/api/v1/submissions/{sid}", headers=headers
-                )
-            if resp.status_code >= 400:
-                return
+            resp = await client.get(
+                f"{base}/api/v1/submissions/{sid}", headers=headers
+            )
             payload = resp.json()
             if isinstance(payload, dict):
                 out[sid] = payload
-        except (httpx.HTTPError, ValueError) as exc:  # pragma: no cover
+        except (PlagLensError, ValueError) as exc:  # pragma: no cover
             log.debug("suspicious_enrich_fail", submission_id=sid, error=str(exc))
 
     # Bound the concurrency a bit so we don't hammer submission with
     # 200 simultaneous sockets if a teacher has lots of flags.
     sem = asyncio.Semaphore(20)
 
-    async def guarded(sid: str) -> None:
+    async def guarded(client: ServiceClient, sid: str) -> None:
         async with sem:
-            await fetch(sid)
+            await fetch(client, sid)
 
-    await asyncio.gather(*(guarded(sid) for sid in submission_ids))
+    async with ServiceClient(
+        base, provider="submission-service", timeout=4.0
+    ) as client:
+        await asyncio.gather(*(guarded(client, sid) for sid in submission_ids))
     return out
 
 

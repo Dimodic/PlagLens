@@ -204,11 +204,6 @@ async def admin_principal():
 
 
 @pytest_asyncio.fixture
-async def super_admin_principal():
-    return _make_principal("super_admin", None)
-
-
-@pytest_asyncio.fixture
 async def student_principal():
     return _make_principal("student", "student")
 

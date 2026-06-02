@@ -2,6 +2,7 @@
  * Coloured progress bar for AI budget usage.
  */
 import { Progress } from '@/components/ui/progress';
+import { useTranslation } from '@/i18n';
 import { CostFormatter } from './CostFormatter';
 
 interface UsageMeterProps {
@@ -29,12 +30,14 @@ export function UsageMeter({
   unit = 'tokens',
   label,
 }: UsageMeterProps) {
+  const { t } = useTranslation();
   if (max == null) {
     return (
       <div className="flex flex-col gap-1">
         {label && <div className="text-sm font-medium">{label}</div>}
         <div className="text-sm text-muted-foreground">
-          {unit === 'cost' ? <CostFormatter value={used} /> : fmtTokens(used)} (без лимита)
+          {unit === 'cost' ? <CostFormatter value={used} /> : fmtTokens(used)}{' '}
+          {t('usage_meter.no_limit')}
         </div>
       </div>
     );
