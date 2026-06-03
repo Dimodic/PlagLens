@@ -745,9 +745,6 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
               <Copy className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {t('integrations_list.redirect_fixed_hint')}
-          </p>
         </div>
 
         <div className="space-y-1.5">

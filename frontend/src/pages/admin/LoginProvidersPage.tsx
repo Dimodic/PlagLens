@@ -389,9 +389,6 @@ function ProviderDetail({ provider }: DetailProps) {
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t('login_providers.redirect_hint')}
-            </p>
           </div>
         )}
 
@@ -418,9 +415,6 @@ function ProviderDetail({ provider }: DetailProps) {
                 <Copy className="h-4 w-4" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {t('login_providers.redirect_hint')}
-            </p>
           </div>
         )}
 
