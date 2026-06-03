@@ -218,6 +218,7 @@
   "assignment_detail.more": "More",
   "assignment_detail.my_sub_at": "Submission from {{date}}",
   "assignment_detail.my_subs_empty": "No submissions for this assignment yet.",
+  "assignment_detail.my_subs_error": "Couldn't load your submissions. Refresh the page.",
   "assignment_detail.no_assistants": "The course has no assistants",
   "assignment_detail.no_date_data": "No submission-date data.",
   "assignment_detail.no_grade": "no grade",

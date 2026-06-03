@@ -43,23 +43,32 @@ async def _self_author_ids(session: Any, user_id: str) -> list[str]:
     """
     ids: list[str] = [user_id]
     try:
-        rows = (
-            await session.execute(
-                text(
-                    "SELECT system || ':' || external_id AS ext "
-                    "FROM identity.external_bindings "
-                    "WHERE user_id = :uid"
-                ),
-                {"uid": user_id},
-            )
-        ).all()
+        # Run the cross-schema read inside a SAVEPOINT. The service connects as
+        # a per-service role (``course_submission_app``) that may lack SELECT on
+        # the ``identity`` schema — that read then fails. A bare ``except`` here
+        # would swallow the *Python* error but leave the asyncpg transaction in
+        # an aborted state, so the very next query (``list_for_user``) blows up
+        # with ``InFailedSQLTransactionError`` and the whole page 500s (which the
+        # SPA renders as "посылок пока нет"). The savepoint rolls back ONLY this
+        # statement, keeping the request's transaction usable.
+        async with session.begin_nested():
+            rows = (
+                await session.execute(
+                    text(
+                        "SELECT system || ':' || external_id AS ext "
+                        "FROM identity.external_bindings "
+                        "WHERE user_id = :uid"
+                    ),
+                    {"uid": user_id},
+                )
+            ).all()
         for (ext,) in rows:
             if ext and ext not in ids:
                 ids.append(str(ext))
     except Exception:
-        # Permission denied or schema missing in dev/test envs — keep
-        # going with the bare user_id, the old behaviour. We don't want
-        # the whole /users/me/submissions page to 500 over a grant.
+        # Permission denied or schema missing — the savepoint already rolled
+        # back, so the session stays usable. Fall back to the bare user_id
+        # (the documented worst case: only ``usr_…`` rows show up).
         pass
     return ids
 

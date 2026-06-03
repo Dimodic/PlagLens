@@ -1767,6 +1767,17 @@ function MyAssignmentSubmissions({ assignmentId }: { assignmentId: string }) {
     );
   }
 
+  // Distinguish a failed request from a genuinely empty list — otherwise a
+  // 500 (e.g. backend hiccup) silently renders as "no submissions yet", which
+  // is exactly what made an uploaded submission look like it had vanished.
+  if (q.isError) {
+    return (
+      <p className="py-8 text-center text-sm text-destructive">
+        {t('assignment_detail.my_subs_error')}
+      </p>
+    );
+  }
+
   if (subs.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">

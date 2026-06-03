@@ -7,7 +7,6 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { Loader2, Upload, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
 import {
@@ -161,7 +160,7 @@ export default function SubmissionUploadPage() {
   return (
     <Page width="regular">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">
+        <h1 className="text-2xl font-semibold tracking-tight leading-tight">
           {t('upload.title')}
         </h1>
         {assignment?.title && (
@@ -171,8 +170,7 @@ export default function SubmissionUploadPage() {
         )}
       </div>
 
-      <Card>
-        <CardContent className="p-6 space-y-4">
+      <div className="space-y-4">
           {!pdfOnly && (
             <div className="space-y-1.5">
               <Label>{t('upload.language')}</Label>
@@ -285,8 +283,7 @@ export default function SubmissionUploadPage() {
               {t('upload.submit')}
             </Button>
           </div>
-        </CardContent>
-      </Card>
+      </div>
     </Page>
   );
 }

@@ -218,6 +218,7 @@
   "assignment_detail.more": "Ещё",
   "assignment_detail.my_sub_at": "Посылка от {{date}}",
   "assignment_detail.my_subs_empty": "По этому заданию посылок пока нет.",
+  "assignment_detail.my_subs_error": "Не удалось загрузить ваши посылки. Обновите страницу.",
   "assignment_detail.no_assistants": "В курсе нет ассистентов",
   "assignment_detail.no_date_data": "Нет данных по датам сдач.",
   "assignment_detail.no_grade": "без оценки",
