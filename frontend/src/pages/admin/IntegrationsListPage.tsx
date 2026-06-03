@@ -748,21 +748,20 @@ function IntegrationOAuthDetail({ provider }: DetailProps) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="iov-scope">Scope</Label>
-          <Input
-            id="iov-scope"
-            value={scope}
-            onChange={(e) => setScope(e.currentTarget.value)}
-            autoComplete="off"
-            className="font-mono text-xs"
-            placeholder={provider.default_scope ?? ''}
-            data-testid="integration-oauth-edit-scope"
-          />
-          <p className="text-xs text-muted-foreground">
-            {t('integrations_list.scope_default_prefix')}{' '}
-            <code className="font-mono">{provider.default_scope ?? '—'}</code>.{' '}
-            {t('integrations_list.scope_hint')}
-          </p>
+          <Label>Scope</Label>
+          <div className="flex flex-wrap gap-1.5" data-testid="integration-oauth-scope">
+            {(provider.scope || provider.default_scope || '')
+              .split(/\s+/)
+              .filter(Boolean)
+              .map((s) => (
+                <span
+                  key={s}
+                  className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground/80"
+                >
+                  {s}
+                </span>
+              ))}
+          </div>
         </div>
 
         <div className="flex items-center justify-between pt-2">
