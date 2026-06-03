@@ -48,7 +48,13 @@ class UserRepository:
     async def get(self, user_id: str) -> User | None:
         return await self.s.get(User, user_id)
 
-    async def get_by_email(self, tenant_id: str, email: str) -> User | None:
+    async def get_by_email(self, tenant_id: str, email: str | None) -> User | None:
+        # Email is optional on a User (OAuth providers such as Telegram/GitHub
+        # may not expose one) and invitations may carry no e-mail at all
+        # (general teacher/course codes). A None lookup can never match a row,
+        # so short-circuit instead of crashing on ``None.lower()``.
+        if not email:
+            return None
         stmt = select(User).where(
             User.tenant_id == tenant_id,
             User.email == email.lower(),
@@ -63,6 +69,8 @@ class UserRepository:
         no match or multiple matches exist (we don't leak which tenants the
         user exists in — caller treats it as bad credentials).
         """
+        if not email:
+            return None
         stmt = select(User).where(
             User.email == email.lower(),
             User.deleted_at.is_(None),

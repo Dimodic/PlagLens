@@ -356,6 +356,16 @@ async def accept_invitation(
             code="VALIDATION_FAILED",
             title="Password required for registration",
         )
+    # A general (email-less) code carries no identity to register under — it is
+    # meant to be redeemed by an already-signed-in user via ``:redeem``. Reject
+    # cleanly instead of crashing on ``inv.email.split(...)`` below.
+    if not inv.email:
+        raise ProblemException(
+            status=409,
+            code="CONFLICT",
+            title="Этот код активируется из аккаунта",
+            detail="Войдите или зарегистрируйтесь, затем активируйте код на странице профиля.",
+        )
     existing = await users.get_by_email(inv.tenant_id, inv.email)
     if existing is not None:
         raise ProblemException(
