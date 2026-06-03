@@ -145,7 +145,9 @@ class YandexProvider(_ProviderBase):
     authorize_url: ClassVar[str] = "https://oauth.yandex.ru/authorize"
     token_url: ClassVar[str] = "https://oauth.yandex.ru/token"
     userinfo_url: ClassVar[str] = "https://login.yandex.ru/info"
-    default_scopes: ClassVar[list[str]] = ["login:email", "login:info"]
+    # login:avatar lets us read default_avatar_id → import the user's portrait
+    # as their PlagLens avatar on first login (mirrors Telegram's photo_url).
+    default_scopes: ClassVar[list[str]] = ["login:email", "login:info", "login:avatar"]
 
     auth_header_scheme: ClassVar[str] = "OAuth"
 

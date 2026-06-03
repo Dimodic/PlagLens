@@ -41,6 +41,17 @@ import { cn } from '@/components/ui/utils';
 const LOGIN_PROVIDERS = new Set(['google', 'yandex', 'github', 'telegram']);
 const PROVIDER_ORDER = ['google', 'yandex', 'github', 'telegram'];
 
+// Per-provider "what to enable in the provider console" hint, shown in the
+// detail pane so an admin knows which permissions/scopes the app must grant.
+// The console permissions must be a SUPERSET of what identity requests
+// (see services/identity/.../oauth/providers.py default_scopes).
+const SETUP_HINT: Record<string, string> = {
+  google: 'login_providers.setup_google',
+  yandex: 'login_providers.setup_yandex',
+  github: 'login_providers.setup_github',
+  telegram: 'login_providers.setup_telegram',
+};
+
 /** Configured = a client_id (preview) is present. The secret is write-only,
  *  so it can't be the readiness signal. */
 function isConfigured(p: OAuthProviderInfo): boolean {
@@ -178,6 +189,17 @@ function ProviderDetail({ provider }: DetailProps) {
   const [problem, setProblem] = useState<Problem | null>(null);
 
   const configured = isConfigured(provider);
+  const setupKey = SETUP_HINT[provider.provider];
+  const isTelegram = provider.provider === 'telegram';
+  // Telegram's Login Widget is gated by the bot's whitelisted DOMAIN (set via
+  // @BotFather /setdomain), not by a pasteable redirect URL. Show the bare host
+  // (parsed from our callback URL) for Telegram instead of the full path.
+  let setupDomain = '';
+  try {
+    setupDomain = provider.redirect_uri ? new URL(provider.redirect_uri).host : '';
+  } catch {
+    setupDomain = '';
+  }
 
   // Switching providers wipes the partially-typed form — otherwise we'd
   // leak secret-like input from one row to another.
@@ -188,8 +210,9 @@ function ProviderDetail({ provider }: DetailProps) {
   }, [provider.provider]);
 
   const copyRedirect = () => {
-    if (provider.redirect_uri && typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(provider.redirect_uri);
+    const value = isTelegram ? setupDomain : provider.redirect_uri;
+    if (value && typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(value);
       notify.info(t('login_providers.redirect_copied'));
     }
   };
@@ -268,6 +291,12 @@ function ProviderDetail({ provider }: DetailProps) {
         </span>
       </header>
 
+      {setupKey && (
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          {t(setupKey)}
+        </p>
+      )}
+
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {problem && (
           <Alert variant="destructive">
@@ -280,7 +309,7 @@ function ProviderDetail({ provider }: DetailProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="login-client-id">
-            Client ID
+            {isTelegram ? t('login_providers.field_bot_username') : 'Client ID'}
             {configured && (
               <span className="ml-2 text-xs text-muted-foreground">
                 {t('login_providers.hint_leave_blank')}
@@ -301,7 +330,7 @@ function ProviderDetail({ provider }: DetailProps) {
 
         <div className="space-y-1.5">
           <Label htmlFor="login-client-secret">
-            Client Secret
+            {isTelegram ? t('login_providers.field_bot_token') : 'Client Secret'}
             {provider.has_secret && (
               <span className="ml-2 text-xs text-muted-foreground">
                 {t('login_providers.hint_reenter')}
@@ -321,15 +350,17 @@ function ProviderDetail({ provider }: DetailProps) {
           />
         </div>
 
-        {provider.redirect_uri && (
+        {(isTelegram ? setupDomain : provider.redirect_uri) && (
           <div className="space-y-1.5">
-            <Label>Redirect URI</Label>
+            <Label>
+              {isTelegram ? t('login_providers.domain_label') : 'Redirect URI'}
+            </Label>
             <div
               className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
               data-testid={`login-redirect-${provider.provider}`}
             >
               <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
-                {provider.redirect_uri}
+                {isTelegram ? setupDomain : provider.redirect_uri}
               </code>
               <Button
                 type="button"
@@ -345,7 +376,9 @@ function ProviderDetail({ provider }: DetailProps) {
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              {t('login_providers.redirect_hint')}
+              {isTelegram
+                ? t('login_providers.domain_hint')
+                : t('login_providers.redirect_hint')}
             </p>
           </div>
         )}
