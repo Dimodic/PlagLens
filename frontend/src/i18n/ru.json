@@ -1258,7 +1258,7 @@
   "login_providers.setup_label": "Что включить в консоли",
   "login_providers.setup_google": "Включите эти scope-ы на экране согласия Google:",
   "login_providers.setup_yandex": "Включите эти доступы в консоли Яндекса (портрет — для аватара):",
-  "login_providers.setup_github": "Включите эти scope-ы в настройках OAuth-приложения GitHub:",
+  "login_providers.setup_github": "В поле Homepage URL укажите адрес сайта: {{url}}",
   "login_providers.setup_telegram": "Создайте бота в @BotFather — username и токен берутся оттуда. Затем выполните /setdomain и укажите домен ниже.",
   "login_providers.field_bot_username": "Username бота",
   "login_providers.field_bot_token": "Токен бота",

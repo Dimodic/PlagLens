@@ -46,11 +46,15 @@ const PROVIDER_ORDER = ['google', 'yandex', 'github', 'telegram'];
 // The console permissions must be a SUPERSET of what identity requests
 // (see services/identity/.../oauth/providers.py default_scopes).
 const SETUP_HINT: Record<string, string> = {
-  google: 'login_providers.setup_google',
+  // Google omitted — it auto-grants openid/email/profile, nothing to set.
   yandex: 'login_providers.setup_yandex',
   github: 'login_providers.setup_github',
   telegram: 'login_providers.setup_telegram',
 };
+
+// Scope chips help only where the admin must tick matching console
+// permissions. Today that's just Yandex; Google/GitHub auto-grant.
+const SHOW_SCOPES = new Set(['yandex']);
 
 /** Configured = a client_id (preview) is present. The secret is write-only,
  *  so it can't be the readiness signal. */
@@ -191,14 +195,21 @@ function ProviderDetail({ provider }: DetailProps) {
   const configured = isConfigured(provider);
   const setupKey = SETUP_HINT[provider.provider];
   const isTelegram = provider.provider === 'telegram';
-  // Telegram's Login Widget is gated by the bot's whitelisted DOMAIN (set via
-  // @BotFather /setdomain), not by a pasteable redirect URL. Show the bare host
-  // (parsed from our callback URL) for Telegram instead of the full path.
+  const showChips =
+    SHOW_SCOPES.has(provider.provider) && !!(provider.scopes && provider.scopes.length);
+  // Parse host + origin from our callback URL: host for Telegram's /setdomain,
+  // origin for the GitHub "Homepage URL" hint.
   let setupDomain = '';
+  let siteOrigin = '';
   try {
-    setupDomain = provider.redirect_uri ? new URL(provider.redirect_uri).host : '';
+    if (provider.redirect_uri) {
+      const u = new URL(provider.redirect_uri);
+      setupDomain = u.host;
+      siteOrigin = u.origin;
+    }
   } catch {
     setupDomain = '';
+    siteOrigin = '';
   }
 
   // Switching providers wipes the partially-typed form — otherwise we'd
@@ -291,22 +302,25 @@ function ProviderDetail({ provider }: DetailProps) {
         </span>
       </header>
 
-      {setupKey && (
-        <p className="text-sm leading-relaxed text-muted-foreground">
-          {t(setupKey)}
-        </p>
-      )}
-
-      {provider.scopes && provider.scopes.length > 0 && (
-        <div className="flex flex-wrap gap-1.5" data-testid="login-scopes">
-          {provider.scopes.map((s) => (
-            <span
-              key={s}
-              className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground/80"
-            >
-              {s}
-            </span>
-          ))}
+      {(setupKey || showChips) && (
+        <div className="space-y-2">
+          {setupKey && (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              {t(setupKey, { url: siteOrigin })}
+            </p>
+          )}
+          {showChips && (
+            <div className="flex flex-wrap gap-1.5" data-testid="login-scopes">
+              {(provider.scopes ?? []).map((s) => (
+                <span
+                  key={s}
+                  className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground/80"
+                >
+                  {s}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
 
