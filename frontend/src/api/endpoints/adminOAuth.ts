@@ -15,6 +15,8 @@ export interface OAuthProviderInfo {
   client_id_preview: string;
   has_secret: boolean;
   redirect_uri: string;
+  /** OAuth scopes identity requests — rendered as chips in the admin UI. */
+  scopes?: string[];
   docs_url?: string | null;
   /** 'env' — falls back to env vars, 'override' — uses DB-stored override. */
   source: 'env' | 'override';

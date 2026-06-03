@@ -297,6 +297,19 @@ function ProviderDetail({ provider }: DetailProps) {
         </p>
       )}
 
+      {provider.scopes && provider.scopes.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" data-testid="login-scopes">
+          {provider.scopes.map((s) => (
+            <span
+              key={s}
+              className="rounded-md border border-border/60 bg-muted/40 px-2 py-0.5 font-mono text-[11px] text-foreground/80"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      )}
+
       <form onSubmit={onSubmit} className="space-y-4" noValidate>
         {problem && (
           <Alert variant="destructive">

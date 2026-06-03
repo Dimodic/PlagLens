@@ -19,7 +19,7 @@ from ...config import settings
 from ...deps import CurrentUser, get_session, require_global_role
 from ...models import OAuthProviderOverride
 from ...oauth import overrides as oauth_overrides
-from ...oauth.providers import list_known_providers
+from ...oauth.providers import get_provider, list_known_providers
 
 router = APIRouter(prefix="/admin/oauth", tags=["admin", "oauth"])
 
@@ -60,6 +60,10 @@ class OAuthProviderInfo(BaseModel):
     client_id_preview: str
     has_secret: bool
     redirect_uri: str
+    # OAuth scopes identity actually requests (provider.default_scopes), so the
+    # admin UI can render them as chips and the console permissions matched
+    # exactly. Empty for Telegram (Login Widget — no scopes).
+    scopes: list[str] = []
     docs_url: str | None = None
     # 'env'      — value resolved from environment vars (no DB override yet).
     # 'override' — value comes from the admin-edited DB row.
@@ -93,6 +97,8 @@ def _build_info(provider: str) -> OAuthProviderInfo:
         client_id_preview = cid
     else:
         client_id_preview = _mask(cid)
+    impl = get_provider(provider)
+    scopes = list(impl.default_scopes) if impl is not None else []
     return OAuthProviderInfo(
         provider=provider,
         title=_PROVIDER_TITLES.get(provider, provider.capitalize()),
@@ -100,6 +106,7 @@ def _build_info(provider: str) -> OAuthProviderInfo:
         client_id_preview=client_id_preview,
         has_secret=bool(csec),
         redirect_uri=f"{base}/api/v1/auth/oauth/{provider}/callback",
+        scopes=scopes,
         docs_url=_PROVIDER_DOCS.get(provider),
         source=source,
     )
