@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="all" />
+<title>PlagLens — проверка студенческих работ: антиплагиат и LLM-анализ</title>
+<meta name="description" content="PlagLens — учебная платформа: приём работ, поиск заимствований и LLM-анализ кода, выставление и выгрузка оценок. Импорт из Stepik и Яндекс.Контеста, экспорт в Google Sheets." />
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #0b0f1a; color: #e8ecf4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
+    line-height: 1.6; -webkit-font-smoothing: antialiased;
+  }
+  a { color: #93b4ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
+  header { padding: 28px 0; display: flex; align-items: center; justify-content: space-between; }
+  .brand { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: #fff; }
+  .brand .lens { color: #2e5be0; }
+  nav a { color: #b8c2d6; font-size: 14px; margin-left: 22px; }
+
+  .hero { padding: 64px 0 40px; }
+  .eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #2e5be0; margin: 0 0 18px; }
+  h1 { font-size: 52px; line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 20px; color: #fff; max-width: 760px; }
+  .lead { font-size: 20px; color: #b8c2d6; max-width: 680px; margin: 0 0 32px; }
+  .cta { display: inline-flex; align-items: center; gap: 10px; background: #2e5be0; color: #fff; font-weight: 600; font-size: 16px; padding: 14px 26px; border-radius: 12px; }
+  .cta:hover { background: #2349b8; text-decoration: none; }
+  .cta-sub { display: block; margin-top: 14px; color: #8a93a6; font-size: 14px; }
+
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 32px 0 8px; }
+  .card { background: #121826; border: 1px solid #1f2a3d; border-radius: 16px; padding: 26px; }
+  .card h3 { margin: 0 0 8px; font-size: 19px; letter-spacing: -0.01em; color: #fff; }
+  .card p { margin: 0; color: #aab4c8; font-size: 15px; }
+
+  .strip { padding: 36px 0; border-top: 1px solid #1f2a3d; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 28px; }
+  .strip div { font-size: 15px; color: #b8c2d6; }
+  .strip b { color: #fff; font-weight: 600; }
+
+  footer { border-top: 1px solid #1f2a3d; margin-top: 16px; padding: 28px 0 56px; color: #8a93a6; font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
+  @media (max-width: 680px) { h1 { font-size: 38px; } .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="brand">Plag<span class="lens">Lens</span></div>
+      <nav>
+        <a href="https://plaglens.ru/">Войти</a>
+        <a href="https://plaglens.ru/privacy.html">Конфиденциальность</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Антиплагиат · LLM-анализ кода</p>
+      <h1>Проверка студенческих работ — от приёма до оценки</h1>
+      <p class="lead">
+        PlagLens принимает решения студентов, ищет заимствования и анализирует
+        код языковой моделью, помогает выставить и выгрузить оценки — в одном
+        месте, без ручной склейки между десятком вкладок.
+      </p>
+      <a class="cta" href="https://plaglens.ru/">Открыть приложение →</a>
+      <span class="cta-sub">Вход для преподавателей, ассистентов и студентов.</span>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h3>Антиплагиат</h3>
+        <p>Попарное сравнение решений внутри курса и со всем корпусом прошлых
+           лет; подсветка совпадений и кластеров копий.</p>
+      </div>
+      <div class="card">
+        <h3>LLM-анализ кода</h3>
+        <p>Краткое резюме решения, сигналы риска и вопросы на понимание —
+           преподаватель решает, чем поделиться со студентом.</p>
+      </div>
+      <div class="card">
+        <h3>Интеграции</h3>
+        <p>Импорт заданий и посылок из Stepik и Яндекс.Контеста, выгрузка
+           оценок в привязанную таблицу Google Sheets.</p>
+      </div>
+      <div class="card">
+        <h3>Роли и уведомления</h3>
+        <p>Преподаватель, ассистент и студент с разными правами; уведомления о
+           проверках и оценках по e-mail и в Telegram.</p>
+      </div>
+    </section>
+
+    <section class="strip">
+      <div><b>Вход:</b> Google · Яндекс ID · GitHub · Telegram или e-mail.</div>
+      <div><b>Назначение:</b> учебный проект для автоматизации проверки заданий.</div>
+    </section>
+
+    <footer>
+      <span>© 2026 PlagLens</span>
+      <a href="https://plaglens.ru/">Приложение</a>
+      <a href="https://plaglens.ru/privacy.html">Политика конфиденциальности</a>
+      <a href="https://plaglens.ru/terms.html">Условия использования</a>
+      <a href="mailto:smmaxims@yandex.ru">Контакты</a>
+    </footer>
+  </div>
+</body>
+</html>
