@@ -65,6 +65,7 @@ interface ImportOp {
   homework_title?: string | null;
   problems_total?: number;
   problems_done?: number;
+  submissions_fetched?: number;
   submissions_imported?: number;
   errors?: string[];
   resync?: boolean;
@@ -77,17 +78,46 @@ interface Props {
   onDone?: () => void;
 }
 
+// Persist the in-flight import op so a page reload doesn't abandon it. The
+// import runs server-side regardless of the browser; on remount we resume
+// polling so the homework list still refreshes (and the user still gets the
+// completion toast) when it finishes — otherwise a reload mid-import leaves
+// the page showing a partial result. Keyed by course so two courses' imports
+// never collide.
+type PersistedOp = { opId: string; source: Source };
+const opStorageKey = (courseId: string) => `plaglens.import_op.${courseId}`;
+
+function readPersistedOp(courseId: string): PersistedOp | null {
+  try {
+    const raw = localStorage.getItem(opStorageKey(courseId));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as PersistedOp;
+    if (
+      v &&
+      typeof v.opId === 'string' &&
+      (v.source === 'yandex_contest' || v.source === 'stepik' || v.source === 'ejudge')
+    ) {
+      return v;
+    }
+  } catch {
+    /* ignore malformed entry */
+  }
+  return null;
+}
+
 export function ImportHomeworkDialog({ open, onOpenChange, course, onDone }: Props) {
   const { t } = useTranslation();
   const notify = useNotifications();
   const qc = useQueryClient();
 
-  const [source, setSource] = useState<Source>('yandex_contest');
+  // Resume a still-running import after a page reload (see readPersistedOp).
+  const persisted = useMemo(() => readPersistedOp(course.id), [course.id]);
+  const [source, setSource] = useState<Source>(persisted?.source ?? 'yandex_contest');
   const [idValue, setIdValue] = useState('');
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [hwTitle, setHwTitle] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [activeOpId, setActiveOpId] = useState<string | null>(null);
+  const [activeOpId, setActiveOpId] = useState<string | null>(persisted?.opId ?? null);
 
   // Per-teacher connector for the chosen source. A teacher can accumulate
   // half-finished pending_auth rows; only the active one carries a token.
@@ -255,7 +285,17 @@ export function ImportHomeworkDialog({ open, onOpenChange, course, onDone }: Pro
         onOpenChange(false);
         return;
       }
-      if (res.operation_id) setActiveOpId(res.operation_id);
+      if (res.operation_id) {
+        try {
+          localStorage.setItem(
+            opStorageKey(course.id),
+            JSON.stringify({ opId: res.operation_id, source } satisfies PersistedOp),
+          );
+        } catch {
+          /* storage disabled / full — non-fatal, polling still works this session */
+        }
+        setActiveOpId(res.operation_id);
+      }
     },
     onError: (e) => notify.error(parseProblem(e).detail || t('import_dialog.failed')),
   });
@@ -264,6 +304,13 @@ export function ImportHomeworkDialog({ open, onOpenChange, course, onDone }: Pro
   useEffect(() => {
     const op = opQ.data;
     if (!op || !activeOpId) return;
+    const clearStored = () => {
+      try {
+        localStorage.removeItem(opStorageKey(course.id));
+      } catch {
+        /* ignore */
+      }
+    };
     if (op.status === 'completed') {
       const title = op.homework_title ?? t('import_dialog.hw_fallback');
       const created = op.problems_done ?? 0;
@@ -275,11 +322,18 @@ export function ImportHomeworkDialog({ open, onOpenChange, course, onDone }: Pro
       );
       void qc.invalidateQueries({ queryKey: homeworkKeys.forCourse(course.id) });
       void qc.invalidateQueries({ queryKey: assignmentKeys.byCourse(course.id) });
+      clearStored();
       onDone?.();
       resetAll();
       onOpenChange(false);
     } else if (op.status === 'failed') {
       notify.error((op.errors ?? []).join('; ') || t('import_dialog.failed'));
+      clearStored();
+      setActiveOpId(null);
+    } else if (op.status === 'expired') {
+      // A restored op whose 24h Redis TTL lapsed (or was wiped on a redeploy).
+      // Nothing to show — drop it quietly so the dialog isn't stuck "busy".
+      clearStored();
       setActiveOpId(null);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -497,11 +551,15 @@ export function ImportHomeworkDialog({ open, onOpenChange, course, onDone }: Pro
                 </span>
               </div>
               <div className="mt-1.5 text-xs text-muted-foreground tabular-nums">
-                {t('import_dialog.progress', {
-                  done: opQ.data?.problems_done ?? 0,
-                  total: opQ.data?.problems_total ?? selected.size,
-                  subs: opQ.data?.submissions_imported ?? 0,
-                })}
+                {opQ.data?.stage === 'fetching_submissions'
+                  ? t('import_dialog.progress_fetching', {
+                      fetched: opQ.data?.submissions_fetched ?? 0,
+                    })
+                  : t('import_dialog.progress', {
+                      done: opQ.data?.problems_done ?? 0,
+                      total: opQ.data?.problems_total ?? selected.size,
+                      subs: opQ.data?.submissions_imported ?? 0,
+                    })}
               </div>
             </div>
           )}

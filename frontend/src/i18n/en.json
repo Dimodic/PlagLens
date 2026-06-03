@@ -637,6 +637,7 @@
   "import_dialog.cancel": "Cancel",
   "import_dialog.submit": "Import",
   "import_dialog.progress": "Tasks {{done}}/{{total}} · submissions {{subs}}",
+  "import_dialog.progress_fetching": "Fetching submissions: {{fetched}}",
   "import_dialog.failed": "Import failed",
   "import_dialog.already_imported": "This contest is already imported into the course",
   "import_dialog.hw_fallback": "Homework",

@@ -637,6 +637,7 @@
   "import_dialog.cancel": "Отмена",
   "import_dialog.submit": "Импортировать",
   "import_dialog.progress": "Заданий {{done}}/{{total}} · посылок {{subs}}",
+  "import_dialog.progress_fetching": "Получаю посылки: {{fetched}}",
   "import_dialog.failed": "Не удалось импортировать",
   "import_dialog.already_imported": "Этот контест уже импортирован в курс",
   "import_dialog.hw_fallback": "ДЗ",

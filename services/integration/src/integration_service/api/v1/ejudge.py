@@ -6,7 +6,6 @@ teacher can tick which to import, then kick off an async import-as-homework job
 """
 from __future__ import annotations
 
-import asyncio
 from dataclasses import asdict
 from typing import Any
 
@@ -19,6 +18,7 @@ from integration_service.adapters.ejudge import EjudgeAdapter
 from integration_service.api.v1.configs import ensure_owner_or_admin
 from integration_service.common.auth import Principal
 from integration_service.common.problems import ProblemException, not_found
+from integration_service.common.tasks import spawn_tracked
 from integration_service.config import get_settings
 from integration_service.deps import principal_dep, session_dep
 from integration_service.repositories import IntegrationConfigRepo
@@ -149,7 +149,7 @@ async def import_as_homework(
         },
         trigger="manual",
     )
-    asyncio.create_task(
+    spawn_tracked(
         run_import_as_homework(
             op_id=op_id,
             cfg=snap,
