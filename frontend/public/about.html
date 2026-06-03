@@ -6,47 +6,83 @@
 <meta name="robots" content="all" />
 <title>PlagLens — проверка студенческих работ: антиплагиат и LLM-анализ</title>
 <meta name="description" content="PlagLens — учебная платформа: приём работ, поиск заимствований и LLM-анализ кода, выставление и выгрузка оценок. Импорт из Stepik и Яндекс.Контеста, экспорт в Google Sheets." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: dark; }
+  /* Tokens copied from the app's dark theme (styles/default_theme.css .dark) so
+     the landing is native to PlagLens: monochrome surfaces, near-white primary,
+     indigo reserved ONLY for the P-lens mark. */
+  :root {
+    --bg: oklch(0.145 0.012 260);
+    --fg: oklch(0.97 0.005 260);
+    --card: oklch(0.18 0.012 260);
+    --muted-fg: oklch(0.70 0.012 260);
+    --border: oklch(0.27 0.012 260);
+    --primary: oklch(0.97 0.005 260);
+    --primary-fg: oklch(0.18 0.018 260);
+    --primary-hover: oklch(0.90 0.005 260);
+    --brand: #6366f1;
+    --radius: 0.625rem;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #0b0f1a; color: #e8ecf4;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
-    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.005em; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
-  a { color: #93b4ff; text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px; }
-  header { padding: 28px 0; display: flex; align-items: center; justify-content: space-between; }
-  .brand { font-weight: 800; font-size: 22px; letter-spacing: -0.02em; color: #fff; }
-  .brand .lens { color: #2e5be0; }
-  nav a { color: #b8c2d6; font-size: 14px; margin-left: 22px; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 28px; }
+  .mono { font-family: ui-monospace, "JetBrains Mono", "Geist Mono", SFMono-Regular, monospace; }
 
-  .hero { padding: 64px 0 40px; }
-  .eyebrow { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: #2e5be0; margin: 0 0 18px; }
-  h1 { font-size: 52px; line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 20px; color: #fff; max-width: 760px; }
-  .lead { font-size: 20px; color: #b8c2d6; max-width: 680px; margin: 0 0 32px; }
-  .cta { display: inline-flex; align-items: center; gap: 10px; background: #2e5be0; color: #fff; font-weight: 600; font-size: 16px; padding: 14px 26px; border-radius: 12px; }
-  .cta:hover { background: #2349b8; text-decoration: none; }
-  .cta-sub { display: block; margin-top: 14px; color: #8a93a6; font-size: 14px; }
+  /* Header / wordmark — the glyph is the literal "P" of PlagLens */
+  header { display: flex; align-items: center; justify-content: space-between; padding: 26px 0; }
+  .brand { display: inline-flex; align-items: baseline; font-weight: 700; font-size: 22px; letter-spacing: -0.02em; color: var(--fg); }
+  .brand svg { width: 0.6em; height: 0.84em; align-self: center; margin-right: -0.05em; color: var(--brand); }
+  nav a { color: var(--muted-fg); font-size: 14px; margin-left: 24px; transition: color .15s; }
+  nav a:hover { color: var(--fg); }
 
-  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 32px 0 8px; }
-  .card { background: #121826; border: 1px solid #1f2a3d; border-radius: 16px; padding: 26px; }
-  .card h3 { margin: 0 0 8px; font-size: 19px; letter-spacing: -0.01em; color: #fff; }
-  .card p { margin: 0; color: #aab4c8; font-size: 15px; }
+  /* Hero */
+  .hero { padding: 72px 0 48px; }
+  .eyebrow { font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted-fg); margin: 0 0 20px; }
+  h1 { font-size: clamp(38px, 6vw, 60px); font-weight: 800; line-height: 1.04; letter-spacing: -0.03em; margin: 0 0 22px; max-width: 800px; color: var(--fg); }
+  .lead { font-size: 19px; line-height: 1.55; color: var(--muted-fg); max-width: 640px; margin: 0 0 34px; }
+  .cta {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: var(--primary); color: var(--primary-fg);
+    font-weight: 600; font-size: 15px; padding: 12px 24px;
+    border-radius: var(--radius); transition: background .15s;
+  }
+  .cta:hover { background: var(--primary-hover); }
+  .cta-sub { display: block; margin-top: 14px; color: var(--muted-fg); font-size: 14px; }
 
-  .strip { padding: 36px 0; border-top: 1px solid #1f2a3d; margin-top: 40px; display: flex; flex-wrap: wrap; gap: 28px; }
-  .strip div { font-size: 15px; color: #b8c2d6; }
-  .strip b { color: #fff; font-weight: 600; }
+  /* Feature cards — quiet surfaces, hairline borders, no colour accents */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; padding: 28px 0 8px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); padding: 26px; transition: border-color .15s; }
+  .card:hover { border-color: oklch(0.36 0.012 260); }
+  .card h3 { margin: 0 0 8px; font-size: 18px; font-weight: 600; letter-spacing: -0.01em; color: var(--fg); }
+  .card p { margin: 0; color: var(--muted-fg); font-size: 15px; line-height: 1.5; }
 
-  footer { border-top: 1px solid #1f2a3d; margin-top: 16px; padding: 28px 0 56px; color: #8a93a6; font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; }
-  @media (max-width: 680px) { h1 { font-size: 38px; } .grid { grid-template-columns: 1fr; } }
+  /* Strip + footer */
+  .strip { display: flex; flex-wrap: wrap; gap: 10px 32px; padding: 36px 0; margin-top: 40px; border-top: 1px solid var(--border); font-size: 15px; color: var(--muted-fg); }
+  .strip b { color: var(--fg); font-weight: 600; }
+  footer { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; padding: 24px 0 56px; border-top: 1px solid var(--border); margin-top: 4px; color: var(--muted-fg); font-size: 14px; }
+  footer a { transition: color .15s; }
+  footer a:hover { color: var(--fg); }
+
+  @media (max-width: 680px) { .grid { grid-template-columns: 1fr; } h1 { font-size: 36px; } }
 </style>
 </head>
 <body>
   <div class="wrap">
     <header>
-      <div class="brand">Plag<span class="lens">Lens</span></div>
+      <a class="brand" href="https://plaglens.ru/">
+        <svg viewBox="28 16 48 68" fill="currentColor" aria-label="PlagLens">
+          <path fill-rule="evenodd" clip-rule="evenodd" d="M28 16 H50 a26 26 0 0 1 0 52 H42 V84 H28 Z M58 42 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0" />
+        </svg>lagLens
+      </a>
       <nav>
         <a href="https://plaglens.ru/">Войти</a>
         <a href="https://plaglens.ru/privacy.html">Конфиденциальность</a>
@@ -54,7 +90,7 @@
     </header>
 
     <section class="hero">
-      <p class="eyebrow">Антиплагиат · LLM-анализ кода</p>
+      <p class="eyebrow mono">Антиплагиат · LLM-анализ кода</p>
       <h1>Проверка студенческих работ — от приёма до оценки</h1>
       <p class="lead">
         PlagLens принимает решения студентов, ищет заимствования и анализирует

@@ -5,93 +5,121 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="robots" content="all" />
 <title>Условия использования — PlagLens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light; }
+  :root {
+    --bg: oklch(0.145 0.012 260);
+    --fg: oklch(0.97 0.005 260);
+    --muted-fg: oklch(0.70 0.012 260);
+    --border: oklch(0.27 0.012 260);
+    --brand: #6366f1;
+    color-scheme: dark;
+  }
   * { box-sizing: border-box; }
   body {
-    margin: 0; background: #f6f8fc; color: #0b0f1a;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, Arial, sans-serif;
-    line-height: 1.6; -webkit-font-smoothing: antialiased;
+    margin: 0; background: var(--bg); color: var(--fg);
+    font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    letter-spacing: -0.005em; line-height: 1.6;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
   }
-  .wrap { max-width: 820px; margin: 0 auto; padding: 56px 24px 96px; }
-  header { border-bottom: 1px solid #e5e9f0; padding-bottom: 24px; margin-bottom: 8px; }
-  .brand { font-weight: 700; font-size: 20px; letter-spacing: -0.01em; color: #1e40af; }
-  h1 { font-size: 32px; letter-spacing: -0.02em; margin: 28px 0 4px; }
-  .updated { color: #5b6478; font-size: 14px; margin: 0; }
-  h2 { font-size: 20px; letter-spacing: -0.01em; margin: 36px 0 10px; }
-  p, li { color: #1f2733; font-size: 16px; }
-  ul { padding-left: 22px; }
-  li { margin: 6px 0; }
-  a { color: #1e40af; }
-  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid #e5e9f0; color: #5b6478; font-size: 14px; }
+  a { color: inherit; }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 0 28px; }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 26px 0; }
+  .brand { display: inline-flex; align-items: baseline; font-weight: 700; font-size: 22px; letter-spacing: -0.02em; color: var(--fg); text-decoration: none; }
+  .brand svg { width: 0.6em; height: 0.84em; align-self: center; margin-right: -0.05em; color: var(--brand); }
+  nav a { color: var(--muted-fg); font-size: 14px; margin-left: 24px; text-decoration: none; transition: color .15s; }
+  nav a:hover { color: var(--fg); }
+
+  h1 { font-size: clamp(30px, 5vw, 40px); font-weight: 800; letter-spacing: -0.025em; margin: 28px 0 4px; color: var(--fg); }
+  .updated { color: var(--muted-fg); font-size: 14px; margin: 0; }
+  h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.01em; margin: 38px 0 10px; color: var(--fg); }
+  p, li { color: var(--muted-fg); font-size: 16px; }
+  ul { padding-left: 22px; } li { margin: 6px 0; }
+  .content a { color: var(--fg); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--border); }
+  .content a:hover { text-decoration-color: var(--fg); }
+
+  footer { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; margin-top: 48px; padding: 24px 0 56px; border-top: 1px solid var(--border); color: var(--muted-fg); font-size: 14px; }
+  footer a { text-decoration: none; transition: color .15s; }
+  footer a:hover { color: var(--fg); }
 </style>
 </head>
 <body>
 <div class="wrap">
   <header>
-    <div class="brand">PlagLens</div>
+    <a class="brand" href="https://plaglens.ru/">
+      <svg viewBox="28 16 48 68" fill="currentColor" aria-label="PlagLens"><path fill-rule="evenodd" clip-rule="evenodd" d="M28 16 H50 a26 26 0 0 1 0 52 H42 V84 H28 Z M58 42 m-13 0 a13 13 0 1 0 26 0 a13 13 0 1 0 -26 0" /></svg>lagLens
+    </a>
+    <nav><a href="https://plaglens.ru/about.html">О сервисе</a><a href="https://plaglens.ru/privacy.html">Конфиденциальность</a></nav>
   </header>
 
-  <h1>Условия использования</h1>
-  <p class="updated">Последнее обновление: 3 июня 2026 г.</p>
+  <div class="content">
+    <h1>Условия использования</h1>
+    <p class="updated">Последнее обновление: 3 июня 2026 г.</p>
 
-  <p>
-    Используя PlagLens (<a href="https://plaglens.ru/">https://plaglens.ru</a>) —
-    учебную платформу проверки студенческих работ, — вы соглашаетесь с
-    настоящими условиями.
-  </p>
+    <p>
+      Используя PlagLens (<a href="https://plaglens.ru/">plaglens.ru</a>) —
+      учебную платформу проверки студенческих работ, — вы соглашаетесь с
+      настоящими условиями.
+    </p>
 
-  <h2>1. Назначение</h2>
-  <p>
-    Платформа предназначена для образовательных целей: приём работ, проверка на
-    заимствования, LLM-анализ кода и выставление оценок в рамках учебных курсов.
-  </p>
+    <h2>1. Назначение</h2>
+    <p>
+      Платформа предназначена для образовательных целей: приём работ, проверка на
+      заимствования, LLM-анализ кода и выставление оценок в рамках учебных курсов.
+    </p>
 
-  <h2>2. Аккаунт</h2>
-  <p>
-    Вы отвечаете за сохранность доступа к своему аккаунту и за действия,
-    совершённые под ним. Указывайте достоверные данные при регистрации.
-  </p>
+    <h2>2. Аккаунт</h2>
+    <p>
+      Вы отвечаете за сохранность доступа к своему аккаунту и за действия,
+      совершённые под ним. Указывайте достоверные данные при регистрации.
+    </p>
 
-  <h2>3. Допустимое использование</h2>
-  <ul>
-    <li>Загружайте только те работы, на которые у вас есть права.</li>
-    <li>Не загружайте вредоносный код, незаконные или чужие материалы без
-      разрешения.</li>
-    <li>Не пытайтесь нарушить работу сервиса, обойти ограничения доступа или
-      получить доступ к чужим данным.</li>
-  </ul>
+    <h2>3. Допустимое использование</h2>
+    <ul>
+      <li>Загружайте только те работы, на которые у вас есть права.</li>
+      <li>Не загружайте вредоносный код, незаконные или чужие материалы без
+        разрешения.</li>
+      <li>Не пытайтесь нарушить работу сервиса, обойти ограничения доступа или
+        получить доступ к чужим данным.</li>
+    </ul>
 
-  <h2>4. Загружаемый контент</h2>
-  <p>
-    Права на загруженные работы остаются за вами. Загружая их, вы разрешаете
-    платформе обрабатывать их для проверки на заимствования и анализа в объёме,
-    необходимом для работы сервиса (см. <a href="https://plaglens.ru/privacy.html">Политику
-    конфиденциальности</a>).
-  </p>
+    <h2>4. Загружаемый контент</h2>
+    <p>
+      Права на загруженные работы остаются за вами. Загружая их, вы разрешаете
+      платформе обрабатывать их для проверки на заимствования и анализа в объёме,
+      необходимом для работы сервиса (см.
+      <a href="https://plaglens.ru/privacy.html">Политику конфиденциальности</a>).
+    </p>
 
-  <h2>5. Отсутствие гарантий</h2>
-  <p>
-    Сервис предоставляется «как есть», без гарантий бесперебойной работы или
-    точности результатов проверки. Это учебный проект; результаты антиплагиата и
-    LLM-анализа носят рекомендательный характер и требуют проверки человеком.
-  </p>
+    <h2>5. Отсутствие гарантий</h2>
+    <p>
+      Сервис предоставляется «как есть», без гарантий бесперебойной работы или
+      точности результатов проверки. Это учебный проект; результаты антиплагиата
+      и LLM-анализа носят рекомендательный характер и требуют проверки человеком.
+    </p>
 
-  <h2>6. Ограничение ответственности</h2>
-  <p>
-    Мы не несём ответственности за косвенный ущерб, связанный с использованием
-    или невозможностью использования сервиса, в пределах, допустимых
-    применимым правом.
-  </p>
+    <h2>6. Ограничение ответственности</h2>
+    <p>
+      Мы не несём ответственности за косвенный ущерб, связанный с использованием
+      или невозможностью использования сервиса, в пределах, допустимых
+      применимым правом.
+    </p>
 
-  <h2>7. Контакты</h2>
-  <p>
-    Вопросы по условиям: <a href="mailto:smmaxims@yandex.ru">smmaxims@yandex.ru</a>.
-  </p>
+    <h2>7. Контакты</h2>
+    <p>
+      Вопросы по условиям: <a href="mailto:smmaxims@yandex.ru">smmaxims@yandex.ru</a>.
+    </p>
+  </div>
 
   <footer>
-    © 2026 PlagLens · <a href="https://plaglens.ru/">plaglens.ru</a> ·
+    <span>© 2026 PlagLens</span>
+    <a href="https://plaglens.ru/">Приложение</a>
+    <a href="https://plaglens.ru/about.html">О сервисе</a>
     <a href="https://plaglens.ru/privacy.html">Политика конфиденциальности</a>
+    <a href="mailto:smmaxims@yandex.ru">Контакты</a>
   </footer>
 </div>
 </body>
