@@ -165,7 +165,7 @@ def _assert_id_token_valid(claims: dict[str, Any], *, audience: str) -> None:
                 title="OIDC id_token audience mismatch",
             )
     exp = claims.get("exp")
-    if isinstance(exp, (int, float)) and exp < datetime.now(timezone.utc).timestamp():
+    if isinstance(exp, int | float) and exp < datetime.now(timezone.utc).timestamp():
         raise ProblemException(
             status=401, code="UNAUTHENTICATED", title="OIDC id_token expired"
         )

@@ -89,7 +89,7 @@ def _parse_time(raw: Any) -> Optional[datetime]:
     if not raw:
         return None
     # eJudge sometimes returns a unix epoch (int) and sometimes ISO 8601.
-    if isinstance(raw, (int, float)):
+    if isinstance(raw, int | float):
         try:
             return datetime.utcfromtimestamp(float(raw))
         except (ValueError, OSError, OverflowError):

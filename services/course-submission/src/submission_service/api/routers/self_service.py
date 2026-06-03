@@ -8,14 +8,14 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Query
-from sqlalchemy import text
-
 from plaglens_common.service_client import ServiceClient
 from plaglens_common.service_token import mint_service_jwt
+from sqlalchemy import text
+
 from submission_service.api.deps import CourseDep, CurrentUser, SessionDep
 from submission_service.common.pagination import Page, PageInfo
-from submission_service.config import get_settings
 from submission_service.common.problem import forbidden, not_found
+from submission_service.config import get_settings
 from submission_service.repositories.submission_repo import SubmissionRepository
 from submission_service.schemas.feedback import FeedbackOut
 from submission_service.schemas.grading import GradeOut

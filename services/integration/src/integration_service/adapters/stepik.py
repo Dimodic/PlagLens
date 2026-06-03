@@ -121,7 +121,7 @@ def normalize_stepik_language(raw: str | None) -> str | None:
         return "python"
     if "kotlin" in s:
         return "kotlin"
-    if "java" in s and "javascript" not in s and "js" != s:
+    if "java" in s and "javascript" not in s and s != "js":
         return "java"
     if "c++" in s or s.startswith("cpp") or "g++" in s or "clang++" in s:
         return "cpp"
