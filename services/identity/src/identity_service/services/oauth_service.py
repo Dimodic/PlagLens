@@ -657,20 +657,20 @@ class OAuthService:
             ) from exc
 
     async def _resolve_tenant(self, tenant_slug: str | None) -> Any:
-        if not tenant_slug:
-            # Default tenant convention: use 'hse' (the canonical one in this
-            # codebase). If absent, surface a clear error.
-            tenant = await self.tenants.get_by_slug("hse")
-        else:
-            tenant = await self.tenants.get_by_slug(tenant_slug)
+        # Default to the platform's self-service tenant (settings, e.g.
+        # "public") — OAuth sign-ups land there and can move via an invite code
+        # later. Previously hardcoded "hse", which broke once that course
+        # tenant was renamed/deleted.
+        slug = tenant_slug or settings.default_tenant_slug
+        tenant = await self.tenants.get_by_slug(slug)
         if tenant is None:
             raise ProblemException(
                 status=404,
                 code="NOT_FOUND",
                 title="Tenant not found",
                 detail=(
-                    f"No tenant with slug '{tenant_slug or 'hse'}' — pass"
-                    " ?tenant_slug=… on the authorize call."
+                    f"No tenant with slug '{slug}' — pass ?tenant_slug=… on the"
+                    " authorize call."
                 ),
             )
         return tenant

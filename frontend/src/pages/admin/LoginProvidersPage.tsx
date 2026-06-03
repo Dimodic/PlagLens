@@ -46,10 +46,9 @@ const PROVIDER_ORDER = ['google', 'yandex', 'github', 'telegram'];
 // The console permissions must be a SUPERSET of what identity requests
 // (see services/identity/.../oauth/providers.py default_scopes).
 const SETUP_HINT: Record<string, string> = {
-  // Google omitted — it auto-grants openid/email/profile, nothing to set.
+  // Only Yandex needs a console hint (admin ticks matching permissions).
+  // Google auto-grants; GitHub shows a Homepage-URL field; Telegram needs none.
   yandex: 'login_providers.setup_yandex',
-  github: 'login_providers.setup_github',
-  telegram: 'login_providers.setup_telegram',
 };
 
 // Scope chips help only where the admin must tick matching console
@@ -212,9 +211,9 @@ function ProviderDetail({ provider }: DetailProps) {
     setProblem(null);
   }, [provider.provider]);
 
-  const copyRedirect = () => {
-    if (provider.redirect_uri && typeof navigator !== 'undefined' && navigator.clipboard) {
-      void navigator.clipboard.writeText(provider.redirect_uri);
+  const copyText = (value: string) => {
+    if (value && typeof navigator !== 'undefined' && navigator.clipboard) {
+      void navigator.clipboard.writeText(value);
       notify.info(t('login_providers.redirect_copied'));
     }
   };
@@ -368,6 +367,34 @@ function ProviderDetail({ provider }: DetailProps) {
           />
         </div>
 
+        {provider.provider === 'github' && siteOrigin && (
+          <div className="space-y-1.5">
+            <Label>Homepage URL</Label>
+            <div
+              className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
+              data-testid="login-homepage-github"
+            >
+              <code className="min-w-0 flex-1 truncate font-mono text-xs text-foreground/80">
+                {siteOrigin}
+              </code>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="-my-1 h-7 w-7 shrink-0"
+                onClick={() => copyText(siteOrigin)}
+                title={t('login_providers.copy')}
+                aria-label={t('login_providers.copy')}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {t('login_providers.redirect_hint')}
+            </p>
+          </div>
+        )}
+
         {provider.redirect_uri && (
           <div className="space-y-1.5">
             <Label>Redirect URI</Label>
@@ -383,7 +410,7 @@ function ProviderDetail({ provider }: DetailProps) {
                 variant="ghost"
                 size="icon"
                 className="-my-1 h-7 w-7 shrink-0"
-                onClick={copyRedirect}
+                onClick={() => copyText(provider.redirect_uri ?? '')}
                 title={t('login_providers.copy')}
                 aria-label={t('login_providers.copy_redirect_aria')}
                 data-testid={`login-copy-${provider.provider}`}
