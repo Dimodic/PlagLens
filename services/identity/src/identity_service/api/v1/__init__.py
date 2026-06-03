@@ -12,7 +12,6 @@ from .auth_2fa import router as auth_2fa_router
 from .auth_email import router as auth_email_router
 from .auth_oauth import router as auth_oauth_router
 from .auth_password import router as auth_password_router
-from .auth_telegram import router as auth_telegram_router
 from .avatars import router as avatars_router
 from .external_bindings import admin_router as external_bindings_admin_router
 from .external_bindings import router as external_bindings_router
@@ -32,11 +31,11 @@ api_v1.include_router(auth_router)
 api_v1.include_router(auth_password_router)
 api_v1.include_router(auth_email_router)
 api_v1.include_router(auth_2fa_router)
-# Telegram MUST register before the generic OAuth router — both share the
-# /auth/oauth prefix, and FastAPI dispatches the first matching route. Without
-# this ordering ``/auth/oauth/telegram/callback`` would be eaten by the
-# generic ``/auth/oauth/{provider}/callback`` and treated as OAuth2.
-api_v1.include_router(auth_telegram_router)
+# Telegram is now a standard OAuth2/OIDC provider (oauth.telegram.org) and
+# flows through the generic ``/auth/oauth/{provider}/*`` router like the rest.
+# The old HMAC Login-Widget router (auth_telegram) is intentionally NOT
+# registered — its ``/auth/oauth/telegram/callback`` would shadow the generic
+# code-flow callback.
 api_v1.include_router(auth_oauth_router)
 api_v1.include_router(tenants_router)
 # me_router MUST register before users_router — both share /users prefix

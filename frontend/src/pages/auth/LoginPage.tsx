@@ -35,16 +35,14 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { authApi } from '@/api/endpoints/auth';
 import { tokenStore } from '@/api/client';
-import { startOAuth, OAUTH_PROVIDERS, telegramAuthApi } from '@/api/endpoints/oauth';
+import { startOAuth, OAUTH_PROVIDERS } from '@/api/endpoints/oauth';
 import { useAuth } from '@/auth/useAuth';
 import { useDocumentTitle } from '@/hooks/useDocumentTitle';
-import { useNotifications } from '@/hooks/useNotifications';
 import { useTranslation } from '@/i18n';
 import type { OAuthProvider, Problem } from '@/api/types';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { openTelegramLogin } from '@/auth/telegramLogin';
 import { emailSchema, passwordSchema } from '@/utils/validators';
 import { BrandMark } from '@/components/shell/BrandMark';
 
@@ -102,7 +100,6 @@ export function LoginPage() {
   const [params, setParams] = useSearchParams();
   const queryClient = useQueryClient();
   const { login, reloadMe } = useAuth();
-  const notify = useNotifications();
 
   // ?mode=register / ?mode=forgot let external links (and the /register
   // + /auth/forgot redirects) deep-link into a specific mode. Default
@@ -138,7 +135,6 @@ export function LoginPage() {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
-  const [tgBusy, setTgBusy] = useState(false);
 
   // Register-only state
   const [displayName, setDisplayName] = useState('');
@@ -178,29 +174,6 @@ export function LoginPage() {
     if (next === 'login') nextParams.delete('mode');
     else nextParams.set('mode', next);
     setParams(nextParams, { replace: true });
-  };
-
-  const onTelegramClick = async () => {
-    if (tgBusy) return;
-    setTgBusy(true);
-    try {
-      const info = await telegramAuthApi.info();
-      if (!info.enabled || !info.bot_id) {
-        notify.info(t('auth.login.telegram_not_configured'));
-        return;
-      }
-      const ok = await openTelegramLogin({
-        bot_id: info.bot_id,
-        redirect_uri: info.redirect_uri,
-      });
-      if (!ok) {
-        notify.error(t('auth.login.telegram_widget_failed'));
-      }
-    } catch {
-      notify.error(t('auth.login.telegram_open_failed'));
-    } finally {
-      setTgBusy(false);
-    }
   };
 
   useEffect(() => {
@@ -389,10 +362,7 @@ export function LoginPage() {
           : t('auth.login.error_generic')
     : null;
 
-  const providerRow: { id: OAuthProvider; label: string }[] = [
-    ...OAUTH_PROVIDERS,
-    { id: 'telegram' as OAuthProvider, label: 'Telegram' },
-  ];
+  const providerRow = OAUTH_PROVIDERS;
 
   const isRegister = mode === 'register';
   const isForgot = mode === 'forgot';
@@ -428,7 +398,6 @@ export function LoginPage() {
         <section className="space-y-4">
           <div className="flex justify-center gap-3">
             {providerRow.map((p) => {
-              const busy = p.id === 'telegram' && tgBusy;
               return (
                 <button
                   key={p.id}
@@ -440,12 +409,7 @@ export function LoginPage() {
                   }
                   title={p.label}
                   data-testid={`login-oauth-${p.id}`}
-                  disabled={busy}
                   onClick={() => {
-                    if (p.id === 'telegram') {
-                      void onTelegramClick();
-                      return;
-                    }
                     const rawNext = params.get('next');
                     const next = rawNext ? decodeURIComponent(rawNext) : null;
                     const safeNext =
@@ -457,11 +421,7 @@ export function LoginPage() {
                   }}
                   className="flex h-12 w-12 items-center justify-center rounded-full border border-border bg-background text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 hover:border-foreground hover:bg-foreground hover:text-background disabled:cursor-wait disabled:opacity-60"
                 >
-                  {busy ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <OAuthGlyph provider={p.id} />
-                  )}
+                  <OAuthGlyph provider={p.id} />
                 </button>
               );
             })}

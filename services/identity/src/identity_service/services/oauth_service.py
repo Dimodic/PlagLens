@@ -132,6 +132,45 @@ def _gen_pkce_pair() -> tuple[str, str]:
     return verifier, challenge
 
 
+def _decode_jwt_claims(token: str) -> dict[str, Any]:
+    """Decode a JWT payload WITHOUT signature verification.
+
+    Used for OIDC id_tokens obtained over the server-to-server, TLS-protected
+    token exchange (the back-channel is already trusted, per the OIDC code
+    flow). ``iss``/``aud``/``exp`` are validated by :func:`_assert_id_token_valid`.
+    """
+    parts = token.split(".")
+    if len(parts) != 3:
+        raise ProblemException(
+            status=502, code="UPSTREAM_FAILED", title="Malformed OIDC id_token"
+        )
+    seg = parts[1] + "=" * (-len(parts[1]) % 4)
+    try:
+        return json.loads(base64.urlsafe_b64decode(seg))
+    except Exception as exc:  # noqa: BLE001
+        raise ProblemException(
+            status=502, code="UPSTREAM_FAILED", title="Unparseable OIDC id_token"
+        ) from exc
+
+
+def _assert_id_token_valid(claims: dict[str, Any], *, audience: str) -> None:
+    """Minimal OIDC claim checks: audience match (string-tolerant) + not expired."""
+    aud = claims.get("aud")
+    if aud is not None:
+        aud_set = {str(a) for a in (aud if isinstance(aud, list) else [aud])}
+        if str(audience) not in aud_set:
+            raise ProblemException(
+                status=401,
+                code="UNAUTHENTICATED",
+                title="OIDC id_token audience mismatch",
+            )
+    exp = claims.get("exp")
+    if isinstance(exp, (int, float)) and exp < datetime.now(timezone.utc).timestamp():
+        raise ProblemException(
+            status=401, code="UNAUTHENTICATED", title="OIDC id_token expired"
+        )
+
+
 # --------------------------------------------------------------------------- #
 # Redis state helpers (module-level so callers can also poke them in tests)
 # --------------------------------------------------------------------------- #
@@ -248,6 +287,10 @@ class OAuthService:
             params["access_type"] = "offline"
         elif provider_name == "yandex":
             params["force_confirm"] = "true"
+        elif provider_name == "telegram":
+            # Telegram OIDC requires the site origin — it must be a registered
+            # Allowed URL in @BotFather → Bot Settings → Web Login.
+            params["origin"] = settings.oauth_callback_base_url.rstrip("/")
 
         await store_state(
             self.redis,
@@ -291,27 +334,43 @@ class OAuthService:
         token_payload = await self._exchange_code(
             impl, cid=cid, csec=csec, code=code, code_verifier=verifier
         )
-        access_token_provider = (
-            token_payload.get("access_token") or token_payload.get("token")
-        )
-        if not access_token_provider:
-            raise ProblemException(
-                status=502,
-                code="UPSTREAM_FAILED",
-                title="OAuth token exchange failed",
-                detail="Provider response did not include access_token.",
+        # 2) Resolve the user profile.
+        if getattr(impl, "uses_id_token", False):
+            # OIDC providers without a userinfo endpoint (Telegram) ship the
+            # user's claims inside the id_token. It came over the TLS-protected
+            # back-channel token exchange, so we decode + validate iss/aud/exp
+            # rather than re-verify the signature against JWKS.
+            id_token = token_payload.get("id_token")
+            if not id_token:
+                raise ProblemException(
+                    status=502,
+                    code="UPSTREAM_FAILED",
+                    title="OAuth token exchange failed",
+                    detail="Provider response did not include id_token.",
+                )
+            claims = _decode_jwt_claims(id_token)
+            _assert_id_token_valid(claims, audience=cid)
+            profile = impl.parse_userinfo(claims)
+        else:
+            access_token_provider = (
+                token_payload.get("access_token") or token_payload.get("token")
             )
-
-        # 2) Fetch userinfo.
-        try:
-            profile = await impl.fetch_userinfo(access_token_provider)
-        except httpx.HTTPError as exc:
-            raise ProblemException(
-                status=502,
-                code="UPSTREAM_FAILED",
-                title="OAuth userinfo fetch failed",
-                detail=str(exc),
-            ) from exc
+            if not access_token_provider:
+                raise ProblemException(
+                    status=502,
+                    code="UPSTREAM_FAILED",
+                    title="OAuth token exchange failed",
+                    detail="Provider response did not include access_token.",
+                )
+            try:
+                profile = await impl.fetch_userinfo(access_token_provider)
+            except httpx.HTTPError as exc:
+                raise ProblemException(
+                    status=502,
+                    code="UPSTREAM_FAILED",
+                    title="OAuth userinfo fetch failed",
+                    detail=str(exc),
+                ) from exc
 
         # If this is a *link* flow, dispatch — never create a new session here.
         if link_user_id:
@@ -570,14 +629,20 @@ class OAuthService:
             "grant_type": "authorization_code",
             "code": code,
             "redirect_uri": self._redirect_uri(impl.name),
-            "client_id": cid,
-            "client_secret": csec,
             "code_verifier": code_verifier,
         }
         headers = {
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
         }
+        if getattr(impl, "token_auth_basic", False):
+            # OIDC client_secret_basic (Telegram): credentials go in the
+            # Authorization header, not the request body.
+            basic = base64.b64encode(f"{cid}:{csec}".encode()).decode()
+            headers["Authorization"] = f"Basic {basic}"
+        else:
+            data["client_id"] = cid
+            data["client_secret"] = csec
         try:
             async with self._http_factory() as client:
                 resp = await client.post(impl.token_url, data=data, headers=headers)

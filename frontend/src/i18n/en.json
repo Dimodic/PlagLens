@@ -1259,7 +1259,7 @@
   "login_providers.setup_google": "Enable these scopes on the Google consent screen:",
   "login_providers.setup_yandex": "Enable these permissions in the Yandex console (portrait is used for the avatar):",
   "login_providers.setup_github": "In the Homepage URL field, enter your site address: {{url}}",
-  "login_providers.setup_telegram": "Create a bot in @BotFather — the username and token come from there. Then run /setdomain and enter the domain below.",
+  "login_providers.setup_telegram": "In @BotFather → Bot Settings → Web Login, add Allowed URLs: {{url}} and the Redirect URI below. Client ID and Secret come from there.",
   "login_providers.field_bot_username": "Bot username",
   "login_providers.field_bot_token": "Bot token",
   "login_providers.domain_label": "Domain for /setdomain",

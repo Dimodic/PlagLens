@@ -51,4 +51,5 @@ export const OAUTH_PROVIDERS: { id: OAuthProvider; label: string }[] = [
   { id: 'google', label: 'Google' },
   { id: 'yandex', label: 'Яндекс' },
   { id: 'github', label: 'GitHub' },
+  { id: 'telegram', label: 'Telegram' },
 ];

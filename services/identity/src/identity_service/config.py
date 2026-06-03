@@ -66,9 +66,9 @@ class Settings(BaseSettings):
     totp_fernet_key: str = ""  # base64 32-byte; auto-generated in dev
     totp_issuer: str = "PlagLens"
 
-    # ---- OAuth (4 providers) ----
+    # ---- OAuth (5 providers; Telegram is OIDC via oauth.telegram.org) ----
     oauth_providers_enabled: list[str] = Field(
-        default_factory=lambda: ["google", "yandex", "stepik", "github"]
+        default_factory=lambda: ["google", "yandex", "stepik", "github", "telegram"]
     )
     oauth_callback_base_url: str = "http://localhost:8000"
     oauth_state_ttl_seconds: int = 600
